@@ -1,0 +1,27 @@
+{
+  "_note": "This is the seed template for .squad/roster.json. The single role below shows the schema — DELETE THIS ROLE when squad-role generates your real roles. The _note field is documentation only and is dropped on the next write by squad-roster. Fields prefixed with _ are reserved for documentation and ignored by the squad-roster skill.",
+  "squad_goal_ref": ".squad/goal.md",
+  "mode": "one-time",
+  "created": "1970-01-01T00:00:00Z",
+  "roles": [
+    {
+      "_comment": "EXAMPLE ROLE — your roles get generated here by /cheeky-squad-os:squad-role. Delete this entry (or wait — squad-role overwrites the file when it adds the first real role). This example is for schema reference only; active is false so squad-spawn will skip it.",
+      "name": "example-role-delete-me",
+      "purpose": "One sentence describing what this role does. Action-first. Specific artifact.",
+      "agent_file": ".claude/agents/example-role-delete-me.md",
+      "role_goal": ".squad/role-goal-example-role-delete-me.md",
+      "file_scope": [
+        "path/the/role/owns/**",
+        "another/path/the/role/owns/**"
+      ],
+      "tools": [
+        "Read",
+        "Write",
+        "Bash"
+      ],
+      "model": "sonnet",
+      "active": false,
+      "created": "1970-01-01T00:00:00Z"
+    }
+  ]
+}

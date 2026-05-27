@@ -1,0 +1,57 @@
+{
+  "name": "cheeky-squad-os",
+  "displayName": "cheeky-squad-os",
+  "description": "Ship the discipline, not the team. Turn any Claude Code goal — engineering, ops, business infrastructure, knowledge work — into a bespoke squad of roles generated from the goal itself. Zero opinionated role files shipped; the role generator builds what each goal needs.",
+  "version": "0.1.0",
+  "author": {
+    "name": "amit-cheeky"
+  },
+  "license": "MIT",
+  "keywords": [
+    "squad",
+    "subagents",
+    "agent-teams",
+    "workflow",
+    "discipline",
+    "claude-code-plugin",
+    "skills",
+    "hooks"
+  ],
+  "category": "productivity",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/session-start.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/user-prompt-submit.sh",
+            "timeout": 3
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "matcher": "Bash|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/permission-request.sh",
+            "timeout": 3
+          }
+        ]
+      }
+    ]
+  }
+}
