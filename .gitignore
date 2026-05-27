@@ -1,0 +1,43 @@
+# cheeky-squad-os — .gitignore
+#
+# Patterns reflect what the plugin itself shouldn't track. If you're using
+# this plugin on your own project, add the same .squad/ ephemeral patterns
+# to that project's .gitignore.
+
+# Ephemeral squad state — reserved namespaces for v2 features
+.squad/role-comm-*
+.squad/role-plan-*
+.squad/features/*
+
+# Generated worktrees from Multi-use mode (per Claude Code worktrees doc tip)
+.claude/worktrees/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor scratch
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs and tmp
+*.log
+tmp/
+.tmp/
+
+# Node (if any tooling lands here later)
+node_modules/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Python (if any tooling lands here later)
+__pycache__/
+*.pyc
+.venv/
+venv/
