@@ -38,6 +38,8 @@ You manage `.squad/roster.json` — the source of truth for who's on the squad �
 
 `.squad/roster.md` is regenerated from `roster.json` after every write. It is **not authoritative** — never read from it. Always read from the JSON.
 
+**Source of truth for `mode`:** `.squad/goal.md` frontmatter is authoritative (it is what `squad-spawn` reads). The `mode` in `roster.json` is a **mirror** kept for the human view. On every write, re-derive it from `.squad/goal.md` and overwrite the roster copy; if they diverged, print a warning naming both values. Never let a user edit drive `roster.json`'s mode independently of the goal.
+
 ## Operations
 
 ### List / show
@@ -125,7 +127,7 @@ After any write to `.squad/roster.json`, regenerate `.squad/roster.md` with this
 
 Before writing `.squad/roster.json`:
 
-- `mode` is one of `one-time`, `multi-use`, `evergreen`.
+- `mode` equals `.squad/goal.md`'s mode — re-derive it from goal.md and overwrite the roster copy (goal.md is authoritative); warn if they had diverged. It must be one of `one-time`, `multi-use`, `evergreen`.
 - Every role has `name` (kebab-case, no collisions), `purpose` (non-empty), `agent_file` (path exists or will exist), `role_goal` (path exists or will exist), `file_scope` (non-empty array of strings), `tools` (non-empty array), `model` (`sonnet`, `opus`, `haiku`, or `inherit`).
 - `active` is a boolean.
 - JSON is well-formed.
