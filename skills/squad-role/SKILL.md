@@ -45,7 +45,7 @@ Check against `.squad/roster.json` for collisions. If collision, propose a numbe
 
 ### Q3 — What files does it own? (file_scope)
 
-Ask: *"What file paths or glob patterns does this role own? These are auto-approved for Bash/Edit/Write; everything else prompts you."*
+Ask: *"What file paths or glob patterns does this role own? Edit/Write inside them are auto-approved; everything else — including Bash, in v1 — prompts you."*
 
 Examples:
 - `reports/klaviyo/**, data/klaviyo/**`
@@ -53,6 +53,11 @@ Examples:
 - `intel/competitors/**`
 
 Accept comma-separated globs. Validate that each is a sensible glob (no leading `/`, no absolute paths, no `..` traversal). If the user gives a too-broad scope (`**`, `*`, project root), warn: *"That scope auto-approves writes anywhere in the project. Confirm or narrow."*
+
+Scope-glob semantics the `PermissionRequest` hook enforces (so set expectations accordingly):
+- `prefix/**` — the whole subtree under `prefix` (this is what you want for "owns this directory").
+- A pattern with **no `/`** (e.g. `*.md`, `*.json`, `Makefile`) matches a **single path segment only** — i.e. files at the project root, never nested ones. If a role needs every `.md` under `reports/`, use `reports/**`, not `*.md`.
+- `**` — everything (the too-broad case above).
 
 ### Q4 — What tools does it need?
 
@@ -80,15 +85,18 @@ In **Evergreen mode**, do not ask — isolation is irrelevant for scheduled solo
 
 ## Compose the role's system prompt
 
-Build the system prompt body from these answers. The template lives at `templates/role-definition.md`. Substitute:
+Build the system prompt body from these answers. The template lives at `templates/role-definition.md`. Substitute **every** placeholder it defines — leaving any `{{...}}` unsubstituted produces a broken role (e.g. a literal `description: {{description}}` in frontmatter disables auto-delegation). Use the exact placeholder names from the template:
 
-- `{{name}}` — role name
+- `{{name}}` — role name (Q2)
+- `{{description}}` — the auto-delegation trigger. **Not collected by a question — derive it** from Q1 purpose + the squad goal, phrased as a "Use when…" trigger (e.g. *"Use when the squad needs Klaviyo flow performance pulled and dumped as JSON"*). This is the `description:` frontmatter field Claude reads to decide when to delegate to this role.
 - `{{purpose}}` — Q1 answer
 - `{{tools}}` — Q4 answer
+- `{{tools_rationale}}` — **derive** a one-line justification from the Q4 tools answer (why these tools, e.g. *"Read/Write/Bash to land JSON dumps; the Klaviyo MCP for the data pull"*).
 - `{{model}}` — Q5 answer
-- `{{file_scope}}` — Q3 answer (as comma-separated globs)
-- `{{isolation_field}}` — `isolation: worktree` line, or omitted
+- `{{file_scope_lines}}` — Q3 answer rendered as **one markdown bullet per glob** (not a comma-separated string — the template places it under a bullet list)
+- `{{isolation_block}}` — the literal `isolation: worktree` line (Q6), or omitted entirely
 - `{{role_goal_path}}` — `.squad/role-goal-<name>.md`
+- `{{created}}` — current UTC time in ISO-8601 (the same timestamp written to the roster entry and the role-goal frontmatter)
 
 The body must include:
 1. A statement of purpose (from Q1).

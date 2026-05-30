@@ -83,7 +83,7 @@ case "$FILE_PATH" in
   /*)
     # Absolute path. Must be inside project root to be considered.
     case "$FILE_PATH" in
-      "$PROJECT_ABS"/*) REL_PATH="${FILE_PATH#$PROJECT_ABS/}" ;;
+      "$PROJECT_ABS"/*) REL_PATH="${FILE_PATH#"$PROJECT_ABS"/}" ;;
       "$PROJECT_ABS")   REL_PATH="" ;;
       *) exit 0 ;;  # outside project root → defer
     esac
@@ -97,11 +97,15 @@ esac
 # --- Match against each scope glob ------------------------------------------
 
 # Glob semantics:
-#   "<prefix>/**"  → match any path whose first segments are <prefix>
-#   "*.<ext>"      → match any file ending in .<ext> at the same directory depth
-#   Other patterns → fall through to bash [[ pattern matching, which is
-#                    permissive (treats * as "anything including /"). User
-#                    keeps final say since unmatched paths just defer.
+#   "<prefix>/**"        → match any path whose first segments are <prefix>
+#   "**"                 → match anything
+#   pattern with no "/"  → match a SINGLE path segment only (e.g. "*.md"
+#                          matches "notes.md" but NOT "src/notes.md"). bash
+#                          [[ == ]] would otherwise let "*" cross "/" and
+#                          silently over-approve nested paths — since this is
+#                          an auto-APPROVE path, we fail closed.
+#   other patterns       → bash [[ pattern matching. Unmatched paths defer to
+#                          the user, so the user keeps final say.
 path_in_scope() {
   local rel="$1"
   local glob="$2"
@@ -122,6 +126,14 @@ path_in_scope() {
       ;;
   esac
 
+  # A glob with no "/" must match a single path segment only. Reject any rel
+  # that contains "/" before falling through to the bash matcher (which would
+  # otherwise treat "*" as matching "/" too, over-approving nested paths).
+  case "$glob" in
+    */*) ;;  # pattern has a separator → generic fallback below
+    *)   case "$rel" in */*) return 1 ;; esac ;;
+  esac
+
   # Fall back to bash pattern matching for everything else
   # shellcheck disable=SC2053
   [[ "$rel" == $glob ]] && return 0
@@ -138,10 +150,14 @@ while IFS= read -r GLOB; do
 done <<< "$SCOPES"
 
 if [ "$MATCHED" -eq 1 ]; then
-  # Emit allow decision. permissionRule pins future identical calls so we
-  # don't re-prompt or re-evaluate every turn.
-  jq -n --arg path "$FILE_PATH" --arg tool "$TOOL_NAME" --arg role "$AGENT_TYPE" \
-    '{hookSpecificOutput: {hookEventName: "PermissionRequest", decision: {behavior: "allow", permissionRule: ("cheeky-squad-os: \($role) owns \($path)")}}}' \
+  # Emit a minimal allow decision for this single call. The PermissionRequest
+  # decision object's documented shape is decision.behavior ("allow"|"deny");
+  # there is NO `permissionRule` field — that name is silently ignored, so do
+  # not add it. To persist a rule (avoid re-prompting identical future calls)
+  # the documented field is `updatedPermissions`; v1 leaves it unset and lets
+  # this hook re-evaluate each in-scope call cheaply instead.
+  jq -n \
+    '{hookSpecificOutput: {hookEventName: "PermissionRequest", decision: {behavior: "allow"}}}' \
     2>/dev/null || true
 fi
 # No match → no output → defer to user. Never silently deny.

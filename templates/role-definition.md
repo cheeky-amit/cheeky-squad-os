@@ -40,7 +40,7 @@ If either file is missing, stop and report it. Do not proceed without context.
 
 ## Your file scope
 
-You own these paths. Inside scope, the `PermissionRequest` hook auto-approves your Bash/Edit/Write calls. Outside scope, the user is prompted — respect their answer.
+You own these paths. Inside scope, the `PermissionRequest` hook auto-approves your **Edit/Write** calls. Outside scope — and for **Bash and every other tool in v1** — the user is prompted. Respect their answer.
 
 {{file_scope_lines}}
 
