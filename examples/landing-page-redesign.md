@@ -323,7 +323,7 @@ squad-spawn: CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 — good.
 {"role":"qa-runner","worktree":"/Users/acme/repo/.claude/worktrees/qa-runner","branch":"squad-qa-runner","status":"created"}
 {"summary":{"created":4,"existed":0,"errors":0}}
 
-squad-spawn: 4 worktrees created. Spawning teammates ...
+squad-spawn: 4 worktrees pre-created. Spawning teammates (Agent Team) ...
 ```
 
 After spawn, `git worktree list`:
@@ -337,7 +337,7 @@ $ git worktree list
 /Users/acme/repo/.claude/worktrees/qa-runner              a1b2c3d [squad-qa-runner]
 ```
 
-Each teammate spawns in its own Claude session, inside its own worktree, launched with `--worktree <role-name>`. The spawn prompt baked into `brand-voice-editor`:
+The lead spawns each teammate into the Agent Team, referencing its `.claude/agents/<role>.md` by name and pointing it at the worktree `scripts/spawn.sh` pre-created. File isolation is anchored by each role's disjoint `file_scope` (the worktree is the working directory; the scope is the boundary). The spawn prompt baked into `brand-voice-editor`:
 
 ```
 You are brand-voice-editor, a teammate on the Acme B2B homepage redesign squad.
@@ -417,7 +417,7 @@ Zero conflicts. Each teammate's `file_scope` was non-overlapping by construction
 ## 8. What just happened
 
 - Four bespoke roles for one specific build. No generic `frontend-dev` or `designer` — the names match the workstreams the goal actually decomposed into.
-- Per-teammate worktrees enforced file isolation. Each role declared its `file_scope` at generation time; `scripts/spawn.sh` created a worktree per role; the four branches merged without a conflict.
+- Disjoint `file_scope` per role enforced file isolation. Each role declared its `file_scope` at generation time; `scripts/spawn.sh` pre-created a worktree per role as the working directory; the four branches merged without a conflict.
 - Agent Teams was enabled with explicit consent. `squad-spawn` checked the env var, explained what Agent Teams adds, proposed the settings change, and only wrote `~/.claude/settings.json` after the user said yes.
 - The goal traveled with the work. The SessionStart hook injected `.squad/goal.md` into the lead's session on restart, and `squad-spawn` baked the goal + per-role file into each teammate's spawn prompt — no teammate ever drifted off-mission.
 - The lead did not manually relay handoffs. Teammates messaged each other directly through the Agent Teams mailbox; the lead only stepped in to merge at the end.

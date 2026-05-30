@@ -1,5 +1,6 @@
 {
   "_note": "This is the seed template for .squad/roster.json. The single role below shows the schema — DELETE THIS ROLE when squad-role generates your real roles. The _note field is documentation only and is dropped on the next write by squad-roster. Fields prefixed with _ are reserved for documentation and ignored by the squad-roster skill.",
+  "_mode_note": "`mode` mirrors .squad/goal.md (authoritative). squad-roster re-derives it from goal.md on every write; squad-spawn reads mode from goal.md, never from here.",
   "squad_goal_ref": ".squad/goal.md",
   "mode": "one-time",
   "created": "1970-01-01T00:00:00Z",

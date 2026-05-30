@@ -2,7 +2,12 @@
 # spawn.sh — Multi-use mode dispatch helper for cheeky-squad-os.
 #
 # Pre-creates one git worktree per active role under .claude/worktrees/<role-name>/
-# so Agent Teams teammates can be launched with file isolation (hard rule #7).
+# (branch squad-<role-name>) so each Multi-use teammate can be pointed at an
+# isolated copy of the repo. This script ONLY creates the worktrees — it does
+# NOT launch any Claude session and bakes no prompt. The squad-spawn skill (the
+# team lead) is responsible for spawning teammates (Agent Teams, by referencing
+# each .claude/agents/<role>.md by name) and may direct each teammate to its
+# worktree path from the JSON below.
 #
 # Invoked by the squad-spawn skill via Bash. NOT invoked directly by users.
 #
@@ -11,7 +16,7 @@
 #   $2 — path to .squad/goal.md (default: .squad/goal.md relative to CWD)
 #
 # Outputs (stdout, one JSON object per line — easy to parse by the skill):
-#   {"role": "<name>", "worktree": "<absolute path>", "status": "created|exists"}
+#   {"role": "<name>", "worktree": "<absolute path>", "branch": "squad-<name>", "status": "created|exists"}
 #   {"summary": {"created": N, "existed": M, "errors": K}}
 #
 # Errors go to stderr. Exit 0 on full success, 1 on any per-role error.
@@ -86,22 +91,34 @@ fi
 while IFS= read -r ROLE; do
   [ -z "$ROLE" ] && continue
   WT_PATH="$WORKTREE_BASE/$ROLE"
-  WT_ABS=$(cd "$(dirname "$WT_PATH")" 2>/dev/null && pwd)/$(basename "$WT_PATH") || WT_ABS=""
-
-  if [ -d "$WT_PATH" ] && git worktree list --porcelain | grep -q "worktree $(pwd)/$WT_PATH$"; then
-    printf '{"role":"%s","worktree":"%s","status":"exists"}\n' "$ROLE" "$WT_ABS"
-    EXISTED=$((EXISTED + 1))
-    continue
-  fi
-
   # Branch name: squad-<role>. Branches from origin/HEAD (worktrees doc default)
   # unless worktree.baseRef is set to "head" in settings.
   BRANCH="squad-$ROLE"
 
+  # Already-registered check. `git worktree list --porcelain` prints CANONICAL
+  # (symlink-resolved) absolute paths, so compare against the resolved physical
+  # path (pwd -P) with a full-line literal match — a substring grep on $(pwd)
+  # breaks on symlinked roots (e.g. macOS /tmp -> /private/tmp).
+  if [ -d "$WT_PATH" ]; then
+    WT_REAL=$(cd "$WT_PATH" 2>/dev/null && pwd -P || true)
+    if [ -n "$WT_REAL" ] && git worktree list --porcelain \
+        | awk '/^worktree /{print $2}' | grep -Fxq "$WT_REAL"; then
+      printf '{"role":"%s","worktree":"%s","branch":"%s","status":"exists"}\n' "$ROLE" "$WT_REAL" "$BRANCH"
+      EXISTED=$((EXISTED + 1))
+      continue
+    fi
+  fi
+
   if git worktree add -B "$BRANCH" "$WT_PATH" 2>/dev/null; then
-    WT_ABS=$(cd "$WT_PATH" && pwd)
-    printf '{"role":"%s","worktree":"%s","status":"created"}\n' "$ROLE" "$WT_ABS"
+    WT_ABS=$(cd "$WT_PATH" && pwd -P)
+    printf '{"role":"%s","worktree":"%s","branch":"%s","status":"created"}\n' "$ROLE" "$WT_ABS" "$BRANCH"
     CREATED=$((CREATED + 1))
+  elif WT_ABS=$(cd "$WT_PATH" 2>/dev/null && pwd -P) \
+      && [ -n "$WT_ABS" ] \
+      && git worktree list --porcelain | awk '/^worktree /{print $2}' | grep -Fxq "$WT_ABS"; then
+    # add failed only because the path is already a registered worktree → idempotent
+    printf '{"role":"%s","worktree":"%s","branch":"%s","status":"exists"}\n' "$ROLE" "$WT_ABS" "$BRANCH"
+    EXISTED=$((EXISTED + 1))
   else
     err "failed to create worktree for role '$ROLE' at $WT_PATH"
     ERRORS=$((ERRORS + 1))

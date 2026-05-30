@@ -89,7 +89,7 @@ After all roles are generated, confirm with the user: *"Squad is ready: [list of
 
 Before spawning, walk the user through what permissions the squad will need:
 
-1. **File scope.** Each generated role has a `file_scope` glob registered in `.squad/roster.json`. The `PermissionRequest` hook auto-approves Bash/Edit/Write inside that scope and defers to the user otherwise. Confirm the user is comfortable with the scopes as written.
+1. **File scope.** Each generated role has a `file_scope` glob registered in `.squad/roster.json`. The `PermissionRequest` hook auto-approves Edit/Write inside that scope and defers everything else (including Bash, in v1) to the user. Confirm the user is comfortable with the scopes as written.
 
 2. **Agent Teams (Multi-use mode only).** Check the `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` environment variable. If it's not set to `1` and the mode is Multi-use, explain:
    - Agent Teams is an experimental Claude Code feature that lets teammates share a task list, message each other directly, and run as separate Claude sessions.
@@ -98,7 +98,7 @@ Before spawning, walk the user through what permissions the squad will need:
    - If user accepts: write the setting, tell them to restart Claude Code, resume on next session.
    - If user declines: continue, but warn that Multi-use mode will fall back to sequential subagents.
 
-3. **Worktrees (Multi-use mode only).** Per-teammate worktrees are mandatory in Multi-use mode (file isolation). The plugin enforces this via the `--worktree` CLI flag in `scripts/spawn.sh`. Confirm the user has accepted the workspace trust dialog (run `claude` once in the project directory if not).
+3. **File isolation (Multi-use mode only).** Teammate file isolation comes from each role owning a **disjoint `file_scope`** — two teammates editing the same file overwrite each other, so the decomposition must give each role a different set of files. `scripts/spawn.sh` can additionally pre-create one git worktree per role (`.claude/worktrees/<role>/`) as an optional isolated working directory, but it does not launch teammates and there is no `--worktree` teammate-launch flag. Confirm the user has accepted the workspace trust dialog (run `claude` once in the project directory if not).
 
 4. **Scheduling (Evergreen mode only).** The plugin cannot create durable scheduled work on the user's behalf. Surface three options for the user to choose, and print exact instructions for each:
    - **`/loop`** (in-session, 7-day max recurring expiry)
