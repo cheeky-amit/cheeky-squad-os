@@ -38,7 +38,7 @@ The role generator is domain-neutral. A Klaviyo audit gets `klaviyo-data-puller`
 /plugin install cheeky-squad-os@cheeky-squad-os
 ```
 
-Replace `<github-org>` with the org hosting the repo. After install, the SessionStart hook starts firing immediately. Run `/cheeky-squad-os:squad-onboard` to set your first goal.
+Replace `<github-org>` with the org hosting the repo. The SessionStart hook fires on the next session start — open a fresh session, or run `/reload-plugins` if you installed mid-session. Then run `/cheeky-squad-os:squad-onboard` to set your first goal.
 
 ---
 
@@ -65,7 +65,7 @@ Replace `<github-org>` with the org hosting the repo. After install, the Session
 **One-time** — bounded deliverable, single push. Uses subagents.
 Example goal: *"Deliver a ranked list of Klaviyo lifecycle fixes with revenue impact estimates within one week."* See `examples/klaviyo-audit.md` for a full walkthrough.
 
-**Multi-use** — ongoing build, multiple workstreams over time. Uses Agent Teams (experimental in Claude Code, env-gated by `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`; falls back to sequential subagents when unset). Teammate file isolation is enforced by giving each role a **disjoint `file_scope`** (the doc-supported approach — two teammates editing the same file overwrite each other). `scripts/spawn.sh` can additionally pre-create one git worktree per role as an optional isolated working directory; it does not launch the teammates itself.
+**Multi-use** — ongoing build, multiple workstreams over time. Uses Agent Teams (experimental in Claude Code, env-gated by `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`; falls back to sequential subagents when unset). Teammate file isolation is enforced by giving each role a **disjoint `file_scope`** (the doc-supported approach — two teammates editing the same file overwrite each other). `skills/squad-spawn/scripts/spawn.sh` can additionally pre-create one git worktree per role as an optional isolated working directory; it does not launch the teammates itself.
 Example goal: *"Ship a new homepage that converts at >5% with the existing brand voice, deployed by end of sprint."* See `examples/landing-page-redesign.md` for a full walkthrough.
 
 **Evergreen** — recurring, scheduled. The plugin sets up the goal and roles, then surfaces three scheduling options (`/loop`, cloud Routine, desktop scheduled task) for the user to pick.
@@ -121,8 +121,13 @@ cheeky-squad-os/
 │   ├── landing-page-redesign.md
 │   └── weekly-competitive-intel.md
 ├── tests/
-│   └── smoke-test.md
+│   ├── smoke-test.md               # manual end-to-end walkthrough
+│   ├── permission-request.bats     # automated: hook allow/defer matrix
+│   └── spawn.bats                  # automated: spawn.sh preflight + worktrees
+├── .github/
+│   └── workflows/ci.yml            # shellcheck + bats on push/PR
 ├── ARCHITECTURE.md
+├── LOGIC.md
 ├── CONTRIBUTING.md
 ├── LICENSE (MIT)
 └── README.md

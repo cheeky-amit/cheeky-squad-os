@@ -1,0 +1,25 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  shell:
+    name: shellcheck + bats
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install tooling
+        run: sudo apt-get update && sudo apt-get install -y shellcheck bats jq
+
+      - name: ShellCheck the shipped shell scripts
+        shell: bash
+        run: |
+          shopt -s globstar nullglob
+          shellcheck hooks/*.sh skills/**/scripts/*.sh
+
+      - name: Run bats suites
+        run: bats tests/permission-request.bats tests/spawn.bats
