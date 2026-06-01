@@ -10,91 +10,222 @@ Your goal generates the team. Every squad is bespoke to the goal that spawned it
 
 The same primitives serve four distinct kinds of work:
 
-- **Engineering work** — features, refactors, migrations. *"Ship a new homepage that converts at >5% by end of sprint."*
-- **Operational agents** — weekly reports, scheduled audits, alert handling. *"Every Monday produce a 1-page competitor movement summary."*
-- **Agentic business infrastructure** — lifecycle marketing audits, recurring research, content production. *"Deliver a ranked Klaviyo lifecycle fix list with revenue impact estimates within one week."*
-- **Knowledge work** — audits, analyses, decision memos. *"Draft a build-vs-buy memo for the analytics stack with cost projections by Friday."*
+| Domain | What it covers | Example goal |
+| --- | --- | --- |
+| 🛠️ **Engineering** | features, refactors, migrations | *"Ship a new homepage that converts at >5% by end of sprint."* |
+| 🔁 **Operational agents** | weekly reports, scheduled audits, alert handling | *"Every Monday produce a 1-page competitor movement summary."* |
+| 📊 **Business infrastructure** | lifecycle audits, recurring research, content | *"Deliver a ranked Klaviyo lifecycle fix list with revenue impact in a week."* |
+| 🧠 **Knowledge work** | audits, analyses, decision memos | *"Draft a build-vs-buy memo for the analytics stack by Friday."* |
 
 The role generator is domain-neutral. A Klaviyo audit gets `klaviyo-data-puller` + `compliance-checker` + `report-writer`. A homepage redesign gets `brand-voice-editor` + `conversion-ux-designer` + `frontend-builder` + `qa-runner`. Every squad is named for what it does — not for what default the framework happens to ship.
 
 ---
 
-## The workflow
+## How it works
 
-1. **Set a north-star goal** with `/cheeky-squad-os:squad-onboard`. The skill asks one question — *"Do you have a goal?"* — reformulates your answer as a measurable, time-bounded outcome, infers the squad's mode (one-time / multi-use / evergreen), and decomposes the work into parallel workstreams. The confirmed goal is saved to `.squad/goal.md` — the binding north-star.
+Four skills carry you from a vague intent to a dispatched, supervised team. Three hooks keep every turn anchored to the goal.
 
-2. **Generate the roles your goal needs** with `/cheeky-squad-os:squad-role`. For each workstream, an interactive flow asks what the role does, what files it owns, what tools it needs, what model is appropriate. Each role is written to `.claude/agents/<role-name>.md` and registered in `.squad/roster.json`. Roles could be a researcher and a writer, a security-auditor and a compliance-checker, a scraper and an analyst — anything the goal demands.
+```mermaid
+flowchart LR
+  U(["🧑 You: a goal"]) --> ON
 
-3. **Spawn the squad** with `/cheeky-squad-os:squad-spawn`. The skill branches on the squad's mode: One-time dispatches subagents (optionally as a dynamic **Workflow** for larger squads — see below); Multi-use uses Agent Teams (experimental, env-gated — see Modes below), with teammate file isolation enforced by disjoint per-role file scopes; Evergreen surfaces three scheduling options (`/loop`, cloud Routine, desktop scheduled task) for the user to pick.
+  subgraph S1["1 · squad-onboard"]
+    ON["Reformulate as a<br/>measurable outcome"] --> MODE{"Infer mode"}
+  end
+  ON --> GOAL[(".squad/goal.md<br/>north-star")]
 
-4. **The hooks enforce the contract every turn.** SessionStart injects the squad goal into every new session's context. UserPromptSubmit appends a one-line "goal in scope" tag on every prompt. PermissionRequest auto-approves Edit/Write inside the active role's file scope and defers to the user otherwise (Bash and all other tools always defer in v1).
+  MODE --> ROLE
 
----
+  subgraph S2["2 · squad-role"]
+    ROLE["Interactive role<br/>generator"] --> AG[".claude/agents/&lt;role&gt;.md"]
+    ROLE --> ROST[(".squad/roster.json")]
+  end
 
-## Installation
+  AG --> SPAWN
+  ROST --> SPAWN
 
+  subgraph S3["3 · squad-spawn"]
+    SPAWN{"Branch on mode"} --> ONE["One-time → subagents"]
+    SPAWN --> MUL["Multi-use → Agent Teams"]
+    SPAWN --> EVR["Evergreen → scheduling"]
+  end
+
+  ONE --> OUT(["📦 Deliverables"])
+  MUL --> OUT
+  EVR --> OUT
+
+  GOAL -. binding .-> SPAWN
 ```
-/plugin marketplace add <github-org>/cheeky-squad-os
-/plugin install cheeky-squad-os@cheeky-squad-os
-```
 
-Replace `<github-org>` with the org hosting the repo. The SessionStart hook fires on the next session start — open a fresh session, or run `/reload-plugins` if you installed mid-session. Then run `/cheeky-squad-os:squad-onboard` to set your first goal.
-
----
-
-## The five skills
-
-- **`squad-onboard`** — entry point. Asks "do you have a goal?", reformulates as an outcome, infers mode, decomposes work, proposes a bespoke squad, hands off to `squad-role`.
-- **`squad-goal`** — manages `.squad/goal.md` as the binding north-star outcome.
-- **`squad-role`** — interactive role generator. Writes `.claude/agents/<role-name>.md` from the user's answers; registers the role in the roster.
-- **`squad-spawn`** — dispatches the squad. Branches on mode (One-time → subagents, Multi-use → Agent Teams + worktrees, Evergreen → scheduling options).
-- **`squad-roster`** — manages `.squad/roster.json` (source of truth) and `.squad/roster.md` (auto-generated human view).
+1. **Set a north-star goal** with `/cheeky-squad-os:squad-onboard`. It asks *"Do you have a goal?"*, reformulates your answer as a measurable, time-bounded outcome, infers the mode (one-time / multi-use / evergreen), and decomposes the work into parallel workstreams. The confirmed goal is saved to `.squad/goal.md`.
+2. **Generate the roles your goal needs** with `/cheeky-squad-os:squad-role`. For each workstream, an interactive flow asks what the role does, what files it owns, what tools it needs, what model fits. Each role is written to `.claude/agents/<role-name>.md` and registered in `.squad/roster.json`.
+3. **Spawn the squad** with `/cheeky-squad-os:squad-spawn`. It branches on the squad's mode (see below).
+4. **The hooks enforce the contract every turn** (see below).
 
 ---
 
 ## The three hooks
 
+Registered inline in `plugin.json`; they fire on the next session start.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant CC as Claude Code
+  participant SS as SessionStart
+  participant UP as UserPromptSubmit
+  participant PR as PermissionRequest
+  participant FS as .squad / files
+
+  CC->>SS: session starts
+  SS->>FS: read .squad/goal.md
+  FS-->>SS: goal text
+  SS-->>CC: inject goal as additionalContext
+  Note over CC: goal is now in scope
+
+  CC->>UP: user submits a prompt
+  UP-->>CC: append "[squad goal in scope: ...]" (observational)
+
+  CC->>PR: subagent wants Edit/Write
+  alt path in role file_scope
+    PR-->>CC: auto-approve
+  else out of scope / Bash / unknown role / error
+    PR-->>CC: defer to user (fail-open, never silently denies)
+  end
+```
+
 - **`SessionStart`** — reads `.squad/goal.md` and injects it as additional context on every session start. If no goal is set, prints a one-line nudge to run `squad-onboard`.
-- **`UserPromptSubmit`** — appends `[squad goal in scope: <first 80 chars>]` to every user turn so drift is visible. Observational only in v1 — does not block.
-- **`PermissionRequest`** — when a subagent or teammate calls Edit/Write inside its registered file scope, auto-approves. Outside scope or unknown role, defers to the user. Fail-open on errors — never silently denies.
+- **`UserPromptSubmit`** — appends `[squad goal in scope: <first 80 chars>]` to every turn so drift is visible. Observational only in v1 — does not block.
+- **`PermissionRequest`** — when a subagent or teammate calls Edit/Write inside its registered file scope, auto-approves. Outside scope, unknown role, or any other tool (**including Bash**), defers to the user. Fail-open on errors — never silently denies.
+
+### How the permission hook decides
+
+```mermaid
+flowchart TD
+  A["PermissionRequest fires"] --> B{"agent_type present?"}
+  B -- "no / main session" --> D["↩️ defer to user"]
+  B -- yes --> C{"tool = Edit or Write?"}
+  C -- "no · e.g. Bash, MCP" --> D
+  C -- yes --> E{"file_path inside<br/>role file_scope?"}
+  E -- "no / traversal / outside repo" --> D
+  E -- yes --> F["✅ allow this single call"]
+```
+
+Bash always defers. Auto-approval only ever widens to a subagent writing inside the files its role owns — nothing more.
 
 ---
 
 ## The three modes
 
-**One-time** — bounded deliverable, single push. Uses subagents.
-Example goal: *"Deliver a ranked list of Klaviyo lifecycle fixes with revenue impact estimates within one week."* See `examples/klaviyo-audit.md` for a full walkthrough.
+`squad-spawn` branches on the mode that `squad-onboard` inferred.
 
-**Multi-use** — ongoing build, multiple workstreams over time. Uses Agent Teams (experimental in Claude Code, env-gated by `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`; falls back to sequential subagents when unset). Teammate file isolation is enforced by giving each role a **disjoint `file_scope`** (the doc-supported approach — two teammates editing the same file overwrite each other). `skills/squad-spawn/scripts/spawn.sh` can additionally pre-create one git worktree per role as an optional isolated working directory; it does not launch the teammates itself.
-Example goal: *"Ship a new homepage that converts at >5% with the existing brand voice, deployed by end of sprint."* See `examples/landing-page-redesign.md` for a full walkthrough.
+```mermaid
+flowchart LR
+  M{"Mode?"} -->|one-time| O["Agent tool x N roles<br/>goal baked into prompt"]
+  M -->|multi-use| T{"AGENT_TEAMS = 1?"}
+  M -->|evergreen| E["Pick: /loop · Routine · desktop task"]
 
-**Evergreen** — recurring, scheduled. The plugin sets up the goal and roles, then surfaces three scheduling options (`/loop`, cloud Routine, desktop scheduled task) for the user to pick.
-Example goal: *"Every Monday produce a 1-page summary of competitor pricing, product, and positioning shifts from the prior week."* See `examples/weekly-competitive-intel.md` for a full walkthrough.
+  T -->|yes| TT["Lead spawns teammates by name<br/>ref .claude/agents/&lt;role&gt;.md"]
+  T -->|no| O2["Fall back to subagents"]
+  TT -. optional .-> WT["spawn.sh pre-creates git worktrees<br/>(git worktree add only —<br/>does NOT launch teammates)"]
+```
+
+- **One-time** — bounded deliverable, single push. Uses subagents. The full text of `.squad/goal.md` and the role's role-goal is baked into every spawn prompt — the only reliable parent→worker channel (the SessionStart hook does **not** fire for subagents).
+  *Example: "Deliver a ranked list of Klaviyo lifecycle fixes within one week." See `examples/klaviyo-audit.md`.*
+- **Multi-use** — ongoing build over multiple workstreams. Uses Agent Teams (experimental, env-gated by `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`; falls back to sequential subagents when unset). Teammate file isolation is enforced by giving each role a **disjoint `file_scope`**. The team lead spawns each teammate by referencing its `.claude/agents/<role>.md` **by name**. As an optional convenience, `skills/squad-spawn/scripts/spawn.sh` can pre-create one git worktree per role — it only runs `git worktree add`; it does **not** launch teammates, and there is **no `--worktree` teammate-launch flag**.
+  *Example: "Ship a new homepage that converts at >5%, deployed by end of sprint." See `examples/landing-page-redesign.md`.*
+- **Evergreen** — recurring, scheduled. The plugin sets up the goal and roles, then surfaces three scheduling options (`/loop`, cloud Routine, desktop scheduled task) for you to pick.
+  *Example: "Every Monday produce a 1-page competitor summary." See `examples/weekly-competitive-intel.md`.*
 
 ---
 
 ## Dynamic Workflows (optional, One-time mode)
 
-For larger One-time squads, dispatch can run as a Claude Code **dynamic Workflow** instead of hand-issued subagent calls — run `/cheeky-squad-os:squad-workflow`. It fans out one agent per active role deterministically, each returning a structured result, then synthesizes. You get deterministic fan-out, schema'd hand-offs, intermediate results held off the main context, and in-session resume.
+For larger One-time squads, dispatch can run as a Claude Code **dynamic Workflow** — run `/cheeky-squad-os:squad-workflow`. You get deterministic fan-out, schema'd hand-offs, intermediate results held off the main context, and in-session resume.
 
-It is **opt-in and One-time only**: a skill can't launch a workflow for you (you approve each run), Multi-use stays on Agent Teams (workflows forbid mid-run messaging), and Evergreen stays on scheduling (a workflow isn't a scheduler). One caveat worth knowing: workflow subagents run with file edits auto-approved, which bypasses the file-scope hook — so the workflow path fans out **read/analyze** roles with self-policed scoped writes, while code-mutating roles stay on the hook-gated `squad-spawn` path. If Workflows aren't available in your install, the command falls back to the standard dispatch. Full design: see [ARCHITECTURE.md](ARCHITECTURE.md#dynamic-workflows--where-they-fit-and-where-they-dont).
+```mermaid
+flowchart TD
+  CMD["/cheeky-squad-os:squad-workflow"] --> BAKE["Bake goal + roster into args<br/>(workflow has no filesystem access)"]
+  BAKE --> FAN{{"Deterministic fan-out"}}
+  FAN --> R1["agent · role A"]
+  FAN --> R2["agent · role B"]
+  FAN --> R3["agent · role C"]
+  R1 --> SY["Synthesize structured digest"]
+  R2 --> SY
+  R3 --> SY
+  SY --> REP(["📋 One report"])
+```
+
+> ⚠️ **Caveat:** workflow subagents run with file edits auto-approved, which bypasses the file-scope hook. So this path fans out **read/analyze** roles with self-policed scoped writes, while code-mutating roles stay on the hook-gated `squad-spawn` path. It's opt-in, approved per run, and falls back to standard dispatch when Workflows aren't available. Full design: [ARCHITECTURE.md](ARCHITECTURE.md#dynamic-workflows--where-they-fit-and-where-they-dont).
+
+---
+
+## Installation
+
+```text
+/plugin marketplace add cheeky-amit/cheeky-squad-os
+/plugin install cheeky-squad-os@cheeky-squad-os
+```
+
+*(Replace `cheeky-amit` with your own org if you've forked the repo.)*
+
+After install, the `SessionStart` hook fires on the **next** session start — open a fresh session, or run `/reload-plugins` if you installed mid-session, to pick the hooks up. Then set your first goal:
+
+```text
+/cheeky-squad-os:squad-onboard
+```
+
+### Setup steps
+
+1. **Check prerequisites** — Claude Code with plugin support, plus `jq` and `git` on your `PATH`:
+   ```bash
+   claude --version
+   which jq      # brew install jq   (macOS)  /  apt-get install jq  (Linux)
+   git --version
+   ```
+   The hooks and `spawn.sh` degrade gracefully without `jq`, but full goal injection and the Multi-use worktree helper require it.
+2. **Add the marketplace & install** (commands above).
+3. **Reload hooks** — start a fresh session or run `/reload-plugins`.
+4. **Verify** — run `/hooks` and confirm all three hooks are wired; ask *"What's our squad goal?"* and you should get the "no goal set" nudge from the `SessionStart` hook.
+5. **Onboard** — run `/cheeky-squad-os:squad-onboard` and answer the goal question.
+6. **Generate roles** — run `/cheeky-squad-os:squad-role` for each proposed workstream.
+7. **Spawn** — run `/cheeky-squad-os:squad-spawn` to dispatch the squad.
+
+See [`tests/smoke-test.md`](tests/smoke-test.md) for a copy-pasteable end-to-end walkthrough that exercises every skill and hook.
+
+---
+
+## The five skills & three hooks
+
+| Component | Kind | What it does |
+| --- | --- | --- |
+| `squad-onboard` | skill | Reformulates a goal as an outcome, infers mode, proposes a bespoke squad. |
+| `squad-goal` | skill | Manages `.squad/goal.md` as the binding north-star. |
+| `squad-role` | skill | Interactive role generator → `.claude/agents/<role>.md` + roster. |
+| `squad-spawn` | skill | Dispatches the squad, branching on mode. |
+| `squad-roster` | skill | Manages `roster.json` + auto-generated `roster.md`. |
+| `SessionStart` | hook | Injects the goal into every session. |
+| `UserPromptSubmit` | hook | Tags each turn with the goal (observational). |
+| `PermissionRequest` | hook | Auto-approves in-scope Edit/Write; defers everything else. |
+
+---
 
 ## What this plugin does NOT ship
 
-- **Zero role files.** No `frontend-dev`, no `backend-dev`, no `qa-engineer`. The role generator builds what your goal needs.
-- **No fixed team structure.** Squad size and composition are decided by goal decomposition. A 3-role audit and a 6-role build are both valid squads.
-- **No assumption that this is for engineers.** The framework is domain-neutral. An ops loop and a marketing audit use the same primitives as a feature build.
+- ✕ **Zero role files.** No `frontend-dev`, no `backend-dev`, no `qa-engineer`. The generator builds what your goal needs.
+- ✕ **No fixed team structure.** A 3-role audit and a 6-role build are both valid squads — size comes from decomposition.
+- ✕ **No assumption you're an engineer.** An ops loop and a marketing audit use the same primitives as a feature build.
 
-This is intentional. Defaults bias every goal toward the shape the defaults assume. A Klaviyo audit doesn't need a `backend-dev`. A weekly intel loop doesn't need a `qa-engineer`. The plugin's design forces you to think about what your goal actually needs — and then build exactly that.
+This is intentional. Defaults bias every goal toward the shape the defaults assume. The plugin's design forces you to think about what your goal actually needs — and then build exactly that.
 
 ---
 
 ## Plugin contents at a glance
 
-```
+```text
 cheeky-squad-os/
 ├── .claude-plugin/
-│   ├── plugin.json
+│   ├── plugin.json                  # metadata + inline hook registration
 │   └── marketplace.json
 ├── skills/
 │   ├── squad-onboard/SKILL.md
@@ -102,7 +233,7 @@ cheeky-squad-os/
 │   ├── squad-role/SKILL.md
 │   ├── squad-spawn/
 │   │   ├── SKILL.md
-│   │   └── scripts/spawn.sh
+│   │   └── scripts/spawn.sh         # multi-use worktree pre-creation helper
 │   └── squad-roster/SKILL.md
 ├── commands/
 │   └── squad-workflow.md            # optional Workflow dispatch (One-time)
@@ -115,17 +246,17 @@ cheeky-squad-os/
 │   ├── role-goal.md
 │   ├── role-definition.md
 │   ├── roster.json
-│   └── squad-dispatch.workflow.js   # canonical fan-out+synthesize script
+│   └── squad-dispatch.workflow.js   # canonical fan-out + synthesize script
 ├── examples/
 │   ├── klaviyo-audit.md
 │   ├── landing-page-redesign.md
 │   └── weekly-competitive-intel.md
 ├── tests/
-│   ├── smoke-test.md               # manual end-to-end walkthrough
-│   ├── permission-request.bats     # automated: hook allow/defer matrix
-│   └── spawn.bats                  # automated: spawn.sh preflight + worktrees
+│   ├── smoke-test.md                # manual end-to-end walkthrough
+│   ├── permission-request.bats      # automated: hook allow/defer matrix
+│   └── spawn.bats                   # automated: spawn.sh preflight + worktrees
 ├── .github/
-│   └── workflows/ci.yml            # shellcheck + bats on push/PR
+│   └── workflows/ci.yml             # shellcheck + bats on push/PR
 ├── ARCHITECTURE.md
 ├── LOGIC.md
 ├── CONTRIBUTING.md
