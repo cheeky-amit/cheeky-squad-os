@@ -298,7 +298,7 @@ cheeky-squad-os/
 
 ## License
 
-[MIT](LICENSE) © amit-cheeky.
+[MIT](LICENSE) © cheeky-amit.
 
 <div align="center">
 <br/>
