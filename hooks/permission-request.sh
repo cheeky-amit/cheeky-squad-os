@@ -94,6 +94,15 @@ case "$FILE_PATH" in
     ;;
 esac
 
+# A ".." segment could escape the role's file_scope even when REL_PATH
+# textually matches a scope glob (e.g. "reports/../../etc/passwd" reduces to
+# "reports/**" prefix-wise but resolves outside the role's tree). Callers may
+# pre-normalize paths, but an auto-APPROVE decision must never depend on that.
+# Reject any traversal and defer to the user (fail-open — never auto-approve).
+case "$REL_PATH" in
+  ..|../*|*/..|*/../*) exit 0 ;;  # never auto-approve traversal — defer to user
+esac
+
 # --- Match against each scope glob ------------------------------------------
 
 # Glob semantics:

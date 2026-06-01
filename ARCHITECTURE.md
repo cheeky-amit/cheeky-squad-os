@@ -32,7 +32,7 @@ These are the load-bearing invariants the rest of the document references by num
 4. **Prompt-baking is the only reliable parent→worker channel.** The full text of `.squad/goal.md` and the relevant `.squad/role-goal-<role>.md` is baked into every spawn prompt. `SessionStart` does not fire for subagents, so the baked prompt — not hook injection — is what guarantees a subagent sees its goal.
 5. **Explicit file scope.** Each role declares a `file_scope`; the `PermissionRequest` hook auto-approves in-scope Edit/Write and defers everything else to the user.
 6. **Mode controls cadence, not size.** One-time / Multi-use / Evergreen set persistence and dispatch primitive; squad size is set by goal decomposition.
-7. **Per-role file isolation.** Roles are given disjoint `file_scope` so concurrent workers don't overwrite each other (agent-teams doc: "each teammate owns a different set of files"). One-time subagents may additionally set `isolation: worktree`; Multi-use can pre-create per-role worktrees via `scripts/spawn.sh` as working directories.
+7. **Per-role file isolation.** Roles are given disjoint `file_scope` so concurrent workers don't overwrite each other (agent-teams doc: "each teammate owns a different set of files"). One-time subagents may additionally set `isolation: worktree`; Multi-use can pre-create per-role worktrees via `skills/squad-spawn/scripts/spawn.sh` as working directories.
 
 ## The three modes
 
@@ -41,14 +41,14 @@ Mode is inferred from goal language by `squad-onboard`. User can override. Agent
 | Mode | Cadence | Primitive | Example goal shape |
 | --- | --- | --- | --- |
 | **One-time** | Single bounded push | Subagents (stable; optional `isolation: worktree` per subagent). For large fan-outs or when adversarial cross-checking adds value, an optional **dynamic Workflow** runtime (see ["Dynamic Workflows"](#dynamic-workflows--where-they-fit-and-where-they-dont) below). | "deliver ranked Klaviyo lifecycle fix list with revenue impact estimates within one week" |
-| **Multi-use** | Ongoing build over multiple workstreams | Agent Teams (experimental, env-gated). Teammate file isolation via **disjoint per-role `file_scope`**; `scripts/spawn.sh` optionally pre-creates one worktree per role as a working directory (it does not launch teammates). | "ship new homepage that converts at >5% by end of sprint" |
+| **Multi-use** | Ongoing build over multiple workstreams | Agent Teams (experimental, env-gated). Teammate file isolation via **disjoint per-role `file_scope`**; `skills/squad-spawn/scripts/spawn.sh` optionally pre-creates one worktree per role as a working directory (it does not launch teammates). | "ship new homepage that converts at >5% by end of sprint" |
 | **Evergreen** | Recurring, scheduled | `/loop` (in-session, 7-day max per `CronCreate` recurring-task expiry) **or** user-managed Routine / Desktop scheduled task (durable, configured by the user — plugin cannot create on their behalf) | "every Monday produce a 1-page competitor movement summary" |
 
 Mode controls **cadence and persistence**. Agent count is set by the goal decomposition (how many parallel workstreams) and the domain expertise required (how many specializations).
 
 ## The five skills
 
-Every skill ships as `skills/<name>/SKILL.md` with YAML frontmatter conforming to the agentskills.io open spec. Claude-Code-specific behaviors live in companion scripts (e.g. `scripts/spawn.sh`) or are gracefully degraded.
+Every skill ships as `skills/<name>/SKILL.md` with YAML frontmatter conforming to the agentskills.io open spec. Claude-Code-specific behaviors live in companion scripts (e.g. `skills/squad-spawn/scripts/spawn.sh`) or are gracefully degraded.
 
 ### 1. `squad-onboard`
 
@@ -140,8 +140,9 @@ Switch on goal.mode:
   multi-use:
     Check $CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS
       Set to "1":
-        Optionally invoke `scripts/spawn.sh` (it ONLY pre-creates one git
-        worktree per active role under .claude/worktrees/<role>/ and emits
+        Optionally invoke `skills/squad-spawn/scripts/spawn.sh` (it ONLY
+        pre-creates one git worktree per active role under
+        .claude/worktrees/<role>/ and emits
         JSON; it launches nothing and bakes no prompt). Then, as the team
         lead, orchestrate the Agent Team:
           - For each role, spawn a teammate referencing the subagent
@@ -419,7 +420,7 @@ sequenceDiagram
 [Agent Teams](https://code.claude.com/docs/en/agent-teams) is explicitly experimental and disabled by default. The plugin handles this in `squad-spawn`:
 
 1. Read `$CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` from environment.
-2. If `1` and mode is `multi-use`: proceed with Agent Teams path. File isolation (hard rule #7) is enforced by **disjoint per-role `file_scope`** (agent-teams doc: "break the work so each teammate owns a different set of files"). `scripts/spawn.sh` optionally pre-creates one git worktree per role as a working directory but launches no teammate; there is no `--worktree <role>` teammate-launch flag (that flag only starts standalone interactive sessions per the worktrees doc). The subagent-frontmatter `isolation: worktree` field is documented for subagents (One-time path), not teammates.
+2. If `1` and mode is `multi-use`: proceed with Agent Teams path. File isolation (hard rule #7) is enforced by **disjoint per-role `file_scope`** (agent-teams doc: "break the work so each teammate owns a different set of files"). `skills/squad-spawn/scripts/spawn.sh` optionally pre-creates one git worktree per role as a working directory but launches no teammate; there is no `--worktree <role>` teammate-launch flag (that flag only starts standalone interactive sessions per the worktrees doc). The subagent-frontmatter `isolation: worktree` field is documented for subagents (One-time path), not teammates.
 3. If unset or `0` and mode is `multi-use`:
    - Print a short explanation of what Agent Teams adds (shared task list, mailbox, direct teammate-to-teammate messaging).
    - Offer to add `{"env": {"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"}}` to `~/.claude/settings.json` (asks consent first).
@@ -467,8 +468,8 @@ A 2–3 role squad does **not** need this; the direct-`Agent` path stays the def
 
 Per the agentskills.io spec, the SKILL.md bodies contain no Claude-Code-specific behavior. Claude-Code-specific concerns:
 
-- **Agent Teams enablement** — lives in `scripts/spawn.sh`, not in the skill body.
-- **`--worktree` invocation** — lives in `scripts/spawn.sh`.
+- **Agent Teams enablement** — the env check lives in `skills/squad-spawn/scripts/spawn.sh`, not in the skill body.
+- **Worktree pre-creation** — `skills/squad-spawn/scripts/spawn.sh` runs `git worktree add` to pre-create one optional working directory per role. It launches no teammate, and there is no `--worktree` teammate-launch flag.
 - **`/loop` and Routines** — referenced in `squad-spawn` body, but the skill degrades gracefully on non-Claude-Code tools (it would describe scheduling abstractly).
 - **Hook installation** — done by `plugin.json`, not the skills.
 

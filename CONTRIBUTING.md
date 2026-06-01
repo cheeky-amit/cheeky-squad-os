@@ -9,13 +9,15 @@ This is a small plugin with a clear shape. Contributions land in one of five pla
 hooks/                 three bash scripts (SessionStart, UserPromptSubmit, PermissionRequest)
 skills/<name>/SKILL.md five SKILL.md files (squad-onboard, squad-goal, squad-role, squad-spawn, squad-roster)
 skills/squad-spawn/scripts/spawn.sh  multi-use mode worktree pre-creation helper
-templates/             goal.md, role-goal.md, role-definition.md, roster.json
+commands/              squad-workflow.md (optional One-time Workflow dispatch)
+templates/             goal.md, role-goal.md, role-definition.md, roster.json, squad-dispatch.workflow.js
 examples/              three walkthrough docs (one per mode)
-tests/smoke-test.md    end-to-end manual verification script
+tests/                 smoke-test.md (manual) + permission-request.bats / spawn.bats (automated)
+.github/workflows/     ci.yml — shellcheck + bats on push/PR
 ARCHITECTURE.md        full design doc
 ```
 
-No JavaScript, no Python, no build step, no test runner. Everything is markdown and bash.
+Almost everything is markdown and bash. The two exceptions: `templates/squad-dispatch.workflow.js` is the canonical dynamic-Workflow dispatch script (JavaScript, run by the Claude Code Workflow runtime), and the shell scripts are covered by a `bats` suite + `shellcheck` in CI. No Python, no build step.
 
 ## What you can contribute
 
@@ -94,16 +96,27 @@ When you add a new example, use role names that don't collide with any of the ex
 
 ## Local testing
 
-There is no automated test suite. The plugin's testing surface is the manual end-to-end script at `tests/smoke-test.md`. Run it before opening a PR:
+Two layers:
+
+**Automated** — a `bats` suite over the shell scripts, gated in CI (`.github/workflows/ci.yml`) alongside `shellcheck`:
+
+```
+shellcheck hooks/*.sh skills/**/scripts/*.sh
+bats tests/permission-request.bats tests/spawn.bats
+```
+
+`permission-request.bats` covers the hook's allow/defer matrix (in-scope allow, out-of-scope/Bash/main-session/unknown-role defer, single-segment glob semantics, `..` traversal defer, missing-jq fail-open). `spawn.bats` covers `spawn.sh` preflight refusals and idempotent worktree creation. Install the tools with `brew install bats-core shellcheck` (macOS) or `apt-get install bats shellcheck` (Linux). These run automatically on every push/PR.
+
+**Manual end-to-end** — the interactive surface (skills, SessionStart injection, real subagent dispatch) isn't covered by bats. Run the walkthrough at `tests/smoke-test.md` before opening a PR:
 
 ```
 /plugin marketplace add ./
 /plugin install cheeky-squad-os@cheeky-squad-os
 ```
 
-Then follow the steps in `tests/smoke-test.md`. The smoke test exercises every skill and every hook with a real (but tiny) goal. If your change breaks the smoke test, the PR isn't ready.
+Then follow the steps in `tests/smoke-test.md`. It exercises every skill and every hook with a real (but tiny) goal. If your change breaks the smoke test, the PR isn't ready.
 
-For hook changes, you can additionally pipe synthetic JSON into the hook script directly and inspect the output — see the test pattern in `tests/smoke-test.md`.
+For hook changes, you can also pipe synthetic JSON into the hook script directly and inspect the output — that's exactly what `tests/permission-request.bats` automates, and the manual pattern is shown in `tests/smoke-test.md`.
 
 ## Issues
 
