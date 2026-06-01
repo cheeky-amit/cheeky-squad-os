@@ -2,7 +2,7 @@
 
 Copy-pasteable manual verification. Exercises every skill and every hook with a small real goal. Should complete in under 10 minutes on a fresh project.
 
-If this passes, the plugin is shipping-ready.
+If this passes, the plugin's core paths are exercised end-to-end. It does **not** cover negative paths (out-of-scope DENY, Bash DEFER, fail-open, `..` traversal) — those live in the automated suite (`tests/permission-request.bats`, `tests/spawn.bats`, run in CI).
 
 ---
 
@@ -209,7 +209,7 @@ All of these must be true:
 - [ ] Step 7: No permission prompts for in-scope writes
 - [ ] Step 8: A fresh session knows the goal without being told (proof of SessionStart hook injecting)
 
-If all 7 pass, the plugin is shipping-ready end-to-end.
+If all 7 pass, the plugin's core paths are exercised end-to-end. Negative-path coverage (out-of-scope DENY, Bash DEFER, no-jq fail-open, `..` traversal) is in the automated suite — see `tests/permission-request.bats` and `tests/spawn.bats`.
 
 ---
 

@@ -52,7 +52,7 @@ Examples:
 - `src/auth/**, tests/auth/**`
 - `intel/competitors/**`
 
-Accept comma-separated globs. Validate that each is a sensible glob (no leading `/`, no absolute paths, no `..` traversal). If the user gives a too-broad scope (`**`, `*`, project root), warn: *"That scope auto-approves writes anywhere in the project. Confirm or narrow."*
+Accept comma-separated globs. Validate that each is a sensible glob (no leading `/`, no absolute paths, no `..` traversal). If the user gives a too-broad scope (bare `**`, `*`, project root), warn: *"A bare `**` scope widens the PermissionRequest auto-approve surface to Edit/Write anywhere in the project — every in-scope write skips the prompt. Confirm or narrow."* Over-broad is allowed, but make it a conscious choice.
 
 Scope-glob semantics the `PermissionRequest` hook enforces (so set expectations accordingly):
 - `prefix/**` — the whole subtree under `prefix` (this is what you want for "owns this directory").
@@ -64,6 +64,8 @@ Scope-glob semantics the `PermissionRequest` hook enforces (so set expectations 
 Ask: *"What tools does this role need? Common picks: `Read, Write, Edit, Bash, Glob, Grep`. Add MCP tools like `mcp__claude_ai_Klaviyo__*` or `mcp__claude_ai_Shopify__*` if it uses external services. Read-only roles can drop `Write, Edit`."*
 
 Validate against Claude Code's tool list (see [sub-agents doc](https://code.claude.com/docs/en/sub-agents#available-tools)). Note that `Agent`, `AskUserQuestion`, `EnterPlanMode`, `ExitPlanMode`, `ScheduleWakeup`, and `WaitForMcpServers` are not available to subagents — strip them silently if listed.
+
+If the user requests `Bash` alongside a broad `file_scope` (from Q3), note in one line: *"Bash always defers to you in v1, so it isn't auto-approved — but a broad write scope plus Bash is a wide grant; keep the scope tight if you can."* Safe-by-default; just make it a conscious choice.
 
 ### Q5 — What model?
 
@@ -79,7 +81,7 @@ Only ask this in **One-time mode** if the role will edit files that other roles 
 
 If yes: set `isolation: worktree` in the role's frontmatter.
 
-In **Multi-use mode**, do not ask — per-teammate `--worktree` is enforced by `scripts/spawn.sh` (the CLI flag, not the frontmatter field).
+In **Multi-use mode**, do not ask — `${CLAUDE_PLUGIN_ROOT}/skills/squad-spawn/scripts/spawn.sh` only pre-creates one git worktree per role (`git worktree add`) as an optional working directory; it does not launch teammates, and there is no `--worktree` teammate-launch flag. Teammate file isolation comes from each role's disjoint `file_scope`, not from this frontmatter field or any flag.
 
 In **Evergreen mode**, do not ask — isolation is irrelevant for scheduled solo runs.
 

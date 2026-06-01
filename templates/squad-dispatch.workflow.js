@@ -120,9 +120,11 @@ Write your deliverables to files inside your scope (do not paste large artifacts
 into your reply), then return the structured result.`;
 }
 
-// ---- Phase 1+2: fan out per role, synthesize as each completes -------------
-// pipeline() runs each role through dispatch -> (no barrier) so synthesis notes
-// accumulate independently; the final cross-role synthesis happens after.
+// ---- Phase 1: fan out one agent per role (barrier), then synthesize --------
+// parallel() is the right primitive here, not pipeline(): dispatch is a single
+// stage and the synthesis below genuinely needs ALL role results at once (it
+// counts statuses and merges every role's follow_ups). A thunk that throws
+// resolves to its .catch() fallback below, so the barrier never rejects.
 phase("Dispatch");
 
 const results = await parallel(

@@ -98,7 +98,7 @@ Before spawning, walk the user through what permissions the squad will need:
    - If user accepts: write the setting, tell them to restart Claude Code, resume on next session.
    - If user declines: continue, but warn that Multi-use mode will fall back to sequential subagents.
 
-3. **File isolation (Multi-use mode only).** Teammate file isolation comes from each role owning a **disjoint `file_scope`** — two teammates editing the same file overwrite each other, so the decomposition must give each role a different set of files. `scripts/spawn.sh` can additionally pre-create one git worktree per role (`.claude/worktrees/<role>/`) as an optional isolated working directory, but it does not launch teammates and there is no `--worktree` teammate-launch flag. Confirm the user has accepted the workspace trust dialog (run `claude` once in the project directory if not).
+3. **File isolation (Multi-use mode only).** Teammate file isolation comes from each role owning a **disjoint `file_scope`** — two teammates editing the same file overwrite each other, so the decomposition must give each role a different set of files. `${CLAUDE_PLUGIN_ROOT}/skills/squad-spawn/scripts/spawn.sh` can additionally pre-create one git worktree per role (`.claude/worktrees/<role>/`) as an optional isolated working directory, but it does not launch teammates and there is no `--worktree` teammate-launch flag. Confirm the user has accepted the workspace trust dialog (run `claude` once in the project directory if not).
 
 4. **Scheduling (Evergreen mode only).** The plugin cannot create durable scheduled work on the user's behalf. Surface three options for the user to choose, and print exact instructions for each:
    - **`/loop`** (in-session, 7-day max recurring expiry)

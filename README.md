@@ -252,8 +252,13 @@ cheeky-squad-os/
 │   ├── landing-page-redesign.md
 │   └── weekly-competitive-intel.md
 ├── tests/
-│   └── smoke-test.md
+│   ├── smoke-test.md                # manual end-to-end walkthrough
+│   ├── permission-request.bats      # automated: hook allow/defer matrix
+│   └── spawn.bats                   # automated: spawn.sh preflight + worktrees
+├── .github/
+│   └── workflows/ci.yml             # shellcheck + bats on push/PR
 ├── ARCHITECTURE.md
+├── LOGIC.md
 ├── CONTRIBUTING.md
 ├── LICENSE (MIT)
 └── README.md

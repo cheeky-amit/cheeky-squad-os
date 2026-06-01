@@ -71,7 +71,7 @@ This file is dual-purpose by design. It works as:
 
 2. **An Agent Teams teammate definition** — referenced when the squad runs in Multi-use mode. Per the [Claude Code agent-teams documentation](https://code.claude.com/docs/en/agent-teams#use-subagent-definitions-for-teammates), the `tools` allowlist and `model` propagate to the teammate, and this body is appended to the teammate's system prompt as additional instructions (it does not replace the default). The `skills` and `mcpServers` frontmatter fields **do not propagate** when this definition runs as a teammate — those load from project and user settings, the same as a regular session. If you add a `skills` or `mcpServers` line and wonder why it isn't taking effect in Multi-use mode, that's why.
 
-The `isolation: worktree` frontmatter field (if present above) applies when this role runs as a subagent. In Multi-use mode, per-teammate worktree isolation is handled by `scripts/spawn.sh` invoking `--worktree <role-name>` on each teammate's Claude session — not by this frontmatter field.
+The `isolation: worktree` frontmatter field (if present above) applies when this role runs as a subagent. In Multi-use mode, `${CLAUDE_PLUGIN_ROOT}/skills/squad-spawn/scripts/spawn.sh` only pre-creates one git worktree per role (`git worktree add`) as an optional working directory; it does not launch teammates, and there is no `--worktree` teammate-launch flag. Teammate file isolation comes from each role's disjoint `file_scope`, not from this frontmatter field or any flag.
 
 ## Edit policy
 
