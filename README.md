@@ -1,4 +1,34 @@
-# cheeky-squad-os
+<div align="center">
+
+# 🪖 cheeky-squad-os
+
+### Ship the discipline, not the team.
+
+*Turn any Claude Code goal — engineering, ops, business infrastructure, knowledge work — into a **bespoke squad of roles generated from the goal itself**. Zero opinionated roles shipped.*
+
+<br/>
+
+[![CI](https://github.com/cheeky-amit/cheeky-squad-os/actions/workflows/ci.yml/badge.svg)](https://github.com/cheeky-amit/cheeky-squad-os/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Version](https://img.shields.io/badge/version-0.1.0-blue.svg)](.claude-plugin/plugin.json)
+[![Claude Code plugin](https://img.shields.io/badge/Claude_Code-plugin-8A2BE2.svg)](https://code.claude.com/docs/en/plugins)
+[![Built with](https://img.shields.io/badge/built_with-Markdown_%2B_Bash-1f425f.svg)](CONTRIBUTING.md)
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+
+<br/>
+
+**[Why](#why-this-matters-across-domains)** ·
+**[How it works](#how-it-works)** ·
+**[Hooks](#the-three-hooks)** ·
+**[Modes](#the-three-modes)** ·
+**[Workflows](#dynamic-workflows-optional-one-time-mode)** ·
+**[Install](#installation)** ·
+**[Components](#the-five-skills--three-hooks)** ·
+**[Contributing](CONTRIBUTING.md)**
+
+</div>
+
+---
 
 > All Claude Code work — engineering, operational, agentic business infrastructure, knowledge work — goes better when you treat your AI session like a team with roles, responsibilities, communication, and supervision. **cheeky-squad-os ships the discipline, not the team.**
 
@@ -268,4 +298,13 @@ cheeky-squad-os/
 
 ## License
 
-MIT. Author: amit-cheeky.
+[MIT](LICENSE) © cheeky-amit.
+
+<div align="center">
+<br/>
+
+**Ship the discipline, not the team.**
+
+<sub>Built as a Claude Code plugin · skills + hooks, no fixed roster · <a href="#-cheeky-squad-os">back to top ↑</a></sub>
+
+</div>

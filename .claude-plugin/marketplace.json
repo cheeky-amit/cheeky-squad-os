@@ -1,7 +1,7 @@
 {
   "name": "cheeky-squad-os",
   "owner": {
-    "name": "amit-cheeky"
+    "name": "cheeky-amit"
   },
   "description": "Self-hosted marketplace for the cheeky-squad-os plugin.",
   "plugins": [
@@ -11,7 +11,7 @@
       "description": "Ship the discipline, not the team. Turn any Claude Code goal into a bespoke squad of roles generated from the goal itself.",
       "version": "0.1.0",
       "author": {
-        "name": "amit-cheeky"
+        "name": "cheeky-amit"
       },
       "license": "MIT",
       "keywords": [
