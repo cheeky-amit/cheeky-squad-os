@@ -100,7 +100,7 @@ while IFS= read -r ROLE; do
   # path (pwd -P) with a full-line literal match — a substring grep on $(pwd)
   # breaks on symlinked roots (e.g. macOS /tmp -> /private/tmp).
   if [ -d "$WT_PATH" ]; then
-    WT_REAL=$(cd "$WT_PATH" 2>/dev/null && pwd -P || true)
+    WT_REAL=$( (cd "$WT_PATH" 2>/dev/null && pwd -P) || true )
     if [ -n "$WT_REAL" ] && git worktree list --porcelain \
         | awk '/^worktree /{print $2}' | grep -Fxq "$WT_REAL"; then
       printf '{"role":"%s","worktree":"%s","branch":"%s","status":"exists"}\n' "$ROLE" "$WT_REAL" "$BRANCH"
