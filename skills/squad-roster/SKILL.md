@@ -26,15 +26,24 @@ You manage `.squad/roster.json` — the source of truth for who's on the squad �
       "purpose": "Pull Klaviyo flow performance via MCP and dump as JSON",
       "agent_file": ".claude/agents/klaviyo-data-puller.md",
       "role_goal": ".squad/role-goal-klaviyo-data-puller.md",
-      "file_scope": ["reports/klaviyo/**", "data/klaviyo/**"],
+      "file_scope": ["reports/klaviyo/**", "data/klaviyo/**", ".squad/workspaces/klaviyo-data-puller/**"],
       "tools": ["Read", "Write", "Bash", "mcp__claude_ai_Klaviyo__*"],
       "model": "sonnet",
+      "environment": {
+        "workspace": ".squad/workspaces/klaviyo-data-puller/",
+        "dirs": ["inputs", "outputs", "scratch"],
+        "env": {},
+        "context": [],
+        "tools": [{ "name": "jq", "kind": "system", "verify": "command -v jq" }]
+      },
       "active": true,
       "created": "<ISO-8601>"
     }
   ]
 }
 ```
+
+The `environment` block is **optional** (managed by `squad-env`, materialized by `provision.sh`). When present, `workspace` must be project-relative with no `..`, and `<workspace>/**` must appear in `file_scope` (so the role's in-sandbox Edit/Write auto-approve).
 
 `.squad/roster.md` is regenerated from `roster.json` after every write. It is **not authoritative** — never read from it. Always read from the JSON.
 
@@ -130,6 +139,7 @@ Before writing `.squad/roster.json`:
 - `mode` equals `.squad/goal.md`'s mode — re-derive it from goal.md and overwrite the roster copy (goal.md is authoritative); warn if they had diverged. It must be one of `one-time`, `multi-use`, `evergreen`.
 - Every role has `name` (kebab-case, no collisions), `purpose` (non-empty), `agent_file` (path exists or will exist), `role_goal` (path exists or will exist), `file_scope` (non-empty array of strings), `tools` (non-empty array), `model` (`sonnet`, `opus`, `haiku`, or `inherit`).
 - `active` is a boolean.
+- If `environment` is present: `environment.workspace` is a non-empty project-relative path with no leading `/` and no `..`; and `<workspace>/**` (trailing slash stripped, `/**` appended) appears in `file_scope`. If the workspace glob is missing from `file_scope`, add it automatically and warn that you widened the scope to cover the sandbox. `dirs`/`context`/`tools` (if present) are arrays; `env` (if present) is an object.
 - JSON is well-formed.
 
 If validation fails, do not write. Print the specific failure and ask the user to fix.

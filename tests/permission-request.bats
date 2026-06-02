@@ -18,7 +18,9 @@ setup() {
 {
   "roles": [
     { "name": "reporter", "file_scope": ["reports/**"] },
-    { "name": "rootdoc",  "file_scope": ["*.md"] }
+    { "name": "rootdoc",  "file_scope": ["*.md"] },
+    { "name": "builder",  "file_scope": ["build/**", ".squad/workspaces/builder/**"],
+      "environment": { "workspace": ".squad/workspaces/builder/" } }
   ]
 }
 JSON
@@ -67,8 +69,64 @@ run_hook() {
   [ -z "$output" ]
 }
 
-@test "Bash always defers (never auto-approved in v1)" {
-  run_hook '{"agent_type":"reporter","tool_name":"Bash","tool_input":{"command":"rm -rf reports"}}'
+@test "Bash defers for a role with no sandbox (no environment.workspace)" {
+  run_hook '{"agent_type":"reporter","tool_name":"Bash","tool_input":{"command":"mkdir -p reports/x"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+# --- in-sandbox Bash scaffolding (Surface 2) ---------------------------------
+
+@test "in-sandbox mkdir is auto-approved (relative path)" {
+  run_hook '{"agent_type":"builder","tool_name":"Bash","tool_input":{"command":"mkdir -p .squad/workspaces/builder/outputs"}}'
+  [ "$status" -eq 0 ]
+  [[ "$output" == *allow* ]]
+}
+
+@test "in-sandbox cp with both operands inside the workspace is auto-approved" {
+  run_hook '{"agent_type":"builder","tool_name":"Bash","tool_input":{"command":"cp .squad/workspaces/builder/a .squad/workspaces/builder/b"}}'
+  [ "$status" -eq 0 ]
+  [[ "$output" == *allow* ]]
+}
+
+@test "in-sandbox touch via absolute path inside the project is auto-approved" {
+  run_hook '{"agent_type":"builder","tool_name":"Bash","tool_input":{"command":"touch '"$PROJECT_DIR"'/.squad/workspaces/builder/scratch/x"}}'
+  [ "$status" -eq 0 ]
+  [[ "$output" == *allow* ]]
+}
+
+@test "Bash operand OUTSIDE the sandbox defers" {
+  run_hook '{"agent_type":"builder","tool_name":"Bash","tool_input":{"command":"mkdir -p src/foo"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "Bash cp with a source outside the project defers" {
+  run_hook '{"agent_type":"builder","tool_name":"Bash","tool_input":{"command":"cp /etc/passwd .squad/workspaces/builder/p"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "destructive verb (rm) defers even inside the sandbox" {
+  run_hook '{"agent_type":"builder","tool_name":"Bash","tool_input":{"command":"rm -rf .squad/workspaces/builder/outputs"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "Bash with a shell metacharacter defers" {
+  run_hook '{"agent_type":"builder","tool_name":"Bash","tool_input":{"command":"mkdir -p .squad/workspaces/builder/a && rm -rf /"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "Bash with a '..' traversal inside the workspace defers" {
+  run_hook '{"agent_type":"builder","tool_name":"Bash","tool_input":{"command":"mkdir -p .squad/workspaces/builder/../../../etc/x"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "bare verb with no operand defers" {
+  run_hook '{"agent_type":"builder","tool_name":"Bash","tool_input":{"command":"mkdir"}}'
   [ "$status" -eq 0 ]
   [ -z "$output" ]
 }

@@ -32,4 +32,4 @@ jobs:
           shellcheck hooks/*.sh skills/**/scripts/*.sh
 
       - name: Run bats suites
-        run: bats tests/permission-request.bats tests/spawn.bats
+        run: bats tests/permission-request.bats tests/spawn.bats tests/provision.bats

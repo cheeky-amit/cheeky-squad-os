@@ -3,15 +3,24 @@
 #
 # Fires when Claude Code is about to prompt for permission on a tool call.
 # If the call comes from a registered subagent (agent_type set on the hook
-# input — confirmed field name per hooks doc + sub-agents doc) AND the call
-# is an Edit/Write to a file inside the role's file_scope, auto-approve.
-# Otherwise: omit decision and let normal permission flow handle it (user
-# is prompted — never silently denied).
+# input — confirmed field name per hooks doc + sub-agents doc) it may be
+# auto-approved on one of two narrow surfaces; everything else defers to the
+# user (no decision emitted → normal permission flow → user prompted; never
+# silently denied):
 #
-# v1 scope:
-#   - Edit, Write → check tool_input.file_path against role file_scope
-#   - Everything else (Bash, MCP tools, …) → defer to user
-# v2 may extend to Bash command-path parsing; v1 keeps the surface narrow.
+#   1. Edit/Write to a file inside the role's file_scope.
+#   2. Bash that does pure in-sandbox SCAFFOLDING (mkdir/touch/cp/ln) where
+#      EVERY path operand resolves inside the role's environment.workspace.
+#      This is the role working freely inside its own sandbox. Anything that
+#      cannot be proven contained — a different verb, an operand outside the
+#      workspace, any shell metacharacter (so we can't reason about it), or a
+#      role with no declared workspace — defers to the user. Installs, network,
+#      and global mutations are NOT on this list by design: they are the
+#      provisioner's "propose to the user" path, not the running role's.
+#
+# The two surfaces share the same containment primitives (normalize-to-relative,
+# reject ".." traversal, fail-closed on doubt) — auto-approving Bash never
+# reopens the path-traversal hole hardened on the Edit/Write surface.
 #
 # Always exits 0. Fail-open on any error.
 
@@ -42,6 +51,7 @@ fi
 AGENT_TYPE=$(printf '%s' "$INPUT" | jq -r '.agent_type // empty' 2>/dev/null)
 TOOL_NAME=$(printf '%s' "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null)
 FILE_PATH=$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null)
+COMMAND=$(printf '%s' "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null)
 
 # Main-session calls (no agent_type) → defer to user. Auto-approval is only
 # for subagent/teammate calls where the active role is identifiable.
@@ -49,72 +59,74 @@ if [ -z "$AGENT_TYPE" ]; then
   exit 0
 fi
 
-# Only Edit and Write are in scope for v1 auto-approval.
-case "$TOOL_NAME" in
-  Edit|Write) ;;
-  *) exit 0 ;;
-esac
-
-if [ -z "$FILE_PATH" ]; then
-  exit 0
-fi
-
-# --- Look up the role's file_scope ------------------------------------------
-
-# jq filter: find the role by name, output one scope glob per line.
-SCOPES=$(printf '%s' "$(cat "$ROSTER")" \
-  | jq -r --arg name "$AGENT_TYPE" \
-      '.roles[] | select(.name == $name) | .file_scope[]?' 2>/dev/null)
-
-if [ -z "$SCOPES" ]; then
-  # Unknown agent_type, or role has no file_scope. Defer to user.
-  exit 0
-fi
-
-# --- Normalize file_path to project-relative ---------------------------------
-
-# Resolve project root to a canonical absolute path.
+# Resolve project root to a canonical absolute path (shared by both surfaces).
 PROJECT_ABS=$(cd "$PROJECT_DIR" 2>/dev/null && pwd)
 if [ -z "$PROJECT_ABS" ]; then
   exit 0
 fi
 
-case "$FILE_PATH" in
-  /*)
-    # Absolute path. Must be inside project root to be considered.
-    case "$FILE_PATH" in
-      "$PROJECT_ABS"/*) REL_PATH="${FILE_PATH#"$PROJECT_ABS"/}" ;;
-      "$PROJECT_ABS")   REL_PATH="" ;;
-      *) exit 0 ;;  # outside project root → defer
-    esac
-    ;;
-  *)
-    # Already relative.
-    REL_PATH="$FILE_PATH"
-    ;;
-esac
+# --- Shared containment primitives -------------------------------------------
 
-# A ".." segment could escape the role's file_scope even when REL_PATH
-# textually matches a scope glob (e.g. "reports/../../etc/passwd" reduces to
-# "reports/**" prefix-wise but resolves outside the role's tree). Callers may
-# pre-normalize paths, but an auto-APPROVE decision must never depend on that.
-# Reject any traversal and defer to the user (fail-open — never auto-approve).
-case "$REL_PATH" in
-  ..|../*|*/..|*/../*) exit 0 ;;  # never auto-approve traversal — defer to user
-esac
+# normalize_rel <raw-path> → prints the project-relative form on stdout.
+# Returns 1 if the path is absolute and outside the project root (caller defers).
+normalize_rel() {
+  local p="$1" rel
+  case "$p" in
+    /*)
+      case "$p" in
+        "$PROJECT_ABS"/*) rel="${p#"$PROJECT_ABS"/}" ;;
+        "$PROJECT_ABS")   rel="" ;;
+        *) return 1 ;;  # absolute path outside project → defer
+      esac
+      ;;
+    *)
+      rel="$p"  # already relative
+      ;;
+  esac
+  printf '%s' "$rel"
+  return 0
+}
 
-# --- Match against each scope glob ------------------------------------------
+# has_traversal <rel> → returns 0 if the relative path contains a ".." segment.
+# A ".." could escape scope/sandbox even when the path textually matches; an
+# auto-APPROVE decision must never depend on caller pre-normalization.
+has_traversal() {
+  case "$1" in
+    ..|../*|*/..|*/../*) return 0 ;;
+  esac
+  return 1
+}
 
+# emit_allow → print the minimal allow decision. The PermissionRequest decision
+# object's documented shape is decision.behavior ("allow"|"deny"); there is NO
+# `permissionRule` field (silently ignored). To persist a rule the documented
+# field is `updatedPermissions`; v1 leaves it unset and re-evaluates each call.
+emit_allow() {
+  jq -n \
+    '{hookSpecificOutput: {hookEventName: "PermissionRequest", decision: {behavior: "allow"}}}' \
+    2>/dev/null || true
+}
+
+# rel_under_dir <rel> <dir> → returns 0 if <rel> is <dir> itself or nested
+# beneath it. <dir> is a plain prefix (the role's workspace), not a glob.
+rel_under_dir() {
+  local rel="$1" dir="$2"
+  case "$rel" in
+    "$dir") return 0 ;;
+    "$dir"/*) return 0 ;;
+  esac
+  return 1
+}
+
+# path_in_scope <rel> <glob> — file_scope glob matcher (Edit/Write surface).
 # Glob semantics:
-#   "<prefix>/**"        → match any path whose first segments are <prefix>
+#   "<prefix>/**"        → any path whose first segments are <prefix>
 #   "**"                 → match anything
 #   pattern with no "/"  → match a SINGLE path segment only (e.g. "*.md"
 #                          matches "notes.md" but NOT "src/notes.md"). bash
 #                          [[ == ]] would otherwise let "*" cross "/" and
-#                          silently over-approve nested paths — since this is
-#                          an auto-APPROVE path, we fail closed.
-#   other patterns       → bash [[ pattern matching. Unmatched paths defer to
-#                          the user, so the user keeps final say.
+#                          silently over-approve nested paths — fail closed.
+#   other patterns       → bash [[ pattern matching. Unmatched paths defer.
 path_in_scope() {
   local rel="$1"
   local glob="$2"
@@ -149,26 +161,100 @@ path_in_scope() {
   return 1
 }
 
-MATCHED=0
-while IFS= read -r GLOB; do
-  [ -z "$GLOB" ] && continue
-  if path_in_scope "$REL_PATH" "$GLOB"; then
-    MATCHED=1
-    break
-  fi
-done <<< "$SCOPES"
+# --- Branch on tool ----------------------------------------------------------
 
-if [ "$MATCHED" -eq 1 ]; then
-  # Emit a minimal allow decision for this single call. The PermissionRequest
-  # decision object's documented shape is decision.behavior ("allow"|"deny");
-  # there is NO `permissionRule` field — that name is silently ignored, so do
-  # not add it. To persist a rule (avoid re-prompting identical future calls)
-  # the documented field is `updatedPermissions`; v1 leaves it unset and lets
-  # this hook re-evaluate each in-scope call cheaply instead.
-  jq -n \
-    '{hookSpecificOutput: {hookEventName: "PermissionRequest", decision: {behavior: "allow"}}}' \
-    2>/dev/null || true
-fi
-# No match → no output → defer to user. Never silently deny.
+case "$TOOL_NAME" in
+  Edit|Write)
+    # ----- Surface 1: in-scope Edit/Write ------------------------------------
+    if [ -z "$FILE_PATH" ]; then
+      exit 0
+    fi
 
-exit 0
+    SCOPES=$(printf '%s' "$(cat "$ROSTER")" \
+      | jq -r --arg name "$AGENT_TYPE" \
+          '.roles[] | select(.name == $name) | .file_scope[]?' 2>/dev/null)
+    if [ -z "$SCOPES" ]; then
+      exit 0  # unknown role, or no file_scope → defer
+    fi
+
+    REL_PATH=$(normalize_rel "$FILE_PATH") || exit 0
+    if has_traversal "$REL_PATH"; then
+      exit 0  # never auto-approve traversal — defer to user
+    fi
+
+    MATCHED=0
+    while IFS= read -r GLOB; do
+      [ -z "$GLOB" ] && continue
+      if path_in_scope "$REL_PATH" "$GLOB"; then
+        MATCHED=1
+        break
+      fi
+    done <<< "$SCOPES"
+
+    if [ "$MATCHED" -eq 1 ]; then
+      emit_allow
+    fi
+    exit 0
+    ;;
+
+  Bash)
+    # ----- Surface 2: in-sandbox scaffolding ---------------------------------
+    if [ -z "$COMMAND" ]; then
+      exit 0
+    fi
+
+    # The role's sandbox root. No declared workspace → no sandbox → defer.
+    WS=$(printf '%s' "$(cat "$ROSTER")" \
+      | jq -r --arg name "$AGENT_TYPE" \
+          '.roles[] | select(.name == $name) | .environment.workspace // empty' 2>/dev/null)
+    if [ -z "$WS" ]; then
+      exit 0
+    fi
+    WS="${WS%/}"
+
+    # Reject any shell metacharacter: substitution, chaining, redirection,
+    # subshell, brace expansion, escapes, newline. We can only reason about a
+    # plain "verb operand operand …" line; anything else defers (fail closed).
+    case "$COMMAND" in
+      *';'*|*'&'*|*'|'*|*'<'*|*'>'*|*'`'*|*'$'*|*\\*|*'('*|*')'*|*'{'*|*'}'*) exit 0 ;;
+    esac
+    case "$COMMAND" in
+      *"
+"*) exit 0 ;;  # embedded newline
+    esac
+
+    # Tokenize on whitespace. First token is the verb.
+    read -ra TOKENS <<< "$COMMAND"
+    VERB="${TOKENS[0]:-}"
+    case "$VERB" in
+      mkdir|touch|cp|ln) ;;
+      *) exit 0 ;;  # only non-destructive scaffolding verbs are auto-approved
+    esac
+
+    # Every non-flag operand must resolve inside the workspace. Zero operands
+    # (e.g. a bare verb) → nothing to approve → defer.
+    OPERANDS=0
+    for tok in "${TOKENS[@]:1}"; do
+      case "$tok" in
+        -*) continue ;;  # a flag, not a path operand
+      esac
+      OPERANDS=$((OPERANDS + 1))
+      REL=$(normalize_rel "$tok") || exit 0   # outside project → defer
+      if has_traversal "$REL"; then
+        exit 0  # traversal → defer
+      fi
+      if ! rel_under_dir "$REL" "$WS"; then
+        exit 0  # operand escapes the sandbox → defer
+      fi
+    done
+
+    if [ "$OPERANDS" -ge 1 ]; then
+      emit_allow
+    fi
+    exit 0
+    ;;
+
+  *)
+    exit 0  # every other tool defers to the user
+    ;;
+esac

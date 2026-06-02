@@ -15,6 +15,8 @@
 #   {{role_goal_path}}    — .squad/role-goal-<name>.md
 #   {{file_scope_lines}}  — one glob per markdown bullet line under "Your file scope"
 #   {{tools_rationale}}   — short paragraph explaining why these specific tools
+#   {{workspace_block}}   — the "Your workspace (sandbox)" section if the role has
+#                           an `environment` block, OR omitted entirely if not
 #   {{created}}           — ISO-8601 generation timestamp
 #
 # Frontmatter field naming note: Claude Code reads `tools` (not `allowed-tools`)
@@ -46,6 +48,7 @@ You own these paths. Inside scope, the `PermissionRequest` hook auto-approves yo
 
 If you need to touch a path outside this scope and the user denies it, do not retry. Surface the friction back to the user — your scope may be wrong, or another role should own that path.
 
+{{workspace_block}}
 ## Your tools
 
 You have access to: `{{tools}}`.

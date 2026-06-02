@@ -100,6 +100,7 @@ When `squad-role` runs for role 1 (`readme-auditor`), answer roughly:
 - **Q4 tools:** `Read, Write, Grep`
 - **Q5 model:** `sonnet`
 - **Q6 isolation:** no (the two roles don't write to overlapping paths)
+- **Q7 sandbox:** yes (it gives the auditor a workspace + verifies its tools)
 
 For role 2 (`readme-rewriter`):
 
@@ -123,6 +124,26 @@ Should show:
 - `.squad/role-goal-readme-auditor.md` and `.squad/role-goal-readme-rewriter.md`
 - `.squad/roster.json` with both roles, `active: true`
 - `.squad/roster.md` (auto-generated human view)
+- if you answered yes to Q7, `readme-auditor`'s entry has an `environment` block and `.squad/workspaces/readme-auditor/**` is in its `file_scope`
+
+---
+
+## Step 4.5 — squad-env provisions the sandbox (optional)
+
+If a role got a sandbox in Step 4:
+
+```
+/cheeky-squad-os:squad-env
+```
+
+`squad-env` should materialize the sandbox and report any uncontainable needs:
+
+```
+ls -la .squad/workspaces/readme-auditor/      # bin/, env, scaffolded dirs
+cat  .squad/workspaces/readme-auditor/env     # PATH + vars, sourced not exported
+```
+
+Should show the workspace dir with `bin/`, a sourced `env` file, and the scaffolded subdirs. Any missing system tool / MCP server is surfaced as a `global_need` for you to approve — not installed automatically.
 
 ---
 
@@ -204,6 +225,7 @@ All of these must be true:
 - [ ] Step 2: Claude reproduced the "no goal set" notice without you mentioning the file
 - [ ] Step 3: `.squad/goal.md` exists with valid frontmatter
 - [ ] Step 4: `.claude/agents/*.md` and `.squad/roster.json` populated correctly
+- [ ] Step 4.5 (if sandbox): `.squad/workspaces/readme-auditor/` materialized with `bin/`, `env`, scaffolded dirs
 - [ ] Step 5: `squad-spawn` ran without errors
 - [ ] Step 6: `reports/readme/audit.md` references the squad goal text (proof of prompt-baking)
 - [ ] Step 7: No permission prompts for in-scope writes

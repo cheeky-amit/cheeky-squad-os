@@ -12,13 +12,14 @@ This means the plugin contains **zero opinionated role files**. No `frontend-dev
 
 | Component | Ships in plugin | Generated per goal | Notes |
 | --- | --- | --- | --- |
-| Skills (5) | Yes | — | `squad-onboard`, `squad-goal`, `squad-role`, `squad-spawn`, `squad-roster` |
+| Skills (6) | Yes | — | `squad-onboard`, `squad-goal`, `squad-role`, `squad-spawn`, `squad-roster`, `squad-env` |
 | Hooks (3) | Yes | — | `SessionStart`, `UserPromptSubmit`, `PermissionRequest` |
 | Templates (4) | Yes | — | `goal.md`, `role-goal.md`, `role-definition.md`, `roster.json` |
 | Role files | **No — zero** | Yes, by `squad-role` | Written to `.claude/agents/<role-name>.md` in the user's project |
 | Squad goal | — | Yes, by `squad-onboard` | `.squad/goal.md` |
 | Role goals | — | Yes, by `squad-role` | `.squad/role-goal-<role-name>.md` per role |
 | Roster | — | Yes, by `squad-roster` | `.squad/roster.json` (source of truth) |
+| Role environment | — | Yes, by `squad-env` | Optional `environment` block per roster role; materialized as a sandbox under `.squad/workspaces/<role>/` by `provision.sh` |
 
 The plugin is **discipline**. Everything else is **generated** from the user's goal.
 
@@ -33,6 +34,8 @@ These are the load-bearing invariants the rest of the document references by num
 5. **Explicit file scope.** Each role declares a `file_scope`; the `PermissionRequest` hook auto-approves in-scope Edit/Write and defers everything else to the user.
 6. **Mode controls cadence, not size.** One-time / Multi-use / Evergreen set persistence and dispatch primitive; squad size is set by goal decomposition.
 7. **Per-role file isolation.** Roles are given disjoint `file_scope` so concurrent workers don't overwrite each other (agent-teams doc: "each teammate owns a different set of files"). One-time subagents may additionally set `isolation: worktree`; Multi-use can pre-create per-role worktrees via `skills/squad-spawn/scripts/spawn.sh` as working directories.
+8. **Sandbox-scoped autonomy.** A role's `environment` (optional) is materialized as a sandbox — a filesystem-and-PATH boundary (`.squad/workspaces/<role>/` + a role-local `bin/` + a sourced `env` file). Inside it, the role provisions and works freely: the `PermissionRequest` hook auto-approves in-sandbox scaffolding (`mkdir`/`touch`/`cp`/`ln` with every operand inside the workspace) exactly as it auto-approves in-`file_scope` Edit/Write. The boundary is enforced by the same hook, not by a confirmation prompt.
+9. **Propose what can't be contained.** Anything inherently global — a system CLI, an MCP server, a network fetch, an experimental/global flag — is never run by the provisioner. It is collected into `global_needs` and proposed to the user for approval. The escape hatch is not separate logic: "not in the sandbox vocabulary" is exactly what the hook already defers, and what `provision.sh` already refuses to execute.
 
 ## The three modes
 
@@ -46,9 +49,9 @@ Mode is inferred from goal language by `squad-onboard`. User can override. Agent
 
 Mode controls **cadence and persistence**. Agent count is set by the goal decomposition (how many parallel workstreams) and the domain expertise required (how many specializations).
 
-## The five skills
+## The six skills
 
-Every skill ships as `skills/<name>/SKILL.md` with YAML frontmatter conforming to the agentskills.io open spec. Claude-Code-specific behaviors live in companion scripts (e.g. `skills/squad-spawn/scripts/spawn.sh`) or are gracefully degraded.
+Every skill ships as `skills/<name>/SKILL.md` with YAML frontmatter conforming to the agentskills.io open spec. Claude-Code-specific behaviors live in companion scripts (e.g. `skills/squad-spawn/scripts/spawn.sh`, `skills/squad-env/scripts/provision.sh`) or are gracefully degraded.
 
 ### 1. `squad-onboard`
 
@@ -229,6 +232,38 @@ Switch on goal.mode:
 }
 ```
 
+### 6. `squad-env`
+
+**Trigger:** "set up the workspaces", "provision the environments", "build each role's sandbox", "prepare the squad to run"; invoked by `squad-role` to derive a role's environment and by `squad-spawn` before dispatch.
+
+**Contract:** Derives and materializes a per-role **sandbox** — the role's "ideal environment for operation," generated from the goal + role goal + `file_scope` + tools.
+
+```
+Read .squad/goal.md           →  refuse if missing
+Read .squad/roster.json       →  refuse if no active roles
+
+For each active role lacking an `environment`:
+  Derive { workspace, dirs, env, context, tools } from the role goal + scope + tools
+  Ensure <workspace>/** is in the role's file_scope (via squad-roster)
+
+Run skills/squad-env/scripts/provision.sh (dry):
+  Materialize (contained, run locally):
+    - workspace dir + scaffolded `dirs` + role-local bin/
+    - env file (SOURCED, never exported globally)
+    - context (kind copy|link from in-project paths)
+  Verify tools; classify the misses:
+    - kind local + install targeting the sandbox  → local_plan (install INTO sandbox)
+    - kind system | mcp | a network fetch         → global_needs (PROPOSE, never run)
+
+Present the report; then:
+  local_plan  → re-run provision.sh --install (one batch, contained autonomy)
+  global_needs → print exact commands, ask the user (never run them)
+```
+
+**Writes:** the `environment` block into each role's `.squad/roster.json` entry (via `squad-roster`); the materialized sandbox under `.squad/workspaces/<role>/` (gitignored — the spec in `roster.json` is the committed source of truth).
+
+**The sandbox is a filesystem-and-PATH boundary, not a kernel jail.** What it can contain: dirs, a sourced env file, a local tool prefix on `PATH`, locally-copied reference material. What it cannot contain — and therefore proposes — system packages, MCP servers, network fetches, and global/experimental flags. This split is hard rules #8 and #9.
+
 ## The role-definition template (no shipped roles — why)
 
 Shipping default roles (`frontend-dev`, `backend-dev`, `qa-engineer`, etc.) is the trap. Defaults bias every goal toward the shape the defaults assume. A Klaviyo lifecycle audit doesn't need a `backend-dev` — it needs an `audit-researcher`, a `compliance-checker`, and a `report-writer`. A weekly competitive intel loop doesn't need any of those — it needs a `scraper`, an `analyst`, and a `summariser`.
@@ -290,7 +325,12 @@ Both mechanisms produce the same end state — the worker sees the goal. They di
 
 ### `PermissionRequest`
 
-**Trigger:** Permission dialog about to appear for `Bash`, `Edit`, `Write` ([hooks doc](https://code.claude.com/docs/en/hooks)). The hook *fires* for all three (the `plugin.json` matcher is `Bash|Edit|Write`), but **v1 only auto-approves `Edit`/`Write`** — `Bash` (and every other tool) always falls through and defers to the user. Bash command-path scoping is deferred to v2.
+**Trigger:** Permission dialog about to appear for `Bash`, `Edit`, `Write` ([hooks doc](https://code.claude.com/docs/en/hooks)). The hook *fires* for all three (the `plugin.json` matcher is `Bash|Edit|Write`) and auto-approves on **two narrow surfaces**, deferring everything else to the user:
+
+1. **`Edit`/`Write`** to a file inside the role's `file_scope`.
+2. **`Bash`** that is pure in-sandbox scaffolding — verb in `{mkdir, touch, cp, ln}`, every path operand resolving inside the role's `environment.workspace`, and no shell metacharacter (so containment is provable). This is hard rule #8 — the role working freely inside its sandbox.
+
+Both surfaces share the same containment primitives (normalize-to-relative, reject `..` traversal, fail-closed on doubt). Destructive verbs, installs, network, and any operand outside the workspace are **not** on the Bash list by design — they are the provisioner's "propose to the user" path (hard rule #9), not the running role's. A role with no `environment.workspace` gets no Bash auto-approval at all.
 
 **Script:** `hooks/permission-request.sh`
 
@@ -303,6 +343,7 @@ Both mechanisms produce the same end state — the worker sees the goal. They di
 - Check if the requested file path matches the role's `file_scope` glob patterns.
 - If match: return `{decision: {behavior: "allow"}}` via `hookSpecificOutput`.
 - If no match: omit decision so normal permission flow runs (user prompted).
+- For a `Bash` call, look up the role's `environment.workspace` instead of `file_scope`: reject any shell metacharacter, require a scaffolding verb, and require every path operand to resolve inside the workspace — else defer.
 - Fail-safe: any error path exits 0 with no decision so user is prompted (never silently allowed).
 
 **Field confirmed:** `agent_type` is the correct identifier per both hooks doc (common input schema) and sub-agents doc ("Hooks receive this value as `agent_type`"). Not `subagent_type`, not `agent_name`, not `subagent_name`.
@@ -319,7 +360,13 @@ All squad state lives under `.squad/` in the user's project. Generated role defi
 │   ├── goal.md                          # squad-onboard writes; squad-goal owns
 │   ├── role-goal-<role-name>.md         # squad-role writes one per role
 │   ├── roster.json                      # squad-roster owns (source of truth)
-│   └── roster.md                        # squad-roster auto-generates (human view)
+│   ├── roster.md                        # squad-roster auto-generates (human view)
+│   └── workspaces/                      # provision.sh materializes one sandbox per role
+│       └── <role-name>/                 #   (gitignored, ephemeral — spec lives in roster.json)
+│           ├── bin/                     #   role-local tools, prepended to PATH by env
+│           ├── env                      #   sourced, never exported globally
+│           ├── inputs/ outputs/ …       #   scaffolded `dirs`
+│           └── .provisioned.json        #   receipt
 └── .claude/
     ├── agents/
     │   ├── <role-name-1>.md             # squad-role writes; Claude Code scans
@@ -341,6 +388,7 @@ Schemas for `goal.md` and `roster.json` are above. `role-goal-<role-name>.md` mi
 | `.squad/roster.json` | **Commit** | Source of truth for who's on the squad; needs to travel with the project. |
 | `.squad/roster.md` | **Commit** | Auto-generated human view; committed for diff readability. |
 | `.squad/role-goal-*.md` | **Commit** | Per-role goals — derived from squad goal but stable artifacts. |
+| `.squad/workspaces/<role>/` | **Gitignore** | Per-role sandboxes materialized by `provision.sh`; ephemeral, recreated on each provision. The `environment` spec in `roster.json` is the committed source of truth. |
 | `.squad/role-comm-*` | **Gitignore** | Inter-role communication scratch (reserved namespace; v1 does not yet write these — pre-ignored so v2 features don't pollute git). |
 | `.squad/role-plan-*` | **Gitignore** | Per-role draft plans (reserved namespace; pre-ignored). |
 | `.squad/features/*` | **Gitignore** | Feature-specific working state (reserved namespace; pre-ignored). |
