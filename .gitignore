@@ -12,6 +12,11 @@
 # Generated worktrees from Multi-use mode (per Claude Code worktrees doc tip)
 .claude/worktrees/
 
+# Per-role sandboxes materialized by squad-env / provision.sh — ephemeral,
+# recreated on each provision (the `environment` spec in roster.json is the
+# committed source of truth; the materialized workspace is not).
+.squad/workspaces/
+
 # OS
 .DS_Store
 Thumbs.db

@@ -85,6 +85,16 @@ In **Multi-use mode**, do not ask — `${CLAUDE_PLUGIN_ROOT}/skills/squad-spawn/
 
 In **Evergreen mode**, do not ask — isolation is irrelevant for scheduled solo runs.
 
+### Q7 — Does this role need a provisioned environment? (sandbox)
+
+Most roles benefit from a sandbox — a private workspace dir with scaffolded folders, an env file, seeded reference material, and verified tools. Ask:
+
+*"Should this role get a provisioned sandbox (a private `.squad/workspaces/<name>/` it works inside, with the reference material and tools it needs prepared up front)? Yes for most working roles; no for a trivial one-shot."*
+
+If **yes**, hand off to `/cheeky-squad-os:squad-env` to derive the `environment` block from the role's purpose, role goal, `file_scope`, and tools — it sets `workspace`, `dirs`, `env`, `context`, and `tools`, and (importantly) adds `<workspace>/**` to this role's `file_scope` so the role's in-sandbox writes auto-approve. Substitute the canonical "Your workspace (sandbox)" section for `{{workspace_block}}`.
+
+If **no**, omit `{{workspace_block}}` entirely and leave the `environment` field off the roster entry.
+
 ## Compose the role's system prompt
 
 Build the system prompt body from these answers. The template lives at `templates/role-definition.md`. Substitute **every** placeholder it defines — leaving any `{{...}}` unsubstituted produces a broken role (e.g. a literal `description: {{description}}` in frontmatter disables auto-delegation). Use the exact placeholder names from the template:
@@ -97,6 +107,7 @@ Build the system prompt body from these answers. The template lives at `template
 - `{{model}}` — Q5 answer
 - `{{file_scope_lines}}` — Q3 answer rendered as **one markdown bullet per glob** (not a comma-separated string — the template places it under a bullet list)
 - `{{isolation_block}}` — the literal `isolation: worktree` line (Q6), or omitted entirely
+- `{{workspace_block}}` — the "Your workspace (sandbox)" section (Q7), or omitted entirely if the role has no `environment` (canonical text in `squad-env`'s SKILL body)
 - `{{role_goal_path}}` — `.squad/role-goal-<name>.md`
 - `{{created}}` — current UTC time in ISO-8601 (the same timestamp written to the roster entry and the role-goal frontmatter)
 
@@ -146,7 +157,7 @@ Write the composed system prompt to `.claude/agents/<name>.md`. Use the YAML fro
 
 ## Register in roster
 
-Call into `squad-roster` to add an entry for this role. The entry includes name, purpose, agent_file path, role_goal path, file_scope, tools, model, active flag (true), and created timestamp.
+Call into `squad-roster` to add an entry for this role. The entry includes name, purpose, agent_file path, role_goal path, file_scope, tools, model, active flag (true), created timestamp, and — if the role got a sandbox in Q7 — the `environment` block.
 
 ## Confirm
 

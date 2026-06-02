@@ -219,24 +219,26 @@ After install, the `SessionStart` hook fires on the **next** session start — o
 4. **Verify** — run `/hooks` and confirm all three hooks are wired; ask *"What's our squad goal?"* and you should get the "no goal set" nudge from the `SessionStart` hook.
 5. **Onboard** — run `/cheeky-squad-os:squad-onboard` and answer the goal question.
 6. **Generate roles** — run `/cheeky-squad-os:squad-role` for each proposed workstream.
-7. **Spawn** — run `/cheeky-squad-os:squad-spawn` to dispatch the squad.
+7. **Provision environments** *(optional)* — run `/cheeky-squad-os:squad-env` to build each role's sandbox (workspace, env, seeded reference material, tools) before dispatch. `squad-spawn` also triggers this automatically for roles that declare an `environment`.
+8. **Spawn** — run `/cheeky-squad-os:squad-spawn` to dispatch the squad.
 
 See [`tests/smoke-test.md`](tests/smoke-test.md) for a copy-pasteable end-to-end walkthrough that exercises every skill and hook.
 
 ---
 
-## The five skills & three hooks
+## The six skills & three hooks
 
 | Component | Kind | What it does |
 | --- | --- | --- |
 | `squad-onboard` | skill | Reformulates a goal as an outcome, infers mode, proposes a bespoke squad. |
 | `squad-goal` | skill | Manages `.squad/goal.md` as the binding north-star. |
 | `squad-role` | skill | Interactive role generator → `.claude/agents/<role>.md` + roster. |
+| `squad-env` | skill | Provisions each role's sandbox (workspace, env, tools) from the goal; proposes what it can't contain. |
 | `squad-spawn` | skill | Dispatches the squad, branching on mode. |
 | `squad-roster` | skill | Manages `roster.json` + auto-generated `roster.md`. |
 | `SessionStart` | hook | Injects the goal into every session. |
 | `UserPromptSubmit` | hook | Tags each turn with the goal (observational). |
-| `PermissionRequest` | hook | Auto-approves in-scope Edit/Write; defers everything else. |
+| `PermissionRequest` | hook | Auto-approves in-scope Edit/Write + in-sandbox scaffolding; defers everything else. |
 
 ---
 
@@ -261,6 +263,9 @@ cheeky-squad-os/
 │   ├── squad-onboard/SKILL.md
 │   ├── squad-goal/SKILL.md
 │   ├── squad-role/SKILL.md
+│   ├── squad-env/
+│   │   ├── SKILL.md
+│   │   └── scripts/provision.sh     # per-role sandbox provisioner
 │   ├── squad-spawn/
 │   │   ├── SKILL.md
 │   │   └── scripts/spawn.sh         # multi-use worktree pre-creation helper
@@ -284,7 +289,8 @@ cheeky-squad-os/
 ├── tests/
 │   ├── smoke-test.md                # manual end-to-end walkthrough
 │   ├── permission-request.bats      # automated: hook allow/defer matrix
-│   └── spawn.bats                   # automated: spawn.sh preflight + worktrees
+│   ├── spawn.bats                   # automated: spawn.sh preflight + worktrees
+│   └── provision.bats               # automated: provision.sh sandbox build
 ├── .github/
 │   └── workflows/ci.yml             # shellcheck + bats on push/PR
 ├── ARCHITECTURE.md

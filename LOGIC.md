@@ -24,6 +24,7 @@ flowchart TB
             ONB["squad-onboard<br/><i>entry point</i>"]
             GOAL["squad-goal<br/><i>owns goal.md</i>"]
             ROLE["squad-role<br/><i>role generator</i>"]
+            ENV["squad-env<br/><i>provisions sandboxes</i>"]
             ROST["squad-roster<br/><i>owns roster.json</i>"]
             SPAWN["squad-spawn<br/><i>dispatch</i>"]
         end
@@ -51,6 +52,7 @@ flowchart TB
         RJSON[".squad/roster.json"]
         AGENTS[".claude/agents/&lt;role&gt;.md"]
         WT[".claude/worktrees/&lt;role&gt;/"]
+        WS[".squad/workspaces/&lt;role&gt;/"]
         WFJS[".claude/workflows/squad-dispatch.js"]
     end
 
@@ -59,7 +61,11 @@ flowchart TB
     ROLE --> AGENTS
     ROLE --> RGMD
     ROLE --> ROST --> RJSON
+    ROLE --> ENV
+    ENV --> WS
+    ENV --> ROST
     ONB --> SPAWN
+    SPAWN --> ENV
     SPAWN -->|One-time| AGENTS
     SPAWN -->|Multi-use| WT
     SPAWN -.points user at.-> WF
@@ -207,9 +213,16 @@ target: <ISO-8601 deadline | "ongoing">
       "purpose": "Pull Klaviyo flow performance via MCP and dump as JSON",
       "agent_file": ".claude/agents/klaviyo-data-puller.md",
       "role_goal": ".squad/role-goal-klaviyo-data-puller.md",
-      "file_scope": ["reports/klaviyo/**", "data/klaviyo/**"],
+      "file_scope": ["reports/klaviyo/**", "data/klaviyo/**", ".squad/workspaces/klaviyo-data-puller/**"],
       "tools": ["Read", "Write", "Bash", "mcp__claude_ai_Klaviyo__*"],
       "model": "sonnet",
+      "environment": {
+        "workspace": ".squad/workspaces/klaviyo-data-puller/",
+        "dirs": ["inputs", "outputs", "scratch"],
+        "env": { "REPORT_DIR": "outputs" },
+        "context": [{ "from": "data/klaviyo/**", "into": "inputs", "kind": "copy" }],
+        "tools": [{ "name": "jq", "kind": "system", "verify": "command -v jq" }]
+      },
       "active": true,
       "created": "<ISO-8601>"
     }
@@ -220,6 +233,12 @@ target: <ISO-8601 deadline | "ongoing">
 > `mode` here is a **mirror** of `goal.md` (re-derived on every roster write).
 > `squad-spawn` always reads mode from `goal.md`, never from the roster.
 > `.squad/roster.md` is an auto-generated human view — never read from it.
+> `environment` is **optional** — the role's sandbox spec, materialized by
+> `squad-env` / `provision.sh` into `.squad/workspaces/<role>/` (gitignored).
+> `workspace` must be project-relative (no `..`) and covered by `file_scope`.
+> Contained parts (dirs, sourced `env`, local `context`, `kind:"local"` tools)
+> are materialized; `kind:"system"`/`"mcp"`/network needs become `global_needs`
+> proposed to the user — never run by the provisioner.
 
 ### 3.4 `.claude/agents/<role>.md` (subagent definition — dual-purpose)
 
@@ -297,24 +316,40 @@ flowchart LR
 > Subagents do **not** fire SessionStart — their goal arrives via prompt-baking
 > (rule #4). See §7.
 
-### 5.2 PermissionRequest (file-scope enforcement)
+### 5.2 PermissionRequest (file-scope + sandbox enforcement)
+
+Two narrow auto-approve surfaces; everything else defers. Surface 1 is in-scope
+Edit/Write (rule #5); Surface 2 is in-sandbox Bash scaffolding (rule #8).
 
 ```mermaid
 flowchart TD
     P0([PermissionRequest:<br/>Bash · Edit · Write]) --> P1{agent_type<br/>set?}
     P1 -->|no main session| DEFER[/no decision →<br/>user prompted/]
-    P1 -->|yes subagent| P2{tool is<br/>Edit or Write?}
-    P2 -->|no e.g. Bash| DEFER
-    P2 -->|yes| P3[look up role's<br/>file_scope in roster]
+    P1 -->|yes subagent| P2{tool?}
+    P2 -->|Edit / Write| P3[look up role's<br/>file_scope in roster]
     P3 --> P4{path matches<br/>a scope glob?}
     P4 -->|no| DEFER
     P4 -->|yes| ALLOW["decision: allow<br/>(behavior only)"]
+    P2 -->|Bash| B1[look up role's<br/>environment.workspace]
+    B1 --> B2{workspace set<br/>+ no shell<br/>metacharacter?}
+    B2 -->|no| DEFER
+    B2 -->|yes| B3{verb in<br/>mkdir·touch·cp·ln?}
+    B3 -->|no| DEFER
+    B3 -->|yes| B4{every operand<br/>inside workspace?<br/>no '..'}
+    B4 -->|no| DEFER
+    B4 -->|yes| ALLOW
+    P2 -->|other| DEFER
 
     classDef ok fill:#e6f4ea,stroke:#34a853,color:#111;
     classDef neu fill:#fef7e0,stroke:#fbbc04,color:#111;
     class ALLOW ok;
     class DEFER neu;
 ```
+
+Both surfaces share the same primitives: normalize-to-relative, reject `..`
+traversal, fail closed on doubt. Installs / network / global mutations are **not**
+on the Bash list — they are the provisioner's *propose* path (rule #9), not the
+running role's.
 
 **Glob matching (`path_in_scope`)** — fails *closed* to avoid over-approval:
 
@@ -433,12 +468,13 @@ flowchart TD
     SQ --> RM["roster.md  ✔commit (auto-gen)"]
     CL --> AG["agents/&lt;role&gt;.md  ✔commit"]
     CL --> WTREE["worktrees/&lt;role&gt;/  ✘gitignore"]
+    SQ --> WSP["workspaces/&lt;role&gt;/  ✘gitignore"]
     CL --> WFD["workflows/squad-dispatch.js  ✔commit (if --save)"]
 
     classDef commit fill:#e6f4ea,stroke:#34a853,color:#111;
     classDef ignore fill:#fce8e6,stroke:#ea4335,color:#111;
     class G,RG,RJ,RM,AG,WFD commit;
-    class WTREE ignore;
+    class WTREE,WSP ignore;
 ```
 
 ---
@@ -457,3 +493,5 @@ The invariants every diagram above upholds (full text in
 | 5 | Explicit `file_scope`; hook auto-approves in-scope Edit/Write. |
 | 6 | Mode controls cadence, not squad size. |
 | 7 | Per-role file isolation via disjoint `file_scope`. |
+| 8 | Sandbox-scoped autonomy — hook auto-approves in-sandbox scaffolding inside `environment.workspace`. |
+| 9 | Propose what can't be contained — system/MCP/network/global needs go to the user, never auto-run. |

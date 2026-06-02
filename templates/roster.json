@@ -1,6 +1,7 @@
 {
   "_note": "This is the seed template for .squad/roster.json. The single role below shows the schema — DELETE THIS ROLE when squad-role generates your real roles. The _note field is documentation only and is dropped on the next write by squad-roster. Fields prefixed with _ are reserved for documentation and ignored by the squad-roster skill.",
   "_mode_note": "`mode` mirrors .squad/goal.md (authoritative). squad-roster re-derives it from goal.md on every write; squad-spawn reads mode from goal.md, never from here.",
+  "_environment_note": "The `environment` block is OPTIONAL and is the role's sandbox spec, materialized by skills/squad-env/scripts/provision.sh. `workspace` is the sandbox root (must be project-relative, no '..', and MUST be covered by file_scope so in-sandbox Edit/Write auto-approve). `dirs` are scaffolded subdirs. `env` is written to <workspace>/env and SOURCED (never exported globally). `context` seeds local reference material (kind copy|link run locally; kind fetch is a global_need). `tools` declare readiness: kind 'local' with an `install` command is installed INTO the sandbox; kind 'system'/'mcp' is never run — it is proposed to the user as a global_need.",
   "squad_goal_ref": ".squad/goal.md",
   "mode": "one-time",
   "created": "1970-01-01T00:00:00Z",
@@ -21,6 +22,38 @@
         "Bash"
       ],
       "model": "sonnet",
+      "environment": {
+        "_comment": "OPTIONAL sandbox spec. Omit the whole block for a role that needs no provisioned environment. The workspace glob below is also added to file_scope so the role's in-sandbox Edit/Write auto-approve.",
+        "workspace": ".squad/workspaces/example-role-delete-me/",
+        "dirs": [
+          "inputs",
+          "outputs",
+          "scratch"
+        ],
+        "env": {
+          "EXAMPLE_VAR": "value"
+        },
+        "context": [
+          {
+            "from": "path/to/local/reference/**",
+            "into": "inputs",
+            "kind": "copy"
+          }
+        ],
+        "tools": [
+          {
+            "name": "jq",
+            "kind": "system",
+            "verify": "command -v jq"
+          },
+          {
+            "name": "csvkit",
+            "kind": "local",
+            "install": "pip install --target lib csvkit",
+            "verify": "test -d lib/csvkit"
+          }
+        ]
+      },
       "active": false,
       "created": "1970-01-01T00:00:00Z"
     }

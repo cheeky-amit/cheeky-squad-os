@@ -19,6 +19,7 @@ You orchestrate dispatch. The squad has been onboarded (`.squad/goal.md` exists)
 3. For each role in roster: verify `.claude/agents/<role.name>.md` and `.squad/role-goal-<role.name>.md` exist. If any missing: print the gaps and ask the user to re-run `squad-role` for the missing ones.
 4. Read each `.squad/role-goal-<role.name>.md`.
 5. Note the squad's mode from `goal.md` frontmatter.
+6. **Provision environments.** If any active role has an `environment` block, run `/cheeky-squad-os:squad-env` (or directly `${CLAUDE_PLUGIN_ROOT}/skills/squad-env/scripts/provision.sh .squad/roster.json .squad/goal.md`) **before** dispatching. This builds each role's sandbox and surfaces any `global_needs` for the user to approve. Do not dispatch a role whose sandbox could not be provisioned (the summary's `errors` > 0) — fix the `environment` first. Roles with no `environment` block skip this.
 
 ## Build the spawn prompt (per role)
 
@@ -36,11 +37,18 @@ You are the <role.name> teammate on a cheeky-squad-os squad.
 # Your role's file scope
 <role.file_scope from roster.json>
 
+# Your workspace (sandbox) — only if the role has an environment block
+Your sandbox is <role.environment.workspace>. Work inside it freely. Before
+running tooling, load your environment: `set -a; . <workspace>/env; set +a; <cmd>`.
+Seeded reference material is under the sandbox.
+
 # Your task on this invocation
 <task description — see below per mode>
 
 Read .squad/goal.md and .squad/role-goal-<role.name>.md at any time during your work. Stay inside your file scope. Hand off deliverables by writing to your scope.
 ```
+
+Include the workspace block only for roles that have an `environment`; omit it otherwise.
 
 **Hard rule #4:** the full text of `.squad/goal.md` and the role's `.squad/role-goal-<role.name>.md` is the only reliable channel from parent to subagent. The SessionStart hook does not fire for subagents. Bake the goal text in; don't rely on hook injection for the One-time path.
 
