@@ -9,7 +9,7 @@ If this passes, the plugin's core paths are exercised end-to-end. It does **not*
 ## Prerequisites
 
 ```
-claude --version   # need v2.1.139 or later (for /goal in Phase 7; the rest works on v2.1.32+)
+claude --version   # need v2.1.32 or later
 which jq           # need jq installed (brew install jq / apt-get install jq)
 git --version      # any modern git
 ```
@@ -182,6 +182,29 @@ The rewritten README should exist, address the auditor's specific findings, and 
 
 ---
 
+## Step 6.5 — squad-verify decides (synthesis is not the verdict)
+
+In the same session:
+
+```
+/cheeky-squad-os:squad-verify
+```
+
+`squad-verify` should:
+- Run `skills/squad-verify/scripts/verify.sh` (JSON-lines evidence scaffold: one line per Definition-of-done signal, one per active role).
+- Judge each Definition-of-done signal PASS / FAIL / NEEDS-HUMAN with concrete evidence (file paths, line counts) — never a guess.
+- Write `.squad/verification.md` with a `verdict: met | partial | unmet` frontmatter.
+
+**Verify:**
+
+```
+cat .squad/verification.md
+```
+
+Should show one `## Signal:` section per Definition-of-done bullet with a status and evidence, a role-deliverables table, and a verdict paragraph. The verdict — not the spawn summary from Step 5 — is the authority on whether the goal is met (hard rule #10).
+
+---
+
 ## Step 7 — Verify the PermissionRequest hook auto-approved in scope
 
 Inspect the session transcript. During Step 5, when `readme-auditor` wrote to `reports/readme/audit.md`, there should have been **no user permission prompt** — the `PermissionRequest` hook auto-approved because `reports/readme/**` is in the role's `file_scope`. Same for `readme-rewriter` writing to `reports/readme/README.rewritten.md`.
@@ -228,10 +251,11 @@ All of these must be true:
 - [ ] Step 4.5 (if sandbox): `.squad/workspaces/readme-auditor/` materialized with `bin/`, `env`, scaffolded dirs
 - [ ] Step 5: `squad-spawn` ran without errors
 - [ ] Step 6: `reports/readme/audit.md` references the squad goal text (proof of prompt-baking)
+- [ ] Step 6.5: `.squad/verification.md` exists with per-signal evidence and a met/partial/unmet verdict
 - [ ] Step 7: No permission prompts for in-scope writes
 - [ ] Step 8: A fresh session knows the goal without being told (proof of SessionStart hook injecting)
 
-If all 7 pass, the plugin's core paths are exercised end-to-end. Negative-path coverage (out-of-scope DENY, Bash DEFER, no-jq fail-open, `..` traversal) is in the automated suite — see `tests/permission-request.bats` and `tests/spawn.bats`.
+If all of these pass, the plugin's core paths are exercised end-to-end. Negative-path coverage (out-of-scope DENY, Bash DEFER, no-jq fail-open, `..` traversal) is in the automated suite — see `tests/permission-request.bats` and `tests/spawn.bats`.
 
 ---
 

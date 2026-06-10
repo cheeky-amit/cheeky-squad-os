@@ -1,6 +1,6 @@
 ---
 name: squad-roster
-description: Use when the user wants to inspect, modify, or audit the active squad — phrases like "show the roster", "who's on the squad", "list teammates", "remove <role>", "deactivate <role>", "what does <role> own", "audit scopes", "show file scopes", "what's <role>'s goal". Manages .squad/roster.json as the source of truth and auto-generates .squad/roster.md as a human-readable view. Also called by squad-role to register newly generated roles and by the PermissionRequest hook to look up scopes.
+description: Use when the user wants to inspect, modify, or audit the active squad — phrases like "show the roster", "who's on the squad", "list teammates", "remove <role>", "deactivate <role>", "what does <role> own", "audit scopes", "show file scopes", "what's <role>'s goal". Manages .squad/roster.json as the source of truth and auto-generates .squad/roster.md as a human-readable view. Also called by squad-role to register newly generated roles; the PermissionRequest hook reads roster.json directly to look up scopes.
 version: 0.1.0
 author: cheeky-squad-os
 license: MIT

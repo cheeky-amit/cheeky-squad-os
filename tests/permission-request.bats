@@ -19,6 +19,7 @@ setup() {
   "roles": [
     { "name": "reporter", "file_scope": ["reports/**"] },
     { "name": "rootdoc",  "file_scope": ["*.md"] },
+    { "name": "datakeeper", "file_scope": ["data/*"] },
     { "name": "builder",  "file_scope": ["build/**", ".squad/workspaces/builder/**"],
       "environment": { "workspace": ".squad/workspaces/builder/" } }
   ]
@@ -40,19 +41,19 @@ run_hook() {
 @test "in-scope Write is auto-approved (relative path)" {
   run_hook '{"agent_type":"reporter","tool_name":"Write","tool_input":{"file_path":"reports/audit.md"}}'
   [ "$status" -eq 0 ]
-  [[ "$output" == *allow* ]]
+  printf '%s' "$output" | jq -e '.hookSpecificOutput.decision.behavior == "allow"'
 }
 
 @test "in-scope Edit is auto-approved (absolute path inside project)" {
   run_hook '{"agent_type":"reporter","tool_name":"Edit","tool_input":{"file_path":"'"$PROJECT_DIR"'/reports/sub/note.md"}}'
   [ "$status" -eq 0 ]
-  [[ "$output" == *allow* ]]
+  printf '%s' "$output" | jq -e '.hookSpecificOutput.decision.behavior == "allow"'
 }
 
 @test "single-segment glob matches a root file" {
   run_hook '{"agent_type":"rootdoc","tool_name":"Write","tool_input":{"file_path":"notes.md"}}'
   [ "$status" -eq 0 ]
-  [[ "$output" == *allow* ]]
+  printf '%s' "$output" | jq -e '.hookSpecificOutput.decision.behavior == "allow"'
 }
 
 # --- defer paths (no output) -------------------------------------------------
@@ -69,6 +70,32 @@ run_hook() {
   [ -z "$output" ]
 }
 
+# --- mid-path glob semantics ("*" must not cross "/") --------------------------
+
+@test "mid-path glob matches a direct child" {
+  run_hook '{"agent_type":"datakeeper","tool_name":"Write","tool_input":{"file_path":"data/export.csv"}}'
+  [ "$status" -eq 0 ]
+  printf '%s' "$output" | jq -e '.hookSpecificOutput.decision.behavior == "allow"'
+}
+
+@test "mid-path glob does NOT match a nested file (defers)" {
+  run_hook '{"agent_type":"datakeeper","tool_name":"Write","tool_input":{"file_path":"data/sub/secret.csv"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "mid-path glob does NOT match a deeply nested file (defers)" {
+  run_hook '{"agent_type":"datakeeper","tool_name":"Write","tool_input":{"file_path":"data/a/b/c.csv"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "mid-path glob does NOT match a shallower path (defers)" {
+  run_hook '{"agent_type":"datakeeper","tool_name":"Write","tool_input":{"file_path":"data"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
 @test "Bash defers for a role with no sandbox (no environment.workspace)" {
   run_hook '{"agent_type":"reporter","tool_name":"Bash","tool_input":{"command":"mkdir -p reports/x"}}'
   [ "$status" -eq 0 ]
@@ -80,19 +107,19 @@ run_hook() {
 @test "in-sandbox mkdir is auto-approved (relative path)" {
   run_hook '{"agent_type":"builder","tool_name":"Bash","tool_input":{"command":"mkdir -p .squad/workspaces/builder/outputs"}}'
   [ "$status" -eq 0 ]
-  [[ "$output" == *allow* ]]
+  printf '%s' "$output" | jq -e '.hookSpecificOutput.decision.behavior == "allow"'
 }
 
 @test "in-sandbox cp with both operands inside the workspace is auto-approved" {
   run_hook '{"agent_type":"builder","tool_name":"Bash","tool_input":{"command":"cp .squad/workspaces/builder/a .squad/workspaces/builder/b"}}'
   [ "$status" -eq 0 ]
-  [[ "$output" == *allow* ]]
+  printf '%s' "$output" | jq -e '.hookSpecificOutput.decision.behavior == "allow"'
 }
 
 @test "in-sandbox touch via absolute path inside the project is auto-approved" {
   run_hook '{"agent_type":"builder","tool_name":"Bash","tool_input":{"command":"touch '"$PROJECT_DIR"'/.squad/workspaces/builder/scratch/x"}}'
   [ "$status" -eq 0 ]
-  [[ "$output" == *allow* ]]
+  printf '%s' "$output" | jq -e '.hookSpecificOutput.decision.behavior == "allow"'
 }
 
 @test "Bash operand OUTSIDE the sandbox defers" {

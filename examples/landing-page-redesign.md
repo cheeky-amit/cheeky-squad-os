@@ -47,15 +47,15 @@ User: yes.
 ```markdown
 ---
 mode: multi-use
-created: 2026-05-27
-sprint_end: 2026-06-10
-owner: lead-engineer
+created: 2026-05-27T14:00:00Z
+target: 2026-06-10
 ---
 
-# Goal
+# Squad goal
 
 Ship a new Acme B2B homepage that converts at >5% with the existing brand
-voice intact, deployed to production by end of sprint (2026-06-10).
+voice intact, deployed to production by end of sprint (2026-06-10). The
+lead engineer owns the squad and the final merge.
 
 The current homepage converts at 2.8%. The redesign targets a >5% conversion
 rate measured over a 7-day A/B test against the current page. Brand voice
@@ -115,11 +115,12 @@ squad-role: One more. What's the explicit handoff? Who reads its output,
 User: When approved, write final to copy/homepage/final/*.md and drop a
       HANDOFF.md there. frontend-builder reads only from final/.
 
-squad-role: Generated. Writing .claude/agents/brand-voice-editor.md and
-            registering in .squad/roster.json.
+squad-role: Generated. Writing .claude/agents/brand-voice-editor.md,
+            .squad/role-goal-brand-voice-editor.md, and registering in
+            .squad/roster.json.
 ```
 
-Resulting `.claude/agents/brand-voice-editor.md`:
+Resulting `.claude/agents/brand-voice-editor.md` — frontmatter carries only name, description, tools, and model; the file scope is registered in `.squad/roster.json` and restated as body bullets:
 
 ```markdown
 ---
@@ -127,13 +128,6 @@ name: brand-voice-editor
 description: Owns all homepage copy. Writes in the established Acme brand voice and gates the final copy against docs/brand-voice.md before frontend-builder consumes it.
 model: opus
 tools: Read, Write, Edit, Grep
-file_scope:
-  - copy/homepage/**
-  - docs/brand-voice.md
-handoff:
-  output: copy/homepage/final/
-  signal: copy/homepage/final/HANDOFF.md
-  consumer: frontend-builder
 ---
 
 # brand-voice-editor
@@ -142,14 +136,26 @@ Produce homepage copy — hero, sub-hero, three value props, social-proof
 captions, pricing-teaser line, primary and secondary CTAs, footer tagline —
 in the Acme brand voice as defined in `docs/brand-voice.md`.
 
+File scope (mirrors `.squad/roster.json`):
+- copy/homepage/**
+- docs/brand-voice.md
+
 Operating rules:
 - Read `docs/brand-voice.md` before writing the first word.
 - Iterate in `copy/homepage/drafts/`. Promote to `copy/homepage/final/`
   only after self-review against the voice doc.
 - When you promote, write `copy/homepage/final/HANDOFF.md` with a changelog
   and the headline metric this copy is optimizing for.
-- Do NOT write outside your file_scope.
+- Do NOT write outside your file scope.
 ```
+
+And `.squad/role-goal-brand-voice-editor.md` — the role's slice of the squad goal, which `squad-spawn` bakes into the spawn prompt:
+
+> Write all homepage copy in the established Acme brand voice and gate it against `docs/brand-voice.md`, promoting approved copy to `copy/homepage/final/` with a `HANDOFF.md`, early enough in the sprint that frontend-builder can build and qa-runner can verify before 2026-06-10.
+>
+> **Owned outputs:** `copy/homepage/drafts/**`, `copy/homepage/final/**` (including `HANDOFF.md`).
+>
+> **Hand-offs:** frontend-builder — reads only from `copy/homepage/final/`; the `HANDOFF.md` is the "go" signal.
 
 ### Role 3: `frontend-builder` (full transcript)
 
@@ -188,10 +194,12 @@ squad-role: Output handoff?
 User: Tag "homepage-redesign-rc1" when lint + typecheck + local Lighthouse
       pass. qa-runner takes over from there.
 
-squad-role: Generated.
+squad-role: Generated. Writing .claude/agents/frontend-builder.md,
+            .squad/role-goal-frontend-builder.md, and registering in
+            .squad/roster.json.
 ```
 
-Resulting `.claude/agents/frontend-builder.md`:
+Resulting `.claude/agents/frontend-builder.md` — again, scope lives in the roster, and the inputs/handoff answers landed in the role goal's Hand-offs, not in frontmatter:
 
 ```markdown
 ---
@@ -199,16 +207,6 @@ name: frontend-builder
 description: Builds the Acme homepage component tree from approved copy and design specs. Owns layout, responsiveness, accessibility, and performance budgets.
 model: sonnet
 tools: Read, Write, Edit, Bash, Glob, Grep
-file_scope:
-  - src/pages/homepage/**
-  - src/components/homepage/**
-  - public/homepage/**
-inputs:
-  - copy/homepage/final/HANDOFF.md
-  - design/homepage/specs.md
-handoff:
-  signal: git tag homepage-redesign-rc1
-  consumer: qa-runner
 ---
 
 # frontend-builder
@@ -217,16 +215,30 @@ Turn approved copy and design specs into a shipping homepage that hits
 Lighthouse Performance >= 90 mobile / >= 95 desktop and zero axe-core
 serious/critical violations.
 
-- Do not start hero work until both inputs are present. Block and message
-  the missing teammate.
+File scope (mirrors `.squad/roster.json`):
+- src/pages/homepage/**
+- src/components/homepage/**
+- public/homepage/**
+
+- Inputs: copy/homepage/final/HANDOFF.md (from brand-voice-editor) and
+  design/homepage/specs.md (from conversion-ux-designer). Do not start
+  hero work until both are present. Block and message the missing teammate.
 - Component-level code only. No backend, no API routes.
 - Run `pnpm lint && pnpm typecheck && pnpm lighthouse:local` before tagging
-  `homepage-redesign-rc1`.
+  `homepage-redesign-rc1`. qa-runner takes over from the tag.
 ```
+
+And `.squad/role-goal-frontend-builder.md`:
+
+> Build the homepage component tree from approved copy (`copy/homepage/final/`) and design specs (`design/homepage/specs.md`) into a page that passes Lighthouse >= 90 mobile / >= 95 desktop with zero serious axe-core violations, tagged `homepage-redesign-rc1` in time for QA before 2026-06-10.
+>
+> **Owned outputs:** `src/pages/homepage/**`, `src/components/homepage/**`, `public/homepage/**`.
+>
+> **Hand-offs:** qa-runner — picks up at the `homepage-redesign-rc1` tag.
 
 ### Role 2: `conversion-ux-designer` (frontmatter only)
 
-Role goal: "Design hero, social proof, pricing teaser, and CTA hierarchy; produce a spec frontend-builder can build directly from."
+Role goal (written to `.squad/role-goal-conversion-ux-designer.md`): "Design hero, social proof, pricing teaser, and CTA hierarchy; produce a spec frontend-builder can build directly from." Hand-off: frontend-builder reads `design/homepage/specs.md`. File scope (roster): `design/homepage/**`, `docs/conversion-patterns.md`.
 
 ```markdown
 ---
@@ -234,18 +246,12 @@ name: conversion-ux-designer
 description: Owns the redesigned Acme homepage layout, conversion-focused flows, CTA hierarchy, and mobile-first design specs. Output is a spec frontend-builder builds from.
 model: opus
 tools: Read, Write, Edit, Glob, Grep
-file_scope:
-  - design/homepage/**
-  - docs/conversion-patterns.md
-handoff:
-  output: design/homepage/specs.md
-  consumer: frontend-builder
 ---
 ```
 
 ### Role 4: `qa-runner` (frontmatter only)
 
-Role goal: "Verify the shipped homepage against every DoD gate — Lighthouse, axe, cross-browser, A/B harness, kill-switch — and produce a pass/fail report."
+Role goal (written to `.squad/role-goal-qa-runner.md`): "Verify the shipped homepage against every DoD gate — Lighthouse, axe, cross-browser, A/B harness, kill-switch — and produce a pass/fail report." Starts at the `homepage-redesign-rc1` tag; hands `reports/homepage/qa-report.md` to the lead engineer. File scope (roster): `tests/homepage/**`, `reports/homepage/**`.
 
 ```markdown
 ---
@@ -253,16 +259,10 @@ name: qa-runner
 description: Verifies the redesigned Acme homepage against every gate in the goal's Definition of Done. Produces a pass/fail report and blocks ship on any fail.
 model: sonnet
 tools: Read, Write, Edit, Bash, Glob, Grep
-file_scope:
-  - tests/homepage/**
-  - reports/homepage/**
-inputs:
-  - git tag homepage-redesign-rc1
-handoff:
-  output: reports/homepage/qa-report.md
-  consumer: lead-engineer
 ---
 ```
+
+After the four runs, `.squad/` holds the goal plus four role-goal files — `role-goal-brand-voice-editor.md`, `role-goal-conversion-ux-designer.md`, `role-goal-frontend-builder.md`, `role-goal-qa-runner.md` — which `squad-spawn`'s preflight requires before it will dispatch anyone.
 
 ## 5. The roster after generation
 
@@ -270,16 +270,59 @@ handoff:
 
 ```json
 {
-  "goal_ref": ".squad/goal.md",
+  "squad_goal_ref": ".squad/goal.md",
   "mode": "multi-use",
+  "created": "2026-05-27T14:10:00Z",
   "roles": [
-    {"name": "brand-voice-editor",     "active": true, "file": ".claude/agents/brand-voice-editor.md",     "model": "opus"},
-    {"name": "conversion-ux-designer", "active": true, "file": ".claude/agents/conversion-ux-designer.md", "model": "opus"},
-    {"name": "frontend-builder",       "active": true, "file": ".claude/agents/frontend-builder.md",       "model": "sonnet"},
-    {"name": "qa-runner",              "active": true, "file": ".claude/agents/qa-runner.md",              "model": "sonnet"}
+    {
+      "name": "brand-voice-editor",
+      "purpose": "Write all homepage copy in the established Acme brand voice and gate the final copy before frontend-builder consumes it.",
+      "agent_file": ".claude/agents/brand-voice-editor.md",
+      "role_goal": ".squad/role-goal-brand-voice-editor.md",
+      "file_scope": ["copy/homepage/**", "docs/brand-voice.md"],
+      "tools": ["Read", "Write", "Edit", "Grep"],
+      "model": "opus",
+      "active": true,
+      "created": "2026-05-27T14:10:00Z"
+    },
+    {
+      "name": "conversion-ux-designer",
+      "purpose": "Design the conversion-focused homepage layout, flows, and CTA hierarchy as a spec frontend-builder builds from.",
+      "agent_file": ".claude/agents/conversion-ux-designer.md",
+      "role_goal": ".squad/role-goal-conversion-ux-designer.md",
+      "file_scope": ["design/homepage/**", "docs/conversion-patterns.md"],
+      "tools": ["Read", "Write", "Edit", "Glob", "Grep"],
+      "model": "opus",
+      "active": true,
+      "created": "2026-05-27T14:25:00Z"
+    },
+    {
+      "name": "frontend-builder",
+      "purpose": "Build the homepage component tree from approved copy and design specs to the Lighthouse and axe-core budgets.",
+      "agent_file": ".claude/agents/frontend-builder.md",
+      "role_goal": ".squad/role-goal-frontend-builder.md",
+      "file_scope": ["src/pages/homepage/**", "src/components/homepage/**", "public/homepage/**"],
+      "tools": ["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
+      "model": "sonnet",
+      "active": true,
+      "created": "2026-05-27T14:40:00Z"
+    },
+    {
+      "name": "qa-runner",
+      "purpose": "Verify the shipped homepage against every Definition-of-done gate and produce a pass/fail report.",
+      "agent_file": ".claude/agents/qa-runner.md",
+      "role_goal": ".squad/role-goal-qa-runner.md",
+      "file_scope": ["tests/homepage/**", "reports/homepage/**"],
+      "tools": ["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
+      "model": "sonnet",
+      "active": true,
+      "created": "2026-05-27T14:55:00Z"
+    }
   ]
 }
 ```
+
+The four `file_scope` arrays are disjoint by construction — no path matches two roles — which is what lets the four worktree branches merge clean in §7.
 
 ## 6. Spawn (Multi-use path)
 

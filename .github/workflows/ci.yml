@@ -32,4 +32,39 @@ jobs:
           shellcheck hooks/*.sh skills/**/scripts/*.sh
 
       - name: Run bats suites
-        run: bats tests/permission-request.bats tests/spawn.bats tests/provision.bats
+        run: bats tests/permission-request.bats tests/spawn.bats tests/provision.bats tests/verify.bats
+
+      - name: Lint example rosters against the canonical schema
+        shell: bash
+        run: |
+          # Every fenced json block that declares "roles" — in the examples and
+          # the shipped template — must conform to the roster schema the
+          # permission hook and spawn path actually read. Invented keys
+          # silently disable the hook, so they fail CI.
+          set -euo pipefail
+          fail=0
+          for f in examples/*.md; do
+            blocks=$(awk '/^```json/{b=1;next} /^```/{if(b){print "\x1e"} b=0;next} b{print}' "$f")
+            n=0
+            while IFS= read -r -d $'\x1e' block; do
+              printf '%s' "$block" | jq -e 'has("roles")' >/dev/null 2>&1 || continue
+              n=$((n+1))
+              if ! printf '%s' "$block" | jq -e '
+                  has("squad_goal_ref") and has("mode") and
+                  ((keys | map(select(startswith("_") | not)) | map(select(. != "squad_goal_ref" and . != "mode" and . != "roles" and . != "created")) | length) == 0) and
+                  (.roles | all(
+                    (has("name") and has("purpose") and has("agent_file") and
+                     has("role_goal") and has("file_scope") and has("tools") and
+                     has("model") and has("active")) and
+                    ((keys | map(select(. == "scope" or . == "allowed_paths" or
+                      . == "depends_on" or . == "goal_ref" or . == "role_goal_file" or
+                      . == "schema_version" or . == "version" or . == "file")) | length) == 0)
+                  ))' >/dev/null; then
+                echo "::error file=$f::roster block #$n does not conform to the canonical roster schema"
+                fail=1
+              fi
+            done < <(printf '%s\x1e' "$blocks")
+          done
+          jq -e 'has("squad_goal_ref") and has("mode") and has("roles")' templates/roster.json >/dev/null \
+            || { echo "::error file=templates/roster.json::template missing required top-level keys"; fail=1; }
+          exit $fail
