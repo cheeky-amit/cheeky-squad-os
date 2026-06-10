@@ -160,6 +160,8 @@ Write the composed system prompt to `.claude/agents/<name>.md`. Use the YAML fro
 
 Call into `squad-roster` to add an entry for this role. The entry includes name, purpose, agent_file path, role_goal path, file_scope, tools, model, active flag (true), created timestamp, and — if the role got a sandbox in Q7 — the `environment` block.
 
+**Always append the role's hand-off outbox to `file_scope`:** `.squad/role-comm-<name>--*`. This is the structured worker↔worker channel (`templates/role-comm.md`) — the glob lets the role publish hand-off manifests to downstream roles without a permission prompt, while writes to any *other* role's outbox still defer. Don't ask the user about this one; it's part of the contract, like the workspace mirror in Q7.
+
 ## Confirm
 
 Print to the user:

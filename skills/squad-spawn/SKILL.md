@@ -42,10 +42,13 @@ Your sandbox is <role.environment.workspace>. Work inside it freely. Before
 running tooling, load your environment: `set -a; . <workspace>/env; set +a; <cmd>`.
 Seeded reference material is under the sandbox.
 
+# Incoming hand-offs — only if any .squad/role-comm-*--<role.name>.md (or --any.md) with status: ready exist
+<full contents of each ready manifest addressed to this role>
+
 # Your task on this invocation
 <task description — see below per mode>
 
-Read .squad/goal.md and .squad/role-goal-<role.name>.md at any time during your work. Stay inside your file scope. Hand off deliverables by writing to your scope.
+Read .squad/goal.md and .squad/role-goal-<role.name>.md at any time during your work. Stay inside your file scope. Hand off deliverables by writing to your scope. When a deliverable is ready for another role, publish a hand-off manifest at .squad/role-comm-<role.name>--<consumer>.md (shape: templates/role-comm.md — what's ready, how to consume, caveats).
 ```
 
 Include the workspace block only for roles that have an `environment`; omit it otherwise.
@@ -65,7 +68,8 @@ For each role in `.squad/roster.json` (filter `active: true`):
    - `prompt`: the composed spawn prompt
 3. If the role's frontmatter has `isolation: worktree`, the subagent automatically runs in a worktree (per sub-agents doc; the frontmatter handles it — no extra flag needed from you).
 4. Subagents can run in parallel if their workstreams are independent. Send multiple `Agent` tool calls in one message to dispatch in parallel. Otherwise dispatch sequentially.
-5. Wait for each subagent's deliverable summary. Synthesize results into a user-facing report.
+5. **Sequential chains ride the hand-off channel.** Before dispatching a downstream role, glob `.squad/role-comm-*--<role.name>.md` (plus `--any.md` broadcasts); bake the full text of every `status: ready` manifest into its spawn prompt under "Incoming hand-offs". Subagents can't receive messages mid-run — the manifest travels the same prompt-baking channel as the goal (hard rule #4). If an expected upstream manifest is missing, say so in the prompt rather than silently omitting it; the consumer role must know it's working without the hand-off.
+6. Wait for each subagent's deliverable summary. Synthesize results into a user-facing report.
 
 **This direct-`Agent` path is the default** and is the right choice for small squads (≤3 roles).
 
@@ -87,6 +91,7 @@ Then stop, or proceed with the direct-`Agent` path if the user prefers it. See t
    - **Spawn the teammates.** As the team lead, create the Agent Team and spawn one teammate per active role, referencing each role's definition at `.claude/agents/<role>.md` **by name** (the documented Agent Teams mechanism — teammates are spawned by the lead in natural language, not by a CLI flag). Pass each teammate the spawn prompt built from the template above as its initial instructions. There is no `--worktree <role>` teammate-launch flag; do not assert one.
    - **File isolation** between teammates is enforced by **disjoint `file_scope`** per role (agent-teams doc: "two teammates editing the same file leads to overwrites — break the work so each teammate owns a different set of files"). The roster's per-role `file_scope` is that vehicle. If you want a teammate to work inside its pre-created worktree, point it there explicitly using the path from `spawn.sh`'s JSON; nothing wires that automatically.
    - Per agent-teams doc: when a subagent definition is used as a teammate, `skills` and `mcpServers` frontmatter do **not** propagate; `tools` and `model` do; the body is appended to the teammate's system prompt.
+   - **Hand-offs:** teammates message each other live (Agent Teams mailbox), but the durable record of WHAT was handed off is still the manifest channel — each teammate publishes `.squad/role-comm-<name>--<consumer>.md` when a deliverable is ready and reads its own inbox (`.squad/role-comm-*--<name>.md`) on start. A message says "look"; the manifest says exactly what's ready, how to consume it, and what to distrust.
    - Print the teammate names back to the user. They can address any teammate by name in subsequent turns.
 3. **If unset, `0`, or anything else:**
    - Print a one-paragraph explanation of what Agent Teams adds: shared task list, mailbox, direct teammate-to-teammate messaging, true parallel execution.

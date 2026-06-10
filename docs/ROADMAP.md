@@ -15,18 +15,18 @@ covers the full lifecycle with nothing missing that a second plugin would have t
 | **Roles** | Bespoke roles generated from any goal; zero shipped role files bias the shape | ✅ v0.1.0 (`squad-role`, `squad-onboard`) |
 | **Responsibilities** | Per-role `file_scope` + role goals, mechanically enforced by the `PermissionRequest` hook | ✅ v0.1.0; glob matcher hardened in v0.2.0 |
 | **Environments** | Sandbox-scoped provisioning; propose what can't be contained | ✅ v0.1.0 (`squad-env`, hard rules #8–#9) |
-| **Communication** | Goal/role-goal prompt-baking (parent→worker) ✅; structured worker↔worker hand-offs beyond file drops | ⚠️ partial — see gap 1 |
+| **Communication** | Goal/role-goal prompt-baking (parent→worker) ✅; structured worker↔worker hand-offs via `.squad/role-comm-<from>--<to>.md` manifests (outbox auto-approved, forging defers, ready manifests baked into downstream spawn prompts) | ✅ v0.3.0 (`templates/role-comm.md`) |
 | **Supervision** | Definition-of-done verification with an artifact of record | ✅ v0.2.0 (`squad-verify`, hard rule #10) |
 | **All three cadences** | One-time / Multi-use / Evergreen, each with a real dispatch path | ✅ v0.1.0; Evergreen depends on external schedulers — see gap 4 |
 | **Trustworthy by inspection** | Docs match shipped behavior; examples conform to real schemas; CI proves it | ✅ v0.2.0 (truth sync + example-roster lint) |
 
 ## Ranked gaps (what a 0.3.0+ should close)
 
-1. **Communication v2 — structured hand-offs.** Multi-use teammates message each other
-   via Agent Teams; One-time subagents only communicate through files in `file_scope`.
-   Implement the reserved `.squad/role-comm-*` namespace as a hand-off contract
-   (producer writes a manifest: what's ready, where, for whom; consumer's spawn prompt
-   includes it). This is the tagline's weakest pillar.
+1. ~~**Communication v2 — structured hand-offs.**~~ **Shipped in v0.3.0**: the
+   `.squad/role-comm-*` namespace is now the hand-off contract — producer publishes a
+   manifest (what's ready / how to consume / caveats) to its hook-scoped outbox;
+   `squad-spawn` bakes ready manifests into downstream spawn prompts (One-time) and
+   teammates pair live messages with the durable manifest (Multi-use).
 2. **Verification depth — executable evidence.** `squad-verify` judges signals from file
    evidence. Let a Definition-of-done bullet declare an evidence command
    (e.g. `verify: bats tests/`), which `verify.sh` runs read-only and records

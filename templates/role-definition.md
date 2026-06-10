@@ -61,8 +61,23 @@ If you find yourself needing a tool that isn't listed, do not try to invoke it �
 
 Write your deliverables inside your file scope. The squad's coordinator (the main session, or the Agent Teams lead) reads your outputs from disk — your scope is your hand-off surface. Do not bundle large artifacts into your final text response; write them to files and reference the paths.
 
+**Hand-offs to other roles** use the structured manifest channel:
+
+- **Outbox.** When a deliverable is ready for a downstream role, write
+  `.squad/role-comm-{{name}}--<consumer>.md` (your file scope includes
+  `.squad/role-comm-{{name}}--*`, so these writes auto-approve). Follow the
+  shape of `templates/role-comm.md`: frontmatter (`from`/`to`/`created`/`status`),
+  then *What's ready* (artifact paths), *How to consume*, and *Caveats*. The
+  manifest is for the consumer role, which has no other context about your work.
+- **Inbox.** Before starting, read every `.squad/role-comm-*--{{name}}.md`
+  (and any `--any.md` broadcasts) that your spawn prompt didn't already include.
+  Honor the *Caveats* section — never assume an artifact is complete unless the
+  manifest says so.
+- Never write another role's outbox (`.squad/role-comm-<other>--*`) — the
+  permission hook defers it, and forging a hand-off corrupts the channel.
+
 When you finish a task, your final text reply should:
-- Name the artifacts you wrote (paths)
+- Name the artifacts you wrote (paths) and any hand-off manifests you published
 - State what's done vs what's still open
 - Flag anything that needs human judgment
 

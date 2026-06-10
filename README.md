@@ -10,7 +10,7 @@
 
 [![CI](https://github.com/cheeky-amit/cheeky-squad-os/actions/workflows/ci.yml/badge.svg)](https://github.com/cheeky-amit/cheeky-squad-os/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.2.0-blue.svg)](.claude-plugin/plugin.json)
+[![Version](https://img.shields.io/badge/version-0.3.0-blue.svg)](.claude-plugin/plugin.json)
 [![Claude Code plugin](https://img.shields.io/badge/Claude_Code-plugin-8A2BE2.svg)](https://code.claude.com/docs/en/plugins)
 [![Built with](https://img.shields.io/badge/built_with-Markdown_%2B_Bash-1f425f.svg)](CONTRIBUTING.md)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
@@ -97,7 +97,7 @@ flowchart LR
 
 1. **Set a north-star goal** with `/cheeky-squad-os:squad-onboard`. It asks *"Do you have a goal?"*, reformulates your answer as a measurable, time-bounded outcome, infers the mode (one-time / multi-use / evergreen), and decomposes the work into parallel workstreams. The confirmed goal is saved to `.squad/goal.md`.
 2. **Generate the roles your goal needs** with `/cheeky-squad-os:squad-role`. For each workstream, an interactive flow asks what the role does, what files it owns, what tools it needs, what model fits. Each role is written to `.claude/agents/<role-name>.md` and registered in `.squad/roster.json`.
-3. **Spawn the squad** with `/cheeky-squad-os:squad-spawn`. It branches on the squad's mode (see below).
+3. **Spawn the squad** with `/cheeky-squad-os:squad-spawn`. It branches on the squad's mode (see below). Roles hand work to each other through structured manifests (`.squad/role-comm-<from>--<to>.md` — what's ready, how to consume, caveats): each role publishes to its own outbox (auto-approved by the hook; another role's outbox defers, so hand-offs can't be forged), and `squad-spawn` bakes ready manifests into downstream spawn prompts.
 4. **Verify the work** with `/cheeky-squad-os:squad-verify`. When the squad reports done, it checks every Definition-of-done signal against the deliverables (PASS / FAIL / NEEDS-HUMAN — never guessed), computes a met / partial / unmet verdict, and writes `.squad/verification.md`. Synthesis summarizes; verification decides.
 5. **The hooks enforce the contract every turn** (see below).
 
@@ -302,6 +302,7 @@ cheeky-squad-os/
 │   ├── role-goal.md
 │   ├── role-definition.md
 │   ├── roster.json
+│   ├── role-comm.md                 # hand-off manifest (worker↔worker channel)
 │   ├── verification.md              # squad-verify report skeleton
 │   └── squad-dispatch.workflow.js   # canonical fan-out + synthesize script
 ├── docs/
