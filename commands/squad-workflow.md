@@ -1,6 +1,6 @@
 ---
 description: Dispatch a One-time squad as a dynamic Workflow — deterministic fan-out over roles, structured hand-offs, in-session resume.
-argument-hint: "[--force] [--save]"
+argument-hint: "[--force] [--save] [--chain]"
 ---
 
 # squad-workflow
@@ -14,7 +14,9 @@ result, then synthesized into one report.
 > command is the user-triggered entry point. You will be asked to approve the run.
 
 Arguments: `$ARGUMENTS` — `--force` to use the workflow path even for small (≤3 role)
-squads; `--save` to keep the generated script under `.claude/workflows/`.
+squads; `--save` to keep the generated script under `.claude/workflows/`; `--chain`
+to keep existing hand-off manifests (this run consumes a previous stage's output —
+e.g. a write-stage run after a read-stage run) instead of clearing them.
 
 ## Your task
 
@@ -29,15 +31,17 @@ squads; `--save` to keep the generated script under `.claude/workflows/`.
 
 4. **Safety briefing (state this before running).** The subagents a workflow spawns always run in **acceptEdits** — their file edits are auto-approved, which **bypasses the squad's `PermissionRequest` file-scope hook**. So this command dispatches **read/analyze** roles whose writes are confined to their own `file_scope` by instruction (baked into each agent prompt), not by the hook. Any role that must mutate shared code should stay on the hook-gated `squad-spawn` path, or be run as its own write-stage workflow with a sign-off gate. Confirm the user is OK with this posture (or to exclude write-roles).
 
-5. **Build the workflow inputs (hard rule #4 — bake everything in).** Workflow scripts have no filesystem access, so assemble an `args` object from the live files:
+5. **Hand-off channel hygiene (staleness).** Manifests under `.squad/role-comm-*.md` are per-engagement working state. Without `--chain`: delete any leftover manifests before dispatching — they are from a completed prior run, and baking them would feed roles stale hand-offs (the deliverables they referenced live on in committed `file_scope` paths; only the routing note is discarded). With `--chain`: keep them — this run is a follow-on stage and those manifests are its legitimate input.
+
+6. **Build the workflow inputs (hard rule #4 — bake everything in).** Workflow scripts have no filesystem access, so assemble an `args` object from the live files:
    - `goal`: full text of `.squad/goal.md`.
-   - `roles`: for each `active: true` role in `roster.json` (excluding any write-roles the user chose to hold back) → `{ name, roleGoal: <full text of .squad/role-goal-<name>.md>, fileScope: <roster file_scope>, task: <this-run contribution derived from the role purpose + the goal's definition of done>, model: <roster model or omit> }`.
+   - `roles`: for each `active: true` role in `roster.json` (excluding any write-roles the user chose to hold back) → `{ name, roleGoal: <full text of .squad/role-goal-<name>.md>, fileScope: <roster file_scope>, task: <this-run contribution derived from the role purpose + the goal's definition of done>, model: <roster model or omit>, handoffs: <full text of each .squad/role-comm-*--<name>.md and --any.md with status: ready, if any survived step 5> }`.
 
-6. **Author and run the workflow.** Follow the shape in `${CLAUDE_PLUGIN_ROOT}/templates/squad-dispatch.workflow.js` (read it). Author the script (or pass that template's logic) and run it via the Workflow tool with the `args` you built. The script fans out one `agent()` per role with `agentType` = the role name (so `.claude/agents/<name>.md` loads), each returning the `{role, summary, artifacts, status, follow_ups}` contract, then returns a structured digest.
+7. **Author and run the workflow.** Follow the shape in `${CLAUDE_PLUGIN_ROOT}/templates/squad-dispatch.workflow.js` (read it). Author the script (or pass that template's logic) and run it via the Workflow tool with the `args` you built. The script fans out one `agent()` per role with `agentType` = the role name (so `.claude/agents/<name>.md` loads), each returning the `{role, summary, artifacts, status, follow_ups}` contract, then returns a structured digest.
 
-7. **(Optional) persist.** If `--save` was passed, write the concrete script to `.claude/workflows/squad-dispatch.js` so it is committed and rerunnable (regenerate it whenever the roster changes — a saved script reflects the roster at generation time, not run time).
+8. **(Optional) persist.** If `--save` was passed, write the concrete script to `.claude/workflows/squad-dispatch.js` so it is committed and rerunnable (regenerate it whenever the roster changes — a saved script reflects the roster at generation time, not run time).
 
-8. **Synthesize.** From the workflow's returned digest, read each role's artifacts from its `file_scope` and compose a user-facing report: what each role produced, where the artifacts live, what's `done` / `partial` / `blocked`, and the collected `follow_ups`. Surface any blocked role prominently. Then hand off to `/cheeky-squad-os:squad-verify` to check the goal's Definition of done and write `.squad/verification.md` — synthesis summarizes; verification decides.
+9. **Synthesize.** From the workflow's returned digest, read each role's artifacts from its `file_scope` and compose a user-facing report: what each role produced, where the artifacts live, what's `done` / `partial` / `blocked`, and the collected `follow_ups`. Surface any blocked role prominently. Then hand off to `/cheeky-squad-os:squad-verify` to check the goal's Definition of done and write `.squad/verification.md` — synthesis summarizes; verification decides.
 
 ## Notes
 

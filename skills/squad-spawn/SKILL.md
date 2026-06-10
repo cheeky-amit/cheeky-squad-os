@@ -20,6 +20,7 @@ You orchestrate dispatch. The squad has been onboarded (`.squad/goal.md` exists)
 4. Read each `.squad/role-goal-<role.name>.md`.
 5. Note the squad's mode from `goal.md` frontmatter.
 6. **Provision environments.** If any active role has an `environment` block, run `/cheeky-squad-os:squad-env` (or directly `${CLAUDE_PLUGIN_ROOT}/skills/squad-env/scripts/provision.sh .squad/roster.json .squad/goal.md`) **before** dispatching. This builds each role's sandbox and surfaces any `global_needs` for the user to approve. Do not dispatch a role whose sandbox could not be provisioned (the summary's `errors` > 0) — fix the `environment` first. Roles with no `environment` block skip this.
+7. **Clear the hand-off channel (staleness).** Manifests under `.squad/role-comm-*.md` are per-engagement working state. If any exist from a prior run, delete them before dispatching — baking them would feed roles stale hand-offs (the deliverables they referenced live on in committed `file_scope` paths; only the routing note is discarded). **Exception:** keep them when this dispatch is an explicit follow-on stage consuming a previous run's hand-offs (the user says so, or the previous run's synthesis planned this stage). In Evergreen mode, every iteration is a fresh engagement — clear at the start of each.
 
 ## Build the spawn prompt (per role)
 
