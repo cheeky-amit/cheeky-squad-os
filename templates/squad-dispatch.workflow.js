@@ -32,6 +32,9 @@
 //   - No mid-run user input. Onboarding / role generation stay interactive
 //     skills; only the (already fully-specified) dispatch runs as a workflow.
 //
+// Full runtime contract (script linting, agent()/args semantics, resume):
+// docs/workflows-runtime-reference.md.
+//
 // INPUT — `args` (supplied by the runner; never read from disk):
 //   {
 //     "goal": "<full text of .squad/goal.md>",

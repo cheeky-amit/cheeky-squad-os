@@ -27,6 +27,7 @@ flowchart TB
             ENV["squad-env<br/><i>provisions sandboxes</i>"]
             ROST["squad-roster<br/><i>owns roster.json</i>"]
             SPAWN["squad-spawn<br/><i>dispatch</i>"]
+            VER["squad-verify<br/><i>checks definition of done</i>"]
         end
         subgraph CMDS["commands/"]
             WF["/squad-workflow<br/><i>Workflow dispatch</i>"]
@@ -42,6 +43,7 @@ flowchart TB
             T3["role-definition.md"]
             T4["roster.json"]
             T5["squad-dispatch.workflow.js"]
+            T6["verification.md"]
         end
     end
 
@@ -54,6 +56,7 @@ flowchart TB
         WT[".claude/worktrees/&lt;role&gt;/"]
         WS[".squad/workspaces/&lt;role&gt;/"]
         WFJS[".claude/workflows/squad-dispatch.js"]
+        VMD[".squad/verification.md"]
     end
 
     ONB --> GOAL --> GMD
@@ -71,6 +74,9 @@ flowchart TB
     SPAWN -.points user at.-> WF
     WF --> WFJS
     WF --> T5
+    SPAWN -.hands off to.-> VER
+    VER --> VMD
+    VER --> T6
 
     H1 -.reads.-> GMD
     H2 -.reads.-> GMD
@@ -78,8 +84,8 @@ flowchart TB
 
     classDef ship fill:#e8f0fe,stroke:#4285f4,color:#111;
     classDef gen fill:#e6f4ea,stroke:#34a853,color:#111;
-    class ONB,GOAL,ROLE,ROST,SPAWN,WF,H1,H2,H3,T1,T2,T3,T4,T5 ship;
-    class GMD,RGMD,RJSON,AGENTS,WT,WFJS gen;
+    class ONB,GOAL,ROLE,ROST,SPAWN,VER,WF,H1,H2,H3,T1,T2,T3,T4,T5,T6 ship;
+    class GMD,RGMD,RJSON,AGENTS,WT,WFJS,VMD gen;
 ```
 
 **Reading it:** blue = ships in the plugin (zero role files). Green = generated
@@ -120,6 +126,11 @@ sequenceDiagram
     SPAWN->>W: spawn with goal+role-goal BAKED in (rule #4)
     W-->>SPAWN: deliverables (written to file_scope)
     SPAWN->>U: synthesized report
+    participant VER as squad-verify
+    SPAWN->>VER: hand off (rule #10)
+    VER->>GOAL: read Definition of done
+    VER->>VER: judge each signal PASS/FAIL/NEEDS-HUMAN
+    VER->>U: .squad/verification.md — met | partial | unmet
 ```
 
 ---
@@ -495,3 +506,4 @@ The invariants every diagram above upholds (full text in
 | 7 | Per-role file isolation via disjoint `file_scope`. |
 | 8 | Sandbox-scoped autonomy — hook auto-approves in-sandbox scaffolding inside `environment.workspace`. |
 | 9 | Propose what can't be contained — system/MCP/network/global needs go to the user, never auto-run. |
+| 10 | Synthesis summarizes, verification decides — `.squad/verification.md` is the only authority for "goal met". |

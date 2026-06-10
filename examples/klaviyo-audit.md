@@ -60,11 +60,11 @@ Handing off to squad-role to generate each role interactively.
 ```markdown
 ---
 mode: one-time
-created: 2026-05-27
+created: 2026-05-27T09:00:00Z
 target: 2026-06-03
 ---
 
-# Goal
+# Squad goal
 
 Deliver a ranked list of Klaviyo lifecycle fixes with revenue impact
 estimates per fix, within one week. The audit covers all active
@@ -120,11 +120,12 @@ Confirm? (y/n)
 
 User: y
 
-squad-role: Generated .claude/agents/klaviyo-data-puller.md and
-registered in .squad/roster.json.
+squad-role: Generated .claude/agents/klaviyo-data-puller.md, wrote
+.squad/role-goal-klaviyo-data-puller.md, and registered the role in
+.squad/roster.json.
 ```
 
-Generated `.claude/agents/klaviyo-data-puller.md` (frontmatter):
+Generated `.claude/agents/klaviyo-data-puller.md` (frontmatter — scope is **not** frontmatter; it lives in `.squad/roster.json` and is restated as bullets in the agent body):
 
 ```yaml
 ---
@@ -132,15 +133,14 @@ name: klaviyo-data-puller
 description: Pulls Klaviyo flow performance, list health, and deliverability data via MCP; cross-references Shopify orders; dumps structured JSON for downstream roles.
 tools: Read, Write, Bash, mcp__claude_ai_Klaviyo__*, mcp__claude_ai_Shopify__*
 model: sonnet
-scope:
-  - data/klaviyo/**
-  - reports/klaviyo/raw/**
 ---
 ```
 
-Generated `.squad/role-goal-klaviyo-data-puller.md` (outcome paragraph):
+Generated `.squad/role-goal-klaviyo-data-puller.md` (outcome paragraph + hand-offs):
 
 > Pull last-90-days flow performance for every active Klaviyo flow, list-level health metrics (growth, churn, engagement deciles), deliverability signals (bounce, complaint, open-rate by ISP), and cross-reference the same window of Shopify orders. Write everything as typed JSON to `data/klaviyo/` and a human-readable raw summary to `reports/klaviyo/raw/summary.md`. Do not interpret — just extract.
+>
+> **Hand-offs:** compliance-checker and report-writer — both consume `data/klaviyo/*.json` and `reports/klaviyo/raw/summary.md` from disk.
 
 ---
 
@@ -168,8 +168,9 @@ squad-role: Model?
 
 User: sonnet
 
-squad-role: Generated .claude/agents/compliance-checker.md and
-registered in .squad/roster.json.
+squad-role: Generated .claude/agents/compliance-checker.md, wrote
+.squad/role-goal-compliance-checker.md, and registered the role in
+.squad/roster.json.
 ```
 
 Generated `.claude/agents/compliance-checker.md` (frontmatter):
@@ -180,14 +181,14 @@ name: compliance-checker
 description: Reads Klaviyo extraction output and flags deliverability, consent, and send-volume risks. Produces a compliance addendum that the report-writer must reference.
 tools: Read, Write
 model: sonnet
-scope:
-  - reports/klaviyo/compliance/**
 ---
 ```
 
 `.squad/role-goal-compliance-checker.md`:
 
 > Read `data/klaviyo/*.json` and `reports/klaviyo/raw/summary.md`. Produce `reports/klaviyo/compliance/flags.md` listing every deliverability, consent, or send-volume risk: bounce rate > 2%, complaint rate > 0.1%, unsegmented sends to disengaged 180d+ subscribers, missing double-opt-in on EU-region growth sources. Each flag includes severity (low/medium/high) and the data point that triggered it.
+>
+> **Hand-offs:** report-writer — consumes `reports/klaviyo/compliance/flags.md`. This role starts only after klaviyo-data-puller's artifacts land.
 
 ---
 
@@ -221,8 +222,9 @@ squad-role: Model?
 
 User: opus
 
-squad-role: Generated .claude/agents/report-writer.md and
-registered in .squad/roster.json.
+squad-role: Generated .claude/agents/report-writer.md, wrote
+.squad/role-goal-report-writer.md, and registered the role in
+.squad/roster.json.
 ```
 
 Generated `.claude/agents/report-writer.md` (frontmatter):
@@ -233,14 +235,14 @@ name: report-writer
 description: Synthesizes raw Klaviyo extraction and compliance flags into a ranked list of lifecycle fixes with revenue impact estimates and confidence scores. Produces the single deliverable.
 tools: Read, Write, Grep
 model: opus
-scope:
-  - reports/klaviyo/**
 ---
 ```
 
 `.squad/role-goal-report-writer.md`:
 
 > Read `data/klaviyo/*.json`, `reports/klaviyo/raw/summary.md`, and `reports/klaviyo/compliance/flags.md`. Produce `reports/klaviyo/final-report.md`: a ranked list of >= 5 lifecycle fixes ordered by estimated monthly revenue impact. Each fix includes the impact estimate, a confidence score with rationale, the evidence (which data point or compliance flag triggered it), and a one-paragraph recommendation. Compliance issues marked high severity must appear in the top 3 regardless of revenue impact.
+>
+> **Hand-offs:** user — this is the last role in the chain; `reports/klaviyo/final-report.md` is the squad deliverable. Dispatch this role only after both upstream roles' artifacts land.
 
 ---
 
@@ -250,40 +252,48 @@ scope:
 
 ```json
 {
-  "version": 1,
-  "goal_ref": ".squad/goal.md",
+  "squad_goal_ref": ".squad/goal.md",
   "mode": "one-time",
+  "created": "2026-05-27T09:30:00Z",
   "roles": [
     {
       "name": "klaviyo-data-puller",
+      "purpose": "Pull Klaviyo flow performance, list health, and deliverability data via MCP and dump structured JSON for downstream roles.",
       "agent_file": ".claude/agents/klaviyo-data-puller.md",
-      "role_goal_file": ".squad/role-goal-klaviyo-data-puller.md",
-      "scope": ["data/klaviyo/**", "reports/klaviyo/raw/**"],
+      "role_goal": ".squad/role-goal-klaviyo-data-puller.md",
+      "file_scope": ["data/klaviyo/**", "reports/klaviyo/raw/**"],
+      "tools": ["Read", "Write", "Bash", "mcp__claude_ai_Klaviyo__*", "mcp__claude_ai_Shopify__*"],
       "model": "sonnet",
       "active": true,
-      "depends_on": []
+      "created": "2026-05-27T09:30:00Z"
     },
     {
       "name": "compliance-checker",
+      "purpose": "Read the Klaviyo extraction output and flag deliverability, consent, and send-volume risks before rankings go out.",
       "agent_file": ".claude/agents/compliance-checker.md",
-      "role_goal_file": ".squad/role-goal-compliance-checker.md",
-      "scope": ["reports/klaviyo/compliance/**"],
+      "role_goal": ".squad/role-goal-compliance-checker.md",
+      "file_scope": ["reports/klaviyo/compliance/**"],
+      "tools": ["Read", "Write"],
       "model": "sonnet",
       "active": true,
-      "depends_on": ["klaviyo-data-puller"]
+      "created": "2026-05-27T09:40:00Z"
     },
     {
       "name": "report-writer",
+      "purpose": "Synthesize raw extraction and compliance flags into the ranked fix list with revenue impact estimates and confidence scores.",
       "agent_file": ".claude/agents/report-writer.md",
-      "role_goal_file": ".squad/role-goal-report-writer.md",
-      "scope": ["reports/klaviyo/**"],
+      "role_goal": ".squad/role-goal-report-writer.md",
+      "file_scope": ["reports/klaviyo/**"],
+      "tools": ["Read", "Write", "Grep"],
       "model": "opus",
       "active": true,
-      "depends_on": ["klaviyo-data-puller", "compliance-checker"]
+      "created": "2026-05-27T09:50:00Z"
     }
   ]
 }
 ```
+
+Note there is no dependency field in the roster — ordering is not roster data. The extract → check → synthesize sequence lives in each role goal's **Hand-offs** section, and `squad-spawn` reads those to sequence the dispatch: the writer goes last, after the auditor roles' artifacts land.
 
 ---
 
@@ -292,12 +302,15 @@ scope:
 ```text
 User: /cheeky-squad-os:squad-spawn
 
-squad-spawn: Mode = one-time. Dispatching via Agent tool, in
-dependency order:
+squad-spawn: Mode = one-time. Preflight passed — goal, roster, all
+three agent files and all three .squad/role-goal-*.md files present.
 
-  1. klaviyo-data-puller   (no deps)
-  2. compliance-checker    (depends on klaviyo-data-puller)
-  3. report-writer         (depends on both)
+The role goals' Hand-offs sections imply a sequence — the data-puller's
+artifacts feed the compliance-checker, and the report-writer reads both:
+
+  1. klaviyo-data-puller
+  2. compliance-checker    (consumes the data-puller's artifacts)
+  3. report-writer         (consumes both upstream artifacts)
 
 Dispatching klaviyo-data-puller now...
 ```
@@ -444,7 +457,7 @@ Total subscribers: 184,302 | Engaged 30d: 41,118 (22.3%)
 - One bespoke squad for one specific goal. No generic team applied; the three roles only exist because this audit needed them.
 - 3 roles, not 7. Sized to the work, not a default.
 - Roles dispatched in dependency order. `report-writer` couldn't start until both upstream artifacts existed.
-- File scopes are enforced by the `PermissionRequest` hook. `compliance-checker` cannot write into `data/klaviyo/`; `klaviyo-data-puller` cannot touch the final report.
+- File scopes are enforced by the `PermissionRequest` hook. In-scope writes auto-approve; an out-of-scope write — say `compliance-checker` reaching into `data/klaviyo/` — defers to the user for explicit approval. The hook never silently denies.
 - The squad goal is injected into every spawn prompt (hard rule). Subagents have no other context channel from the parent — what's in the prompt is what they know.
 - `SessionStart` and `UserPromptSubmit` hooks keep the goal in scope across the parent session too, so you never drift mid-audit.
 - When the report ships, the squad is done. No recurring triggers, no scheduling. If the brand wants a monthly version next quarter, that's a new `squad-onboard` run in Evergreen mode — different dispatch path.

@@ -12,14 +12,15 @@ This means the plugin contains **zero opinionated role files**. No `frontend-dev
 
 | Component | Ships in plugin | Generated per goal | Notes |
 | --- | --- | --- | --- |
-| Skills (6) | Yes | — | `squad-onboard`, `squad-goal`, `squad-role`, `squad-spawn`, `squad-roster`, `squad-env` |
+| Skills (7) | Yes | — | `squad-onboard`, `squad-goal`, `squad-role`, `squad-spawn`, `squad-roster`, `squad-env`, `squad-verify` |
 | Hooks (3) | Yes | — | `SessionStart`, `UserPromptSubmit`, `PermissionRequest` |
-| Templates (4) | Yes | — | `goal.md`, `role-goal.md`, `role-definition.md`, `roster.json` |
+| Templates (6) | Yes | — | `goal.md`, `role-goal.md`, `role-definition.md`, `roster.json`, `squad-dispatch.workflow.js`, `verification.md` |
 | Role files | **No — zero** | Yes, by `squad-role` | Written to `.claude/agents/<role-name>.md` in the user's project |
 | Squad goal | — | Yes, by `squad-onboard` | `.squad/goal.md` |
 | Role goals | — | Yes, by `squad-role` | `.squad/role-goal-<role-name>.md` per role |
 | Roster | — | Yes, by `squad-roster` | `.squad/roster.json` (source of truth) |
 | Role environment | — | Yes, by `squad-env` | Optional `environment` block per roster role; materialized as a sandbox under `.squad/workspaces/<role>/` by `provision.sh` |
+| Verification report | — | Yes, by `squad-verify` | `.squad/verification.md` — per-signal evidence + met/partial/unmet verdict against the goal's Definition of done |
 
 The plugin is **discipline**. Everything else is **generated** from the user's goal.
 
@@ -36,6 +37,7 @@ These are the load-bearing invariants the rest of the document references by num
 7. **Per-role file isolation.** Roles are given disjoint `file_scope` so concurrent workers don't overwrite each other (agent-teams doc: "each teammate owns a different set of files"). One-time subagents may additionally set `isolation: worktree`; Multi-use can pre-create per-role worktrees via `skills/squad-spawn/scripts/spawn.sh` as working directories.
 8. **Sandbox-scoped autonomy.** A role's `environment` (optional) is materialized as a sandbox — a filesystem-and-PATH boundary (`.squad/workspaces/<role>/` + a role-local `bin/` + a sourced `env` file). Inside it, the role provisions and works freely: the `PermissionRequest` hook auto-approves in-sandbox scaffolding (`mkdir`/`touch`/`cp`/`ln` with every operand inside the workspace) exactly as it auto-approves in-`file_scope` Edit/Write. The boundary is enforced by the same hook, not by a confirmation prompt.
 9. **Propose what can't be contained.** Anything inherently global — a system CLI, an MCP server, a network fetch, an experimental/global flag — is never run by the provisioner. It is collected into `global_needs` and proposed to the user for approval. The escape hatch is not separate logic: "not in the sandbox vocabulary" is exactly what the hook already defers, and what `provision.sh` already refuses to execute.
+10. **Synthesis summarizes, verification decides** — `.squad/verification.md` is the only authority for declaring the goal met.
 
 ## The three modes
 
@@ -49,9 +51,9 @@ Mode is inferred from goal language by `squad-onboard`. User can override. Agent
 
 Mode controls **cadence and persistence**. Agent count is set by the goal decomposition (how many parallel workstreams) and the domain expertise required (how many specializations).
 
-## The six skills
+## The seven skills
 
-Every skill ships as `skills/<name>/SKILL.md` with YAML frontmatter conforming to the agentskills.io open spec. Claude-Code-specific behaviors live in companion scripts (e.g. `skills/squad-spawn/scripts/spawn.sh`, `skills/squad-env/scripts/provision.sh`) or are gracefully degraded.
+Every skill ships as `skills/<name>/SKILL.md` with YAML frontmatter conforming to the agentskills.io open spec. Claude-Code-specific behaviors live in companion scripts (e.g. `skills/squad-spawn/scripts/spawn.sh`, `skills/squad-env/scripts/provision.sh`, `skills/squad-verify/scripts/verify.sh`) or are gracefully degraded.
 
 ### 1. `squad-onboard`
 
@@ -116,7 +118,7 @@ Writes:
 - `.squad/role-goal-<role-name>.md` — role goal derived from squad goal
 - Registers entry in `.squad/roster.json` (via `squad-roster`)
 
-**Output location note:** The original brief named `agents/<role-name>.md`. Claude Code scans `.claude/agents/` for project subagents (and `~/.claude/agents/` for user subagents), per [sub-agents doc](https://code.claude.com/docs/en/sub-agents#choose-the-subagent-scope). We use `.claude/agents/` so generated roles are discoverable without extra configuration.
+**Output location note:** An earlier design placed generated roles at `agents/<role-name>.md` in the repo root. Claude Code scans `.claude/agents/` for project subagents (and `~/.claude/agents/` for user subagents), per [sub-agents doc](https://code.claude.com/docs/en/sub-agents#choose-the-subagent-scope). We use `.claude/agents/` so generated roles are discoverable without extra configuration.
 
 ### 4. `squad-spawn`
 
@@ -208,7 +210,7 @@ Switch on goal.mode:
 **Contract:**
 - Manages `.squad/roster.json` (source of truth, JSON for tooling)
 - Auto-generates `.squad/roster.md` for human reading (regenerated on each write)
-- Used by `squad-role` to register roles, by `squad-spawn` to enumerate active teammates, and by the `PermissionRequest` hook to look up scope rules
+- Used by `squad-role` to register roles and by `squad-spawn` to enumerate active teammates; the `PermissionRequest` hook does not call this skill — it reads `.squad/roster.json` directly with `jq` to look up scope rules
 
 **Schema of `.squad/roster.json`:**
 ```json
@@ -222,15 +224,24 @@ Switch on goal.mode:
       "purpose": "Extract flow performance, list health, deliverability from Klaviyo MCP",
       "agent_file": ".claude/agents/klaviyo-data-puller.md",
       "role_goal": ".squad/role-goal-klaviyo-data-puller.md",
-      "file_scope": ["reports/klaviyo/**", "data/klaviyo/**"],
+      "file_scope": ["reports/klaviyo/**", "data/klaviyo/**", ".squad/workspaces/klaviyo-data-puller/**"],
       "tools": ["Read", "Write", "Bash", "mcp__claude_ai_Klaviyo__*"],
       "model": "sonnet",
+      "environment": {
+        "workspace": ".squad/workspaces/klaviyo-data-puller/",
+        "dirs": ["inputs", "outputs", "scratch"],
+        "env": { "REPORT_DIR": "outputs" },
+        "context": [{ "from": "data/klaviyo/**", "into": "inputs", "kind": "copy" }],
+        "tools": [{ "name": "jq", "kind": "system", "verify": "command -v jq" }]
+      },
       "active": true,
       "created": "<ISO-8601>"
     }
   ]
 }
 ```
+
+The `environment` block is **optional** — it is the role's sandbox spec (see `templates/roster.json` for the annotated canonical shape), materialized by `squad-env`/`provision.sh`. `workspace` must be project-relative (no `..`), and `<workspace>/**` is mirrored into the role's `file_scope` so in-sandbox Edit/Write auto-approve. `dirs` are scaffolded subdirs; `env` is written to `<workspace>/env` and sourced (never exported globally); `context` seeds local reference material; `tools` declare readiness — `kind: "local"` installs into the sandbox, `kind: "system"`/`"mcp"` is never run and becomes a `global_need` proposed to the user.
 
 ### 6. `squad-env`
 
@@ -264,6 +275,34 @@ Present the report; then:
 
 **The sandbox is a filesystem-and-PATH boundary, not a kernel jail.** What it can contain: dirs, a sourced env file, a local tool prefix on `PATH`, locally-copied reference material. What it cannot contain — and therefore proposes — system packages, MCP servers, network fetches, and global/experimental flags. This split is hard rules #8 and #9.
 
+### 7. `squad-verify`
+
+**Trigger:** "verify the squad", "is the work done", "check the definition of done", "did we hit the goal"; `squad-spawn`'s per-spawn synthesis ends by handing off to it.
+
+**Contract:** The supervision component. Synthesis summarizes; verification decides (hard rule #10).
+
+```
+Read .squad/goal.md           →  refuse if missing; point at squad-onboard
+Read .squad/roster.json       →  refuse if no active roles; point at squad-role
+
+Run skills/squad-verify/scripts/verify.sh (jq-based scaffold):
+  - parse the goal's "## Definition of done" bullets
+  - count deliverable files under each active role's file_scope
+  - check role-goal presence per active role
+  - emit JSON lines
+
+For EACH definition-of-done signal:
+  Gather evidence READ-ONLY (no file mutation, no Bash side effects)
+  Mark PASS / FAIL / NEEDS-HUMAN
+    — never guess: an unverifiable signal goes to NEEDS-HUMAN
+
+Compute verdict: met | partial | unmet
+Write .squad/verification.md (from templates/verification.md — frontmatter:
+  verdict, verified_at, goal_mode, signals_pass/fail/human)
+```
+
+**Writes:** `.squad/verification.md` **only** — it never modifies `goal.md` or `roster.json`. The verification report is the only authority for declaring the goal met; a squad's synthesized report is a summary, not a verdict.
+
 ## The role-definition template (no shipped roles — why)
 
 Shipping default roles (`frontend-dev`, `backend-dev`, `qa-engineer`, etc.) is the trap. Defaults bias every goal toward the shape the defaults assume. A Klaviyo lifecycle audit doesn't need a `backend-dev` — it needs an `audit-researcher`, a `compliance-checker`, and a `report-writer`. A weekly competitive intel loop doesn't need any of those — it needs a `scraper`, an `analyst`, and a `summariser`.
@@ -278,7 +317,7 @@ name: <role-name>                # lowercase, hyphenated
 description: <when to delegate>  # used by Claude for auto-delegation
 tools: <comma-separated>         # allowlist
 model: sonnet | opus | haiku | inherit
-isolation: worktree              # set when mode is multi-use; omitted otherwise
+isolation: worktree              # optional; One-time subagents only — Multi-use isolation comes from disjoint file_scope
 ---
 ```
 
@@ -380,7 +419,7 @@ Schemas for `goal.md` and `roster.json` are above. `role-goal-<role-name>.md` mi
 
 ### Version control
 
-`.squad/` mixes shared squad state with ephemeral working artifacts. The plugin's shipped `.gitignore` (Phase 7) draws the line as follows:
+`.squad/` mixes shared squad state with ephemeral working artifacts. The repo's `.gitignore` draws the line as follows (mirror these patterns in your own project's `.gitignore`):
 
 | Path | Status | Why |
 | --- | --- | --- |
@@ -388,6 +427,7 @@ Schemas for `goal.md` and `roster.json` are above. `role-goal-<role-name>.md` mi
 | `.squad/roster.json` | **Commit** | Source of truth for who's on the squad; needs to travel with the project. |
 | `.squad/roster.md` | **Commit** | Auto-generated human view; committed for diff readability. |
 | `.squad/role-goal-*.md` | **Commit** | Per-role goals — derived from squad goal but stable artifacts. |
+| `.squad/verification.md` | **Commit** | The verdict of record (hard rule #10) — the evidence trail for "the goal is met" should travel with the project. Overwritten on each re-verify. |
 | `.squad/workspaces/<role>/` | **Gitignore** | Per-role sandboxes materialized by `provision.sh`; ephemeral, recreated on each provision. The `environment` spec in `roster.json` is the committed source of truth. |
 | `.squad/role-comm-*` | **Gitignore** | Inter-role communication scratch (reserved namespace; v1 does not yet write these — pre-ignored so v2 features don't pollute git). |
 | `.squad/role-plan-*` | **Gitignore** | Per-role draft plans (reserved namespace; pre-ignored). |
@@ -548,7 +588,6 @@ A user running these skills under a different agent runner gets the discipline (
 
 These are the features the plugin leans on and the surfaces that gate them. The exact minimum version numbers below are **approximate** — treat them as "a recent Claude Code" and verify against your installed `claude --version` rather than as hard guarantees:
 
-- `/goal` (Phase 7 smoke test uses it)
 - `/loop` (Evergreen mode option) — in-session recurring task
 - **Agent Teams** (Multi-use mode) — experimental, env-gated by `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`
 - **Dynamic Workflows** (optional One-time dispatch) — **research preview, paid plans, ~v2.1.154+**, can be org-disabled (`disableWorkflows` / `CLAUDE_CODE_DISABLE_WORKFLOWS`). See ["Dynamic Workflows"](#dynamic-workflows--where-they-fit-and-where-they-dont).

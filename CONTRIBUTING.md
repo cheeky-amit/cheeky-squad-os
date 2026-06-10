@@ -7,14 +7,15 @@ This is a small plugin with a clear shape. Contributions land in one of five pla
 ```
 .claude-plugin/        plugin manifest + self-marketplace
 hooks/                 three bash scripts (SessionStart, UserPromptSubmit, PermissionRequest)
-skills/<name>/SKILL.md six SKILL.md files (squad-onboard, squad-goal, squad-role, squad-env, squad-spawn, squad-roster)
+skills/<name>/SKILL.md seven SKILL.md files (squad-onboard, squad-goal, squad-role, squad-env, squad-spawn, squad-roster, squad-verify)
 skills/squad-spawn/scripts/spawn.sh  multi-use mode worktree pre-creation helper
 skills/squad-env/scripts/provision.sh  per-role sandbox provisioner
+skills/squad-verify/scripts/verify.sh  definition-of-done evidence scaffold
 commands/              squad-workflow.md (optional One-time Workflow dispatch)
-templates/             goal.md, role-goal.md, role-definition.md, roster.json, squad-dispatch.workflow.js
+templates/             goal.md, role-goal.md, role-definition.md, roster.json, squad-dispatch.workflow.js, verification.md
 examples/              three walkthrough docs (one per mode)
-tests/                 smoke-test.md (manual) + permission-request.bats / spawn.bats / provision.bats (automated)
-.github/workflows/     ci.yml — shellcheck + bats on push/PR
+tests/                 smoke-test.md (manual) + permission-request.bats / spawn.bats / provision.bats / verify.bats (automated)
+.github/workflows/     ci.yml — shellcheck + bats + example-roster schema lint on push/PR
 ARCHITECTURE.md        full design doc
 ```
 
@@ -24,7 +25,7 @@ Almost everything is markdown and bash. The two exceptions: `templates/squad-dis
 
 ### 1. A new skill
 
-Add a directory under `skills/<your-skill-name>/` containing a single `SKILL.md`. Follow the YAML frontmatter conventions used by the existing six skills:
+Add a directory under `skills/<your-skill-name>/` containing a single `SKILL.md`. Follow the YAML frontmatter conventions used by the existing seven skills:
 
 ```yaml
 ---
@@ -103,10 +104,10 @@ Two layers:
 
 ```
 shellcheck hooks/*.sh skills/**/scripts/*.sh
-bats tests/permission-request.bats tests/spawn.bats tests/provision.bats
+bats tests/permission-request.bats tests/spawn.bats tests/provision.bats tests/verify.bats
 ```
 
-`permission-request.bats` covers the hook's allow/defer matrix (in-scope Edit/Write allow, in-sandbox Bash scaffolding allow, out-of-scope/main-session/unknown-role defer, single-segment glob semantics, `..` traversal defer, metacharacter/verb/operand-escape defer, missing-jq fail-open). `spawn.bats` covers `spawn.sh` preflight refusals and idempotent worktree creation. `provision.bats` covers `provision.sh` sandbox materialization (dirs, sourced env file, local context copy, tool verification, local-install vs global-needs classification). Install the tools with `brew install bats-core shellcheck` (macOS) or `apt-get install bats shellcheck` (Linux). These run automatically on every push/PR.
+`permission-request.bats` covers the hook's allow/defer matrix (in-scope Edit/Write allow, in-sandbox Bash scaffolding allow, out-of-scope/main-session/unknown-role defer, single-segment and mid-path glob semantics — `*` never crosses `/`, `..` traversal defer, metacharacter/verb/operand-escape defer, missing-jq fail-open). `spawn.bats` covers `spawn.sh` preflight refusals and idempotent worktree creation. `provision.bats` covers `provision.sh` sandbox materialization (dirs, sourced env file, local context copy, tool verification, local-install vs global-needs classification). `verify.bats` covers `verify.sh` (preflight refusals, Definition-of-done parsing incl. frontmatter/HTML-comment exclusion, per-role scope counting, JSON-lines validity). CI additionally lints every example roster JSON block against the canonical `roster.json` schema — invented keys silently disable the permission hook, so they fail the build. Install the tools with `brew install bats-core shellcheck` (macOS) or `apt-get install bats shellcheck` (Linux). These run automatically on every push/PR.
 
 **Manual end-to-end** — the interactive surface (skills, SessionStart injection, real subagent dispatch) isn't covered by bats. Run the walkthrough at `tests/smoke-test.md` before opening a PR:
 

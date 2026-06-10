@@ -45,7 +45,7 @@ Check against `.squad/roster.json` for collisions. If collision, propose a numbe
 
 ### Q3 — What files does it own? (file_scope)
 
-Ask: *"What file paths or glob patterns does this role own? Edit/Write inside them are auto-approved; everything else — including Bash, in v1 — prompts you."*
+Ask: *"What file paths or glob patterns does this role own? Edit/Write inside them auto-approve. Bash auto-approves only for in-sandbox scaffolding (mkdir/touch/cp/ln inside the role's provisioned workspace); everything else prompts you."*
 
 Examples:
 - `reports/klaviyo/**, data/klaviyo/**`
@@ -57,6 +57,7 @@ Accept comma-separated globs. Validate that each is a sensible glob (no leading 
 Scope-glob semantics the `PermissionRequest` hook enforces (so set expectations accordingly):
 - `prefix/**` — the whole subtree under `prefix` (this is what you want for "owns this directory").
 - A pattern with **no `/`** (e.g. `*.md`, `*.json`, `Makefile`) matches a **single path segment only** — i.e. files at the project root, never nested ones. If a role needs every `.md` under `reports/`, use `reports/**`, not `*.md`.
+- Globs containing `/` match segment-for-segment — `*` never crosses a `/` (so `data/*` matches `data/x`, not `data/sub/x`). Use `prefix/**` for recursive ownership.
 - `**` — everything (the too-broad case above).
 
 ### Q4 — What tools does it need?
@@ -65,7 +66,7 @@ Ask: *"What tools does this role need? Common picks: `Read, Write, Edit, Bash, G
 
 Validate against Claude Code's tool list (see [sub-agents doc](https://code.claude.com/docs/en/sub-agents#available-tools)). Note that `Agent`, `AskUserQuestion`, `EnterPlanMode`, `ExitPlanMode`, `ScheduleWakeup`, and `WaitForMcpServers` are not available to subagents — strip them silently if listed.
 
-If the user requests `Bash` alongside a broad `file_scope` (from Q3), note in one line: *"Bash always defers to you in v1, so it isn't auto-approved — but a broad write scope plus Bash is a wide grant; keep the scope tight if you can."* Safe-by-default; just make it a conscious choice.
+If the user requests `Bash` alongside a broad `file_scope` (from Q3), note in one line: *"Bash defers to you except pure in-sandbox scaffolding when the role has a provisioned workspace — but a broad write scope plus Bash is a wide grant; keep the scope tight if you can."* Safe-by-default; just make it a conscious choice.
 
 ### Q5 — What model?
 

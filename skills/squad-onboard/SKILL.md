@@ -89,7 +89,7 @@ After all roles are generated, confirm with the user: *"Squad is ready: [list of
 
 Before spawning, walk the user through what permissions the squad will need:
 
-1. **File scope.** Each generated role has a `file_scope` glob registered in `.squad/roster.json`. The `PermissionRequest` hook auto-approves Edit/Write inside that scope and defers everything else (including Bash, in v1) to the user. Confirm the user is comfortable with the scopes as written.
+1. **File scope.** Each generated role has a `file_scope` glob registered in `.squad/roster.json`. The `PermissionRequest` hook auto-approves Edit/Write inside that scope plus in-sandbox scaffolding Bash (mkdir/touch/cp/ln inside a provisioned workspace), and defers everything else to the user. Confirm the user is comfortable with the scopes as written.
 
 2. **Agent Teams (Multi-use mode only).** Check the `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` environment variable. If it's not set to `1` and the mode is Multi-use, explain:
    - Agent Teams is an experimental Claude Code feature that lets teammates share a task list, message each other directly, and run as separate Claude sessions.
@@ -105,7 +105,7 @@ Before spawning, walk the user through what permissions the squad will need:
    - **Cloud Routine** (durable, Anthropic-managed — user creates via their Claude Code routines surface)
    - **Desktop scheduled task** (durable, local — user creates via the Claude Code desktop app)
 
-End onboarding with: *"Ready to spawn. Run `/cheeky-squad-os:squad-spawn` to dispatch the squad, or `/cheeky-squad-os:squad-roster` to inspect what was generated."*
+End onboarding with: *"Ready to spawn. Run `/cheeky-squad-os:squad-spawn` to dispatch the squad, or `/cheeky-squad-os:squad-roster` to inspect what was generated. When the squad reports done, run `/cheeky-squad-os:squad-verify` to check the Definition of done before declaring victory."*
 
 ## Refusals and edge cases
 

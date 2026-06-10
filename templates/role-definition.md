@@ -42,7 +42,7 @@ If either file is missing, stop and report it. Do not proceed without context.
 
 ## Your file scope
 
-You own these paths. Inside scope, the `PermissionRequest` hook auto-approves your **Edit/Write** calls. Outside scope — and for **Bash and every other tool in v1** — the user is prompted. Respect their answer.
+You own these paths. Inside scope, the `PermissionRequest` hook auto-approves your **Edit/Write** calls. If you have a provisioned sandbox (below), pure scaffolding Bash (mkdir/touch/cp/ln) fully inside it auto-approves too. Outside scope, and for every other tool call, the user is prompted. Respect their answer.
 
 {{file_scope_lines}}
 

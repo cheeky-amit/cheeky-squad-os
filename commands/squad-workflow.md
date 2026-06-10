@@ -37,9 +37,10 @@ squads; `--save` to keep the generated script under `.claude/workflows/`.
 
 7. **(Optional) persist.** If `--save` was passed, write the concrete script to `.claude/workflows/squad-dispatch.js` so it is committed and rerunnable (regenerate it whenever the roster changes — a saved script reflects the roster at generation time, not run time).
 
-8. **Synthesize.** From the workflow's returned digest, read each role's artifacts from its `file_scope` and compose a user-facing report: what each role produced, where the artifacts live, what's `done` / `partial` / `blocked`, and the collected `follow_ups`. Surface any blocked role prominently.
+8. **Synthesize.** From the workflow's returned digest, read each role's artifacts from its `file_scope` and compose a user-facing report: what each role produced, where the artifacts live, what's `done` / `partial` / `blocked`, and the collected `follow_ups`. Surface any blocked role prominently. Then hand off to `/cheeky-squad-os:squad-verify` to check the goal's Definition of done and write `.squad/verification.md` — synthesis summarizes; verification decides.
 
 ## Notes
 
 - This command does **not** replace `/cheeky-squad-os:squad-spawn`. It is an optional, opt-in dispatch backend for One-time squads. `squad-spawn` remains the default and the only path for Multi-use and Evergreen.
 - Resume is **in-session only** — if Claude Code exits mid-run, the next session starts the workflow fresh.
+- The Workflow runtime contract this command relies on (script linting, `agent()`/`args` semantics, resume) is documented in [`docs/workflows-runtime-reference.md`](../docs/workflows-runtime-reference.md).

@@ -122,11 +122,10 @@ rel_under_dir() {
 # Glob semantics:
 #   "<prefix>/**"        → any path whose first segments are <prefix>
 #   "**"                 → match anything
-#   pattern with no "/"  → match a SINGLE path segment only (e.g. "*.md"
-#                          matches "notes.md" but NOT "src/notes.md"). bash
-#                          [[ == ]] would otherwise let "*" cross "/" and
-#                          silently over-approve nested paths — fail closed.
-#   other patterns       → bash [[ pattern matching. Unmatched paths defer.
+#   other patterns       → segment-for-segment bash [[ ]] matching: "*" never
+#                          crosses "/" (e.g. "*.md" matches "notes.md" but NOT
+#                          "src/notes.md"; "data/*" matches "data/x" but NOT
+#                          "data/sub/x"). Unmatched paths defer — fail closed.
 path_in_scope() {
   local rel="$1"
   local glob="$2"
@@ -147,13 +146,15 @@ path_in_scope() {
       ;;
   esac
 
-  # A glob with no "/" must match a single path segment only. Reject any rel
-  # that contains "/" before falling through to the bash matcher (which would
-  # otherwise treat "*" as matching "/" too, over-approving nested paths).
-  case "$glob" in
-    */*) ;;  # pattern has a separator → generic fallback below
-    *)   case "$rel" in */*) return 1 ;; esac ;;
-  esac
+  # bash [[ == ]] lets "*" cross "/" (no FNM_PATHNAME), so before falling
+  # through, require glob and rel to have the SAME number of "/" — each "*"
+  # then matches within a single segment. Catches both the no-"/" case
+  # ("*.md" vs "src/notes.md") and the mid-path case ("data/*" vs
+  # "data/sub/secret"), which would otherwise silently over-approve.
+  local g_slashes="${glob//[!\/]/}" r_slashes="${rel//[!\/]/}"
+  if [ "${#g_slashes}" -ne "${#r_slashes}" ]; then
+    return 1
+  fi
 
   # Fall back to bash pattern matching for everything else
   # shellcheck disable=SC2053

@@ -145,6 +145,7 @@ For One-time and Multi-use modes, after the squad finishes (or per-iteration in 
 2. Compose a user-facing summary: what each role produced, where the artifacts live, what's next.
 3. Surface any role that failed or returned an error.
 4. Suggest follow-up actions (replace a role, change a scope, replace the goal).
+5. Hand off to `/cheeky-squad-os:squad-verify` to check the goal's Definition of done and write `.squad/verification.md`. Synthesis summarizes; verification decides — never declare the goal met from the summary alone.
 
 ## Refusals
 

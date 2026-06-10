@@ -179,9 +179,12 @@ squad-role:
   fetch_errors array. Never crash the run. The analyst handles partial data.
 
 squad-role:
-  Locked. Writing .claude/agents/competitor-scraper.md and registering in
+  Locked. Writing .claude/agents/competitor-scraper.md,
+  .squad/role-goal-competitor-scraper.md, and registering in
   .squad/roster.json. Preview:
 ```
+
+The agent file's frontmatter carries only name, description, tools, and model — the file scope is registered in `.squad/roster.json` (where the `PermissionRequest` hook reads it) and restated as body bullets:
 
 ```markdown
 ---
@@ -190,14 +193,15 @@ description: Pull structured weekly snapshots of competitor homepages, pricing
   pages, and blog indexes into intel/competitors/raw/<date>/<slug>.json
 model: haiku
 tools: Read, Write, Bash, WebFetch
-allowed_paths:
-  - intel/competitors/raw/**
 ---
 
 # competitor-scraper
 
 You exist to capture this week's structured snapshot of three competitor
 surfaces. You do not analyze, you do not summarize — you fetch, parse, and dump.
+
+File scope (mirrors `.squad/roster.json`):
+- intel/competitors/raw/**
 
 ## Inputs
 
@@ -257,8 +261,6 @@ description: Diff this week's raw competitor snapshots against the prior week's
   snapshots; write a deltas file naming exactly what changed per competitor.
 model: sonnet
 tools: Read, Write, Grep
-allowed_paths:
-  - intel/competitors/deltas/**
 ---
 
 # signal-analyst
@@ -267,6 +269,9 @@ You exist to find what changed. You read two snapshot directories (this week and
 last week) and produce a single deltas file that the summariser can synthesize.
 You do not write the founder-facing summary; you produce the source of truth
 for it.
+
+File scope (mirrors `.squad/roster.json`):
+- intel/competitors/deltas/**
 ```
 
 ### Role 3 — `summariser` (brief)
@@ -286,8 +291,6 @@ description: Read the week's deltas file; write the 1-page Monday brief at
   intel/summaries/<YYYY-MM-DD>.md, formatted for a founder's quick read.
 model: opus
 tools: Read, Write
-allowed_paths:
-  - intel/summaries/**
 ---
 
 # summariser
@@ -296,46 +299,59 @@ You exist to turn the analyst's deltas file into a brief Maya can read in three
 minutes with coffee. One page. Three competitor sections, three bullets each
 max. A closing "so what" line. No charts, no tables wider than what fits in a
 terminal, no preamble. Be honest about low-confidence signals.
+
+File scope (mirrors `.squad/roster.json`):
+- intel/summaries/**
 ```
 
 ## 5. The roster after generation — `.squad/roster.json`
 
 ```json
 {
-  "schema_version": 1,
-  "goal_ref": ".squad/goal.md",
+  "squad_goal_ref": ".squad/goal.md",
   "mode": "evergreen",
+  "created": "2026-05-27T10:00:00Z",
   "roles": [
     {
       "name": "competitor-scraper",
-      "file": ".claude/agents/competitor-scraper.md",
+      "purpose": "Pull structured weekly snapshots of competitor homepages, pricing pages, and blog indexes into per-competitor JSON the analyst can read.",
+      "agent_file": ".claude/agents/competitor-scraper.md",
+      "role_goal": ".squad/role-goal-competitor-scraper.md",
+      "file_scope": ["intel/competitors/raw/**"],
+      "tools": ["Read", "Write", "Bash", "WebFetch"],
       "model": "haiku",
-      "allowed_paths": ["intel/competitors/raw/**"],
-      "depends_on": [],
       "active": true,
-      "created": "2026-05-27"
+      "created": "2026-05-27T10:00:00Z"
     },
     {
       "name": "signal-analyst",
-      "file": ".claude/agents/signal-analyst.md",
+      "purpose": "Diff this week's raw snapshots against the prior week's (reads competitor-scraper's output) and write the deltas file naming exactly what changed.",
+      "agent_file": ".claude/agents/signal-analyst.md",
+      "role_goal": ".squad/role-goal-signal-analyst.md",
+      "file_scope": ["intel/competitors/deltas/**"],
+      "tools": ["Read", "Write", "Grep"],
       "model": "sonnet",
-      "allowed_paths": ["intel/competitors/deltas/**"],
-      "depends_on": ["competitor-scraper"],
       "active": true,
-      "created": "2026-05-27"
+      "created": "2026-05-27T10:05:00Z"
     },
     {
       "name": "summariser",
-      "file": ".claude/agents/summariser.md",
+      "purpose": "Turn the analyst's deltas file into the 1-page founder-readable Monday brief — runs last, after signal-analyst's hand-off.",
+      "agent_file": ".claude/agents/summariser.md",
+      "role_goal": ".squad/role-goal-summariser.md",
+      "file_scope": ["intel/summaries/**"],
+      "tools": ["Read", "Write"],
       "model": "opus",
-      "allowed_paths": ["intel/summaries/**"],
-      "depends_on": ["signal-analyst"],
       "active": true,
-      "created": "2026-05-27"
+      "created": "2026-05-27T10:10:00Z"
     }
   ]
 }
 ```
+
+Run order is not encoded in the roster — there is no `depends_on` key. The
+chain (`competitor-scraper → signal-analyst → summariser`) lives in each role's
+purpose and role-goal hand-offs, and the dispatcher honors it at spawn time.
 
 ## 6. Spawn (squad-spawn) — Evergreen path
 
@@ -545,3 +561,8 @@ manual 90-minute loop is gone; the brief is the loop now.
   founder reads markdown, not a dashboard. Every iteration leaves a paper
   trail you can grep through six months later when you ask "when did
   ServiceTitan first lead with AI?"
+- **"Run complete" is a summary, not a verdict.** The goal carries a
+  per-iteration Definition of done; `/cheeky-squad-os:squad-verify` checks it
+  (file written by 9am? ≤3 bullets per competitor? deltas explicit? "so what"
+  line present?) and writes `.squad/verification.md`. Synthesis summarizes;
+  verification decides.
