@@ -348,7 +348,9 @@ Both mechanisms produce the same end state — the worker sees the goal. They di
 
 **Why it matters:** Hard rule #2 — no session starts without a goal in scope. For sessions and teammates the hook enforces it; for subagents `squad-spawn` enforces it via prompt-baking.
 
-**Worker↔worker hand-offs ride the same channels.** Parent→worker context is solved above; worker→worker context uses the hand-off manifest (`templates/role-comm.md`): when a role's deliverable is ready for a downstream role, it writes `.squad/role-comm-<from>--<to>.md` — frontmatter (`from`/`to`/`status`), what's ready, how to consume, caveats. `squad-role` registers each role's outbox glob (`.squad/role-comm-<name>--*`) in its `file_scope`, so publishing auto-approves while writing *another* role's outbox defers — the segment-aware glob matcher makes forged hand-offs structurally impossible to auto-approve. Delivery is mode-appropriate: One-time subagents can't receive messages mid-run, so `squad-spawn` bakes ready manifests into the downstream spawn prompt (Channel B again); Multi-use teammates message each other live and use the manifest as the durable record of what was handed off.
+**Worker↔worker hand-offs ride the same channels.** Parent→worker context is solved above; worker→worker context uses the hand-off manifest (`templates/role-comm.md`): when a role's deliverable is ready for a downstream role, it writes `.squad/role-comm-<from>--<to>.md` — frontmatter (`from`/`to`/`status`), what's ready, how to consume, caveats. `squad-role` registers each role's outbox glob (`.squad/role-comm-<name>--*`) in its `file_scope`, so publishing auto-approves while writing *another* role's outbox defers — the segment-aware glob matcher makes forged hand-offs structurally impossible to auto-approve. Delivery is mode-appropriate: One-time subagents can't receive messages mid-run, so `squad-spawn` bakes ready manifests into the downstream spawn prompt (Channel B again) and `/squad-workflow` bakes them into each role's `args.handoffs`; Multi-use teammates message each other live and use the manifest as the durable record of what was handed off.
+
+**Manifest lifecycle (staleness).** Manifests are per-*engagement* working state, not an archive. The dispatcher clears leftover manifests at the start of each fresh run — `squad-spawn` before dispatching (and at every Evergreen iteration), `/squad-workflow` unless `--chain` is passed — so a role is never baked a hand-off from a completed prior run. The exception is the deliberately chained run (a write-stage consuming a read-stage's output), where the previous stage's manifests *are* the input. The deliverables a cleared manifest pointed at are unaffected — they live in committed `file_scope` paths; only the routing note is discarded.
 
 ### `UserPromptSubmit`
 
@@ -438,7 +440,13 @@ Schemas for `goal.md` and `roster.json` are above. `role-goal-<role-name>.md` mi
 | `.claude/worktrees/<role>/` | **Gitignore** | Git worktrees `spawn.sh` pre-creates for Multi-use teammates (per worktrees-doc tip); ephemeral, recreated on each spawn. |
 | `.claude/workflows/squad-dispatch.js` | **Commit** | Generated dynamic-Workflow dispatch script (One-time mode, optional); committing it makes the squad's fan-out rerunnable by anyone who clones. |
 
+| `.squad/squads/<slug>/` | **Commit** | Parked squads (see below) — same commit-grade state as the active squad, just inactive. |
+
 The shipped `.gitignore` matches exactly this policy. Users who want their generated roles to stay private can move them to `~/.claude/agents/` instead (user scope) — Claude Code's subagent scanner finds both locations.
+
+### One active squad, many parked
+
+A project runs **one active squad**: `.squad/goal.md` and `.squad/roster.json` are what the hooks, scripts, and skills read, and concurrent squads would collide on `.claude/agents/` names and `agent_type` lookups in the permission hook. A second initiative parks the first instead of destroying it: `squad-goal`'s **park** operation moves the active squad's durable state (goal, roster, role-goals, verification, and its role files out of `.claude/agents/`) into `.squad/squads/<slug>/`; **switch** restores a parked squad to active (parking the current one first). Ephemeral state — hand-off manifests, sandboxes, worktrees — is never parked; it is cleared or re-provisioned on resume. Because the active squad always lives at the same paths, parking adds zero complexity to the hooks and scripts: they remain single-squad readers.
 
 ## Sequence diagram
 

@@ -3,6 +3,19 @@
 All notable changes to cheeky-squad-os are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [SemVer](https://semver.org/).
 
+## [0.4.0] - 2026-06-10
+
+The lifecycle release: hand-off channel completeness and multi-initiative projects.
+
+### Added
+
+- **Multi-squad via park/switch** — `squad-goal` gains `park`, `switch`, and `list squads`: the active squad's durable state (goal, roster, role-goals, verification, role files) moves to `.squad/squads/<slug>/` and back, so one project can hold several initiatives without concurrent-squad collisions. The active squad always lives at `.squad/` — hooks, scripts, and tests stay single-squad readers with zero changes. `squad-onboard` and `squad-goal`'s replace flow now offer parking instead of destruction.
+- **Workflow dispatch carries manifests** — `/squad-workflow` bakes ready hand-off manifests into each role's `args.handoffs`, and `templates/squad-dispatch.workflow.js` renders them as an "Incoming hand-offs" prompt section and instructs roles to publish their own. The workflow path and the direct-`Agent` path now speak the same communication channel.
+
+### Fixed
+
+- **Manifest staleness semantics** — manifests are per-engagement: `squad-spawn` clears leftovers before each fresh dispatch (including every Evergreen iteration) and `/squad-workflow` does the same unless the new `--chain` flag marks the run as a follow-on stage consuming the previous stage's hand-offs. A role can no longer be baked a stale manifest from a completed prior run.
+
 ## [0.3.0] - 2026-06-10
 
 The communication release. The last amber pillar of the tagline ("roles, responsibilities, communication, and supervision") — structured worker↔worker hand-offs, implementing the `.squad/role-comm-*` namespace reserved since v0.1.0.

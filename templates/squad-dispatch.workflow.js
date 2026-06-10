@@ -44,8 +44,11 @@
 //         "roleGoal": "<full text of .squad/role-goal-<name>.md>",
 //         "fileScope": ["reports/klaviyo/**", "data/klaviyo/**"],
 //         "task": "What this role contributes THIS run",
-//         "model": "sonnet"                    // optional; omit to inherit
-//       }
+//         "model": "sonnet",                   // optional; omit to inherit
+//         "handoffs": [                        // optional; full text of each
+//           "<.squad/role-comm-*--<name>.md (or --any.md) with status: ready>"
+//         ]                                    // baked by the runner — workflow
+//       }                                      // scripts cannot read disk
 //     ]
 //   }
 // =============================================================================
@@ -107,6 +110,14 @@ ${role.roleGoal || `(role goal not supplied — read .squad/role-goal-${role.nam
 
 # Your file scope (HARD BOUNDARY)
 ${(role.fileScope || []).map((g) => `- ${g}`).join("\n") || "- (none declared)"}
+${
+	(role.handoffs || []).length
+		? `
+# Incoming hand-offs (from upstream roles — honor their Caveats sections)
+${role.handoffs.join("\n\n---\n\n")}
+`
+		: ""
+}
 
 You are running with file edits auto-approved (acceptEdits) — the squad's
 PermissionRequest scope hook does NOT gate you here. Therefore you MUST police
@@ -120,7 +131,10 @@ Also read .squad/goal.md and .squad/role-goal-${role.name}.md directly to confir
 ${role.task || "Contribute your role's slice of the squad goal: produce the artifact your role owns and write it inside your file scope."}
 
 Write your deliverables to files inside your scope (do not paste large artifacts
-into your reply), then return the structured result.`;
+into your reply). When a deliverable is ready for another role, also publish a
+hand-off manifest at .squad/role-comm-${role.name}--<consumer>.md (shape:
+templates/role-comm.md — what's ready, how to consume, caveats); a later stage
+or run will deliver it. Then return the structured result.`;
 }
 
 // ---- Phase 1: fan out one agent per role (barrier), then synthesize --------

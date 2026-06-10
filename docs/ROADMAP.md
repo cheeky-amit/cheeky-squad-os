@@ -47,6 +47,11 @@ covers the full lifecycle with nothing missing that a second plugin would have t
    shared across machines/teammates (already noted as a non-goal in ARCHITECTURE — it
    graduates to a goal here).
 
+Closed outside the ranked list (v0.4.0): workflow-path manifest parity (`/squad-workflow`
+bakes `args.handoffs`), manifest staleness semantics (dispatchers clear per-engagement
+manifests; `--chain` preserves them for follow-on stages), and the single-squad
+assumption (park/switch whole squads under `.squad/squads/<slug>/`).
+
 ## How releases are judged
 
 Each release must move at least one pillar's status, keep CI green

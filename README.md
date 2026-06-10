@@ -10,7 +10,7 @@
 
 [![CI](https://github.com/cheeky-amit/cheeky-squad-os/actions/workflows/ci.yml/badge.svg)](https://github.com/cheeky-amit/cheeky-squad-os/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.3.0-blue.svg)](.claude-plugin/plugin.json)
+[![Version](https://img.shields.io/badge/version-0.4.0-blue.svg)](.claude-plugin/plugin.json)
 [![Claude Code plugin](https://img.shields.io/badge/Claude_Code-plugin-8A2BE2.svg)](https://code.claude.com/docs/en/plugins)
 [![Built with](https://img.shields.io/badge/built_with-Markdown_%2B_Bash-1f425f.svg)](CONTRIBUTING.md)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
@@ -248,7 +248,7 @@ See [`tests/smoke-test.md`](tests/smoke-test.md) for a copy-pasteable end-to-end
 | Component | Kind | What it does |
 | --- | --- | --- |
 | `squad-onboard` | skill | Reformulates a goal as an outcome, infers mode, proposes a bespoke squad. |
-| `squad-goal` | skill | Manages `.squad/goal.md` as the binding north-star. |
+| `squad-goal` | skill | Manages `.squad/goal.md` as the binding north-star; parks/switches whole squads (`.squad/squads/<slug>/`) so one project can hold several initiatives. |
 | `squad-role` | skill | Interactive role generator → `.claude/agents/<role>.md` + roster. |
 | `squad-env` | skill | Provisions each role's sandbox (workspace, env, tools) from the goal; proposes what it can't contain. |
 | `squad-spawn` | skill | Dispatches the squad, branching on mode. |

@@ -17,9 +17,14 @@
 #     .squad/role-comm-*--<own-name>.md. Agent Teams messaging stays the live
 #     channel; the manifest is the durable record of WHAT was handed off.
 #
-# Lifecycle: ephemeral, per-run, gitignored (.squad/role-comm-* in .gitignore).
-# Overwrite your own previous manifest to the same consumer; set
-# status: superseded instead of deleting if the consumer may already have read it.
+# Lifecycle: ephemeral, per-ENGAGEMENT, gitignored (.squad/role-comm-* in
+# .gitignore). The dispatcher (squad-spawn / squad-workflow) deletes leftover
+# manifests at the start of each fresh run — except when the run is an explicit
+# follow-on stage (squad-workflow --chain, or a planned next stage), where the
+# previous stage's manifests are the input. Within a run: overwrite your own
+# previous manifest to the same consumer; set status: superseded instead of
+# deleting if the consumer may already have read it. Consumers can judge
+# freshness from `created`.
 #
 # Placeholders:
 #   {{from}}     — producer role name (must equal the filename's <from>)
