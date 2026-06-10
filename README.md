@@ -24,6 +24,7 @@
 **[Workflows](#dynamic-workflows-optional-one-time-mode)** ·
 **[Install](#installation)** ·
 **[Components](#the-seven-skills--three-hooks)** ·
+**[Roadmap](docs/ROADMAP.md)** ·
 **[Contributing](CONTRIBUTING.md)**
 
 </div>
@@ -304,6 +305,7 @@ cheeky-squad-os/
 │   ├── verification.md              # squad-verify report skeleton
 │   └── squad-dispatch.workflow.js   # canonical fan-out + synthesize script
 ├── docs/
+│   ├── ROADMAP.md                   # measurable path to the north star, ranked gaps
 │   └── workflows-runtime-reference.md  # verified Workflow DSL runtime reference
 ├── examples/
 │   ├── klaviyo-audit.md
