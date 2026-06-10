@@ -3,6 +3,20 @@
 All notable changes to cheeky-squad-os are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [SemVer](https://semver.org/).
 
+## [0.3.0] - 2026-06-10
+
+The communication release. The last amber pillar of the tagline ("roles, responsibilities, communication, and supervision") — structured worker↔worker hand-offs, implementing the `.squad/role-comm-*` namespace reserved since v0.1.0.
+
+### Added
+
+- **Hand-off manifest channel** — when a role's deliverable is ready for a downstream role, it publishes `.squad/role-comm-<from>--<to>.md` (shape: new `templates/role-comm.md`): frontmatter (`from`/`to`/`created`/`status`), *What's ready* (artifact paths), *How to consume*, *Caveats*. Ephemeral, per-run, gitignored.
+- **Outbox scoping** — `squad-role` now always registers `.squad/role-comm-<name>--*` in each role's `file_scope`. Publishing to your own outbox auto-approves; writing another role's outbox defers — the segment-aware glob matcher (v0.2.0) makes forged hand-offs structurally impossible to auto-approve. 2 new bats cases prove it.
+- **Mode-appropriate delivery** — `squad-spawn` globs `.squad/role-comm-*--<role>.md` before dispatching a downstream role and bakes every `status: ready` manifest into its spawn prompt (subagents can't receive messages mid-run — manifests ride the hard-rule-#4 prompt-baking channel). Multi-use teammates message live via Agent Teams and keep the manifest as the durable record; generated roles get inbox/outbox instructions via `templates/role-definition.md`.
+
+### Changed
+
+- ARCHITECTURE/LOGIC/README/CONTRIBUTING document the channel; template count is now 7; `docs/ROADMAP.md` communication pillar flipped to shipped.
+
 ## [0.2.0] - 2026-06-10
 
 The supervision release. The tagline always promised "roles, responsibilities, communication, and supervision" — this version ships the supervision component.

@@ -44,6 +44,7 @@ flowchart TB
             T4["roster.json"]
             T5["squad-dispatch.workflow.js"]
             T6["verification.md"]
+            T7["role-comm.md"]
         end
     end
 
@@ -84,7 +85,7 @@ flowchart TB
 
     classDef ship fill:#e8f0fe,stroke:#4285f4,color:#111;
     classDef gen fill:#e6f4ea,stroke:#34a853,color:#111;
-    class ONB,GOAL,ROLE,ROST,SPAWN,VER,WF,H1,H2,H3,T1,T2,T3,T4,T5,T6 ship;
+    class ONB,GOAL,ROLE,ROST,SPAWN,VER,WF,H1,H2,H3,T1,T2,T3,T4,T5,T6,T7 ship;
     class GMD,RGMD,RJSON,AGENTS,WT,WFJS,VMD gen;
 ```
 
@@ -464,6 +465,14 @@ flowchart TD
 | Agent Teams teammate | ✅ (full session) | hook + baked prompt (belt & suspenders) |
 | Subagent (One-time / fallback) | ❌ | **prompt-baking only** (rule #4) |
 | Workflow `agent()` | ❌ | baked into `args`, re-read by the agent |
+
+**Worker↔worker** context travels as hand-off manifests
+(`.squad/role-comm-<from>--<to>.md`, shape: `templates/role-comm.md`): the
+producer publishes to its own outbox (auto-approved — `squad-role` registers
+`.squad/role-comm-<name>--*` in `file_scope`; another role's outbox defers),
+and delivery reuses the channels above — baked into the consumer's spawn
+prompt for subagents (Channel B), read directly + announced via Agent Teams
+messaging for teammates (Channel A workers).
 
 ---
 

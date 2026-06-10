@@ -2,7 +2,7 @@
   "name": "cheeky-squad-os",
   "displayName": "cheeky-squad-os",
   "description": "Ship the discipline, not the team. Turn any Claude Code goal — engineering, ops, business infrastructure, knowledge work — into a bespoke squad of roles generated from the goal itself. Zero opinionated role files shipped; the role generator builds what each goal needs.",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "author": {
     "name": "cheeky-amit"
   },

@@ -14,7 +14,7 @@ This means the plugin contains **zero opinionated role files**. No `frontend-dev
 | --- | --- | --- | --- |
 | Skills (7) | Yes | — | `squad-onboard`, `squad-goal`, `squad-role`, `squad-spawn`, `squad-roster`, `squad-env`, `squad-verify` |
 | Hooks (3) | Yes | — | `SessionStart`, `UserPromptSubmit`, `PermissionRequest` |
-| Templates (6) | Yes | — | `goal.md`, `role-goal.md`, `role-definition.md`, `roster.json`, `squad-dispatch.workflow.js`, `verification.md` |
+| Templates (7) | Yes | — | `goal.md`, `role-goal.md`, `role-definition.md`, `roster.json`, `squad-dispatch.workflow.js`, `verification.md`, `role-comm.md` |
 | Role files | **No — zero** | Yes, by `squad-role` | Written to `.claude/agents/<role-name>.md` in the user's project |
 | Squad goal | — | Yes, by `squad-onboard` | `.squad/goal.md` |
 | Role goals | — | Yes, by `squad-role` | `.squad/role-goal-<role-name>.md` per role |
@@ -348,6 +348,8 @@ Both mechanisms produce the same end state — the worker sees the goal. They di
 
 **Why it matters:** Hard rule #2 — no session starts without a goal in scope. For sessions and teammates the hook enforces it; for subagents `squad-spawn` enforces it via prompt-baking.
 
+**Worker↔worker hand-offs ride the same channels.** Parent→worker context is solved above; worker→worker context uses the hand-off manifest (`templates/role-comm.md`): when a role's deliverable is ready for a downstream role, it writes `.squad/role-comm-<from>--<to>.md` — frontmatter (`from`/`to`/`status`), what's ready, how to consume, caveats. `squad-role` registers each role's outbox glob (`.squad/role-comm-<name>--*`) in its `file_scope`, so publishing auto-approves while writing *another* role's outbox defers — the segment-aware glob matcher makes forged hand-offs structurally impossible to auto-approve. Delivery is mode-appropriate: One-time subagents can't receive messages mid-run, so `squad-spawn` bakes ready manifests into the downstream spawn prompt (Channel B again); Multi-use teammates message each other live and use the manifest as the durable record of what was handed off.
+
 ### `UserPromptSubmit`
 
 **Trigger:** Every user turn ([hooks doc](https://code.claude.com/docs/en/hooks#userpromptsubmit)).
@@ -429,7 +431,7 @@ Schemas for `goal.md` and `roster.json` are above. `role-goal-<role-name>.md` mi
 | `.squad/role-goal-*.md` | **Commit** | Per-role goals — derived from squad goal but stable artifacts. |
 | `.squad/verification.md` | **Commit** | The verdict of record (hard rule #10) — the evidence trail for "the goal is met" should travel with the project. Overwritten on each re-verify. |
 | `.squad/workspaces/<role>/` | **Gitignore** | Per-role sandboxes materialized by `provision.sh`; ephemeral, recreated on each provision. The `environment` spec in `roster.json` is the committed source of truth. |
-| `.squad/role-comm-*` | **Gitignore** | Inter-role communication scratch (reserved namespace; v1 does not yet write these — pre-ignored so v2 features don't pollute git). |
+| `.squad/role-comm-*` | **Gitignore** | Hand-off manifests (`role-comm-<from>--<to>.md`, shape: `templates/role-comm.md`) — per-run working state, overwritten each dispatch. The deliverables they point at live in committed `file_scope` paths; the manifest itself is ephemeral routing. |
 | `.squad/role-plan-*` | **Gitignore** | Per-role draft plans (reserved namespace; pre-ignored). |
 | `.squad/features/*` | **Gitignore** | Feature-specific working state (reserved namespace; pre-ignored). |
 | `.claude/agents/<role>.md` | **Commit** | Generated subagent definitions are part of the project's reproducible setup; committing them lets a teammate clone and run the same squad. |

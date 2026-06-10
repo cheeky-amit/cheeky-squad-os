@@ -17,7 +17,7 @@ setup() {
   cat > "$PROJECT_DIR/.squad/roster.json" <<'JSON'
 {
   "roles": [
-    { "name": "reporter", "file_scope": ["reports/**"] },
+    { "name": "reporter", "file_scope": ["reports/**", ".squad/role-comm-reporter--*"] },
     { "name": "rootdoc",  "file_scope": ["*.md"] },
     { "name": "datakeeper", "file_scope": ["data/*"] },
     { "name": "builder",  "file_scope": ["build/**", ".squad/workspaces/builder/**"],
@@ -66,6 +66,20 @@ run_hook() {
 
 @test "single-segment glob does NOT match a nested file (defers)" {
   run_hook '{"agent_type":"rootdoc","tool_name":"Write","tool_input":{"file_path":"src/notes.md"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+# --- hand-off manifest channel (role-comm outbox scope) ------------------------
+
+@test "writing the role's own hand-off outbox is auto-approved" {
+  run_hook '{"agent_type":"reporter","tool_name":"Write","tool_input":{"file_path":".squad/role-comm-reporter--builder.md"}}'
+  [ "$status" -eq 0 ]
+  printf '%s' "$output" | jq -e '.hookSpecificOutput.decision.behavior == "allow"'
+}
+
+@test "writing ANOTHER role's hand-off outbox defers (no forged hand-offs)" {
+  run_hook '{"agent_type":"reporter","tool_name":"Write","tool_input":{"file_path":".squad/role-comm-builder--reporter.md"}}'
   [ "$status" -eq 0 ]
   [ -z "$output" ]
 }

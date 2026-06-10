@@ -12,7 +12,7 @@ skills/squad-spawn/scripts/spawn.sh  multi-use mode worktree pre-creation helper
 skills/squad-env/scripts/provision.sh  per-role sandbox provisioner
 skills/squad-verify/scripts/verify.sh  definition-of-done evidence scaffold
 commands/              squad-workflow.md (optional One-time Workflow dispatch)
-templates/             goal.md, role-goal.md, role-definition.md, roster.json, squad-dispatch.workflow.js, verification.md
+templates/             goal.md, role-goal.md, role-definition.md, roster.json, squad-dispatch.workflow.js, verification.md, role-comm.md
 examples/              three walkthrough docs (one per mode)
 tests/                 smoke-test.md (manual) + permission-request.bats / spawn.bats / provision.bats / verify.bats (automated)
 .github/workflows/     ci.yml — shellcheck + bats + example-roster schema lint on push/PR
