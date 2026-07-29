@@ -9,7 +9,10 @@
 #   {{name}}              — kebab-case role name (e.g. "klaviyo-data-puller")
 #   {{description}}       — auto-delegation trigger (when Claude should pick this role)
 #   {{tools}}             — comma-separated tool list (Read, Write, Bash, mcp__*, …)
-#   {{model}}             — sonnet | opus | haiku | inherit
+#   {{model}}             — sonnet | opus | haiku | fable | inherit, or a full model ID
+#                           (e.g. claude-opus-5)
+#   {{effort_block}}      — literal "effort: <tier>" line OR omitted entirely
+#                           (tier: low | medium | high | xhigh | max)
 #   {{isolation_block}}   — literal "isolation: worktree" line OR omitted entirely
 #   {{purpose}}           — one-sentence statement of what this role does
 #   {{role_goal_path}}    — .squad/role-goal-<name>.md
@@ -26,6 +29,7 @@ name: {{name}}
 description: {{description}}
 tools: {{tools}}
 model: {{model}}
+{{effort_block}}
 {{isolation_block}}
 ---
 
@@ -90,6 +94,8 @@ This file is dual-purpose by design. It works as:
 2. **An Agent Teams teammate definition** — referenced when the squad runs in Multi-use mode. Per the [Claude Code agent-teams documentation](https://code.claude.com/docs/en/agent-teams#use-subagent-definitions-for-teammates), the `tools` allowlist and `model` propagate to the teammate, and this body is appended to the teammate's system prompt as additional instructions (it does not replace the default). The `skills` and `mcpServers` frontmatter fields **do not propagate** when this definition runs as a teammate — those load from project and user settings, the same as a regular session. If you add a `skills` or `mcpServers` line and wonder why it isn't taking effect in Multi-use mode, that's why.
 
 The `isolation: worktree` frontmatter field (if present above) applies when this role runs as a subagent. In Multi-use mode, `${CLAUDE_PLUGIN_ROOT}/skills/squad-spawn/scripts/spawn.sh` only pre-creates one git worktree per role (`git worktree add`) as an optional working directory; it does not launch teammates, and there is no `--worktree` teammate-launch flag. Teammate file isolation comes from each role's disjoint `file_scope`, not from this frontmatter field or any flag.
+
+The `effort: <tier>` frontmatter field (if present above) sets this role's reasoning effort when it runs as a subagent, overriding the session's effort level; absent, it inherits from the session — today's behavior. A teammate in Multi-use mode does not read this field: it inherits whatever effort level the lead session was running at the moment it spawned the team, not this file's `effort:` value. (It does not inherit the lead's `/model` selection the same way — this role's own `model:` field above still applies to the teammate, as noted earlier.)
 
 ## Edit policy
 

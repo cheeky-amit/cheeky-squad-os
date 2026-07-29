@@ -22,6 +22,8 @@
         "Bash"
       ],
       "model": "sonnet",
+      "_effort_comment": "OPTIONAL. One of low | medium | high | xhigh | max. Omit to inherit the session's effort level; available tiers depend on the model. A role with no effort field is valid.",
+      "effort": "high",
       "environment": {
         "_comment": "OPTIONAL sandbox spec. Omit the whole block for a role that needs no provisioned environment. The workspace glob below is also added to file_scope so the role's in-sandbox Edit/Write auto-approve.",
         "workspace": ".squad/workspaces/example-role-delete-me/",

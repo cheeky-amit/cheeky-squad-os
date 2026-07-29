@@ -111,7 +111,7 @@ target: <ISO-8601 deadline or "ongoing">
 1. *What does this role do?* (one-sentence purpose)
 2. *What files does it own?* (glob patterns — drives `PermissionRequest` auto-approval)
 3. *What tools does it need?* (allowlist for subagent frontmatter)
-4. *What model is appropriate?* (`sonnet`, `opus`, `haiku`, or `inherit`)
+4. *What model is appropriate?* (`sonnet` | `opus` | `haiku` | `fable` | `inherit`, or a full model ID such as `claude-opus-5`). A role may also declare an optional `effort` tier (`low` | `medium` | `high` | `xhigh` | `max`, availability model-gated) — omitted, it inherits the session's.
 5. *What scope does it own?* (workstream description, used to derive role goal)
 
 Writes:
@@ -141,7 +141,12 @@ Switch on goal.mode:
     If a generated role's .claude/agents/<role>.md sets `isolation: worktree`
       in its frontmatter, the subagent runs in a temporary git worktree
       (per sub-agents doc — frontmatter mechanism applies to subagents only,
-      not to teammates).
+      not to teammates). Since v2.1.203 the platform itself rejects Bash
+      whose cwd resolves to the main checkout inside such a subagent, and
+      since v2.1.216 it also rejects commands that redirect git out of the
+      worktree (`git -C`, `--git-dir`, `GIT_DIR`/`GIT_WORK_TREE`, or a `cd`
+      first) — the platform now enforces what hard rule #7 previously could
+      only ask for.
 
   multi-use:
     Check $CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS
@@ -317,14 +322,15 @@ The template's frontmatter conforms to Claude Code's subagent spec (see [sub-age
 name: <role-name>                # lowercase, hyphenated
 description: <when to delegate>  # used by Claude for auto-delegation
 tools: <comma-separated>         # allowlist
-model: sonnet | opus | haiku | inherit
+model: sonnet | opus | haiku | fable | inherit   # or a full model ID, e.g. claude-opus-5
+effort: low | medium | high | xhigh | max        # optional; overrides session effort; availability is model-gated
 isolation: worktree              # optional; One-time subagents only — Multi-use isolation comes from disjoint file_scope
 ---
 ```
 
 The body (system prompt) is composed by `squad-role` from the interactive answers, and includes an embedded reference to the role's goal file so the role sees its own goal on every invocation.
 
-**Reusability note in every generated role file:** the role file works as both a subagent (via Agent tool) and as an Agent Teams teammate definition. When used as a teammate, the `skills` and `mcpServers` frontmatter fields do not propagate (per [agent-teams docs](https://code.claude.com/docs/en/agent-teams#use-subagent-definitions-for-teammates)); `tools` and `model` do; body becomes additional system prompt.
+**Reusability note in every generated role file:** the role file works as both a subagent (via Agent tool) and as an Agent Teams teammate definition. When used as a teammate, the `skills` and `mcpServers` frontmatter fields do not propagate (per [agent-teams docs](https://code.claude.com/docs/en/agent-teams#use-subagent-definitions-for-teammates)); `tools` and `model` do; body becomes additional system prompt. Neither does `hooks:` — a teammate is a full session, so enforcement for the Multi-use path has to live in the plugin's project-level hooks (see ["Agent Teams experimental status"](#agent-teams-experimental-status)), never in per-role frontmatter. A role's own `effort:` frontmatter isn't what governs a teammate either — a teammate inherits the **lead's** `effort` level, not its `/model` selection.
 
 ## The three hooks
 
@@ -446,7 +452,6 @@ Schemas for `goal.md` and `roster.json` are above. `role-goal-<role-name>.md` mi
 | `.squad/workspaces/<role>/` | **Gitignore** | Per-role sandboxes materialized by `provision.sh`; ephemeral, recreated on each provision. The `environment` spec in `roster.json` is the committed source of truth. |
 | `.squad/role-comm-*` | **Gitignore** | Hand-off manifests (`role-comm-<from>--<to>.md`, shape: `templates/role-comm.md`) — per-run working state, overwritten each dispatch. The deliverables they point at live in committed `file_scope` paths; the manifest itself is ephemeral routing. |
 | `.squad/role-plan-*` | **Gitignore** | Per-role draft plans (reserved namespace; pre-ignored). |
-| `.squad/features/*` | **Gitignore** | Feature-specific working state (reserved namespace; pre-ignored). |
 | `.claude/agents/<role>.md` | **Commit** | Generated subagent definitions are part of the project's reproducible setup; committing them lets a teammate clone and run the same squad. |
 | `.claude/worktrees/<role>/` | **Gitignore** | Git worktrees `spawn.sh` pre-creates for Multi-use teammates (per worktrees-doc tip); ephemeral, recreated on each spawn. |
 | `.claude/workflows/squad-dispatch.js` | **Commit** | Generated dynamic-Workflow dispatch script (One-time mode, optional); committing it makes the squad's fan-out rerunnable by anyone who clones. |
@@ -538,6 +543,8 @@ sequenceDiagram
 
 The plugin never writes to `settings.json` without explicit user consent in the same turn.
 
+**The teammate-inheritance gap.** The `skills`/`mcpServers` frontmatter fields not propagating to a teammate (reusability note above) has company: `hooks:` in a role's frontmatter would not fire for a teammate either — per [agent-teams docs](https://code.claude.com/docs/en/agent-teams#use-subagent-definitions-for-teammates), only `tools` and `model` are honored. Because this plugin's entire enforcement story is hooks, that rules out per-role `hooks:` frontmatter as an enforcement mechanism on the Multi-use path — enforcement has to live in the three project-level hooks (`SessionStart`, `UserPromptSubmit`, `PermissionRequest`) documented above, which do fire for a teammate because a teammate is a full Claude Code session. One more asymmetry worth knowing: a teammate inherits the lead's `effort` level, but not its `/model` selection.
+
 ## Dynamic Workflows — where they fit (and where they don't)
 
 A [dynamic Workflow](https://code.claude.com/docs/en/workflows) is a JavaScript script the Claude Code runtime executes to orchestrate subagents at scale (deterministic fan-out, branching, loops; intermediate results held in script variables). cheeky-squad-os integrates it as an **optional dispatch backend for One-time mode** — surfaced by the `/cheeky-squad-os:squad-workflow` command and the canonical script `templates/squad-dispatch.workflow.js`.
@@ -558,16 +565,16 @@ The default One-time path asks the orchestrator to remember, turn by turn, to ba
 - **Structured hand-off** — each role returns a schema'd `{role, summary, artifacts, status, follow_ups}` result, so synthesis is mechanical instead of free-text scraping.
 - **Intermediate results off-context** — they live in a script variable; the main session's context holds only the final synthesis.
 - **In-session resume** — a long N-role run survives interruption within the same session (it does **not** resume across a Claude Code restart).
-- **Scale** — up to 16 concurrent / many agents per run, well past what hand-issued `Agent` calls comfortably manage.
+- **Scale** — up to 16 concurrent agents and 1,000 agents total per run (a "large workflow" warning fires past 25 agents or 1.5M projected tokens), well past what hand-issued `Agent` calls comfortably manage.
 
 A 2–3 role squad does **not** need this; the direct-`Agent` path stays the default. The workflow earns its overhead at 4+ roles or when adversarial cross-checking adds value.
 
 ### The constraints that shaped the integration (all verified against the docs)
 
 1. **A skill cannot launch a workflow.** Triggers are: the literal keyword `workflow` in a user prompt, `/effort ultracode`, a bundled command, or a saved `/<name>` command — and each run needs user approval. So `squad-spawn` cannot silently escalate into a workflow; it *points the user* at `/cheeky-squad-os:squad-workflow`, which is the user-triggered entry.
-2. **Workflow subagents run in `acceptEdits`.** Their file edits are auto-approved, which **bypasses the `PermissionRequest` file-scope hook** — the plugin's core write-discipline control. Compensating design: the dispatch workflow fans out **read/analyze** roles that write only inside their own `file_scope` (stated as a hard boundary in every baked agent prompt). Roles that mutate shared code stay on the hook-gated `squad-spawn` path, or run as their own write-stage workflow with a sign-off gate between stages.
+2. **Workflow subagents run in `acceptEdits`.** They always run in that mode and inherit the session's tool allowlist, whatever the session's own mode is — so their file edits are auto-approved and a role's writes are **not gated by its `file_scope`** on this path. Whether the `PermissionRequest` hook never fires for a workflow subagent, or fires and is simply overridden by `acceptEdits`, is **not established** — assume neither; what is certain is the effect, so do not rely on file-scope enforcement here. That removes the plugin's core write-discipline control on this path. Compensating design: the dispatch workflow fans out **read/analyze** roles that write only inside their own `file_scope` (stated as a hard boundary in every baked agent prompt). Roles that mutate shared code stay on the hook-gated `squad-spawn` path, or run as their own write-stage workflow with a sign-off gate between stages.
 3. **No filesystem access in the script.** A workflow script can't read `.squad/`. So `/cheeky-squad-os:squad-workflow` bakes the goal text, each role's role-goal, `file_scope`, and task into the workflow's `args` (this *is* hard rule #4); the spawned agents, being real subagents, additionally re-read the files.
-4. **Availability.** Research preview, recent Claude Code, paid plans, org-disablable. The command detects unavailability and **falls back** to the direct-`Agent` One-time path.
+4. **Availability.** Requires Claude Code v2.1.154+; available on all paid plans, with Anthropic API access, and on Amazon Bedrock, Google Cloud's Agent Platform, and Microsoft Foundry (on Pro, enable from the Dynamic workflows row in `/config`); org-disablable. The command detects unavailability and **falls back** to the direct-`Agent` One-time path.
 
 ### How a dispatch runs
 
@@ -600,18 +607,18 @@ A user running these skills under a different agent runner gets the discipline (
 ## What v1 deliberately does not do
 
 - **Drift blocking.** `UserPromptSubmit` observes; it does not refuse. Drift policy is v2.
-- **Cross-session role memory.** `memory:` frontmatter on generated subagents is supported by Claude Code (per sub-agents doc) but not auto-set by `squad-role` in v1. Future flag.
+- **Cross-session role memory.** `memory:` is a documented subagent frontmatter field — a persistent per-agent directory, scoped `user`/`project`/`local` — available to any generated role, but not auto-set by `squad-role` in v1. Future flag.
 - **Squad-of-squads composition.** Subagents can't spawn subagents (per docs). v1 does not model nested squads.
 - **Automatic mode escalation.** If a one-time turns into a multi-use, the user re-runs `squad-onboard`. No silent migration.
 - **Roster sync to remote.** All state is local under `.squad/`. Future: optional sync.
 
 ## Version targets
 
-These are the features the plugin leans on and the surfaces that gate them. The exact minimum version numbers below are **approximate** — treat them as "a recent Claude Code" and verify against your installed `claude --version` rather than as hard guarantees:
+These are the features the plugin leans on and the surfaces that gate them. Where a version number below is quoted from the feature's own documentation it is exact; where none is given, treat the requirement as "a recent Claude Code" and check your installed `claude --version`:
 
 - `/loop` (Evergreen mode option) — in-session recurring task
 - **Agent Teams** (Multi-use mode) — experimental, env-gated by `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`
-- **Dynamic Workflows** (optional One-time dispatch) — **research preview, paid plans, ~v2.1.154+**, can be org-disabled (`disableWorkflows` / `CLAUDE_CODE_DISABLE_WORKFLOWS`). See ["Dynamic Workflows"](#dynamic-workflows--where-they-fit-and-where-they-dont).
+- **Dynamic Workflows** (optional One-time dispatch) — **requires v2.1.154+; available on all paid plans, with Anthropic API access, and on Amazon Bedrock, Google Cloud's Agent Platform, and Microsoft Foundry**, can be org-disabled (`disableWorkflows` / `CLAUDE_CODE_DISABLE_WORKFLOWS`). See ["Dynamic Workflows"](#dynamic-workflows--where-they-fit-and-where-they-dont).
 - Plugin manifest follows the schema documented at [plugin-marketplaces](https://code.claude.com/docs/en/plugin-marketplaces)
 
 The plugin gracefully degrades on surfaces it can't reach: missing Agent Teams falls back to subagents; missing/disabled Workflows falls back to the direct-`Agent` One-time path.

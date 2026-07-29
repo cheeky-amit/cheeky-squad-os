@@ -73,7 +73,7 @@ For each proposed role, state in one line:
 - **Name** (kebab-case)
 - **One-sentence purpose**
 - **Likely file scope** (where it'll write outputs)
-- **Likely model** (Sonnet for most, Haiku for high-volume mechanical work, Opus for deep reasoning)
+- **Likely model** (Sonnet for most, Haiku for high-volume mechanical work, Opus for deep reasoning, Fable for a long-running role that has to investigate and self-verify across more than one sitting)
 
 Ask: *"Does this squad look right? I'll generate each role next — you'll confirm the details per role."*
 

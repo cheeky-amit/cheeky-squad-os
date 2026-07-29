@@ -170,7 +170,7 @@ erDiagram
         path   role_goal
         list   file_scope          "glob patterns"
         list   tools
-        enum   model               "sonnet|opus|haiku|inherit"
+        enum   model               "sonnet|opus|haiku|fable|inherit|full model ID"
         bool   active
         date   created
     }
@@ -187,6 +187,7 @@ erDiagram
         string description         "auto-delegation trigger"
         list   tools
         enum   model
+        enum   effort              "low|medium|high|xhigh|max (optional)"
         enum   isolation           "worktree (optional)"
         text   body                "system prompt"
     }
@@ -259,7 +260,8 @@ target: <ISO-8601 deadline | "ongoing">
 name: <role-name>           # kebab, == roster name == hook agent_type
 description: <Use when…>    # drives auto-delegation
 tools: <comma-separated>
-model: sonnet|opus|haiku|inherit
+model: sonnet|opus|haiku|fable|inherit|<full-id>
+effort: low|medium|high|xhigh|max   # optional; defaults to session effort
 isolation: worktree         # optional; One-time subagents only
 ---
 # <body = system prompt; reads goal.md + role-goal on every run>
@@ -267,7 +269,11 @@ isolation: worktree         # optional; One-time subagents only
 
 Reusable as a **subagent** (via the `Agent` tool) and as an **Agent Teams
 teammate**. When used as a teammate, `tools`/`model` propagate; `skills`/
-`mcpServers` do **not**; the body is appended to the teammate's system prompt.
+`mcpServers` — and `hooks` — do **not**; the body is appended to the
+teammate's system prompt as additional instructions rather than replacing it.
+Hook-based enforcement for a teammate must live in project-level hooks, not
+role frontmatter. Teammates inherit the lead's **effort** level, but not its
+`/model` selection.
 
 ---
 
@@ -424,7 +430,7 @@ flowchart TD
     C2 -->|multi-use| CM[→ squad-spawn<br/>Agent Teams]
     C2 -->|evergreen| CE[→ scheduling]
     C2 -->|yes| C3{Workflows<br/>available?}
-    C3 -->|no preview/version/disabled| CF[fall back to<br/>direct-Agent path]
+    C3 -->|not enabled/version/disabled| CF[fall back to<br/>direct-Agent path]
     C3 -->|yes| C4{≤3 roles &<br/>not --force?}
     C4 -->|yes| CREC[recommend<br/>direct path]
     C4 -->|no| C5[brief acceptEdits<br/>safety posture]
@@ -450,8 +456,10 @@ flowchart LR
     DIG --> OUT([return to orchestrator<br/>→ user-facing synthesis])
 ```
 
-> ⚠️ **Safety:** workflow subagents run in `acceptEdits` — file edits are
-> auto-approved, **bypassing the PermissionRequest hook (§5.2)**. So this path
+> ⚠️ **Safety:** workflow subagents always run in `acceptEdits` and inherit
+> the invoking session's tool allowlist, regardless of the session's own mode
+> — file edits are auto-approved and therefore **not gated by `file_scope`**.
+> Do not rely on file-scope enforcement (§5.2) on this path. So this path
 > fans out **read/analyze** roles whose writes are confined to their own
 > `file_scope` *by instruction in the baked prompt*. Code-mutating roles stay on
 > the hook-gated `squad-spawn` path, or run as their own write-stage workflow

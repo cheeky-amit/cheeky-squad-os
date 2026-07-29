@@ -111,7 +111,7 @@ squad-role: Tools? (Claude Code tool names and MCP tool patterns)
 
 User: Read, Write, Bash, mcp__claude_ai_Klaviyo__*, mcp__claude_ai_Shopify__*
 
-squad-role: Model? (sonnet / haiku / opus)
+squad-role: Model? (sonnet / haiku / opus / fable / inherit, or a full model ID, e.g. `claude-opus-5`)
 
 User: sonnet
 
@@ -222,6 +222,12 @@ squad-role: Model?
 
 User: opus
 
+squad-role: Effort? (optional — low / medium / high / xhigh / max;
+omit to inherit the session's effort level)
+
+User: xhigh — this role has to defend a dollar estimate per fix, want
+the extra rigor on the reasoning.
+
 squad-role: Generated .claude/agents/report-writer.md, wrote
 .squad/role-goal-report-writer.md, and registered the role in
 .squad/roster.json.
@@ -235,6 +241,7 @@ name: report-writer
 description: Synthesizes raw Klaviyo extraction and compliance flags into a ranked list of lifecycle fixes with revenue impact estimates and confidence scores. Produces the single deliverable.
 tools: Read, Write, Grep
 model: opus
+effort: xhigh
 ---
 ```
 
@@ -286,6 +293,7 @@ model: opus
       "file_scope": ["reports/klaviyo/**"],
       "tools": ["Read", "Write", "Grep"],
       "model": "opus",
+      "effort": "xhigh",
       "active": true,
       "created": "2026-05-27T09:50:00Z"
     }

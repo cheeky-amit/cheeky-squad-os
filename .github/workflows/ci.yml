@@ -32,7 +32,9 @@ jobs:
           shellcheck hooks/*.sh skills/**/scripts/*.sh
 
       - name: Run bats suites
-        run: bats tests/permission-request.bats tests/spawn.bats tests/provision.bats tests/verify.bats
+        # Glob, not an explicit list: a new tests/*.bats suite must never be
+        # silently unwired from CI by someone forgetting to add it here.
+        run: bats tests/*.bats
 
       - name: Lint example rosters against the canonical schema
         shell: bash

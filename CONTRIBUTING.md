@@ -38,6 +38,8 @@ compatible-with: [claude-code, agentskills-1.0]
 ---
 ```
 
+`version`, `author`, `license`, and `compatible-with` are **intentional** and sit outside Claude Code's own documented SKILL.md field list. Claude Code ignores unrecognized frontmatter keys, and these four carry the agentskills.io portability claim — keep them on any new skill; don't strip them as "unsupported".
+
 Constraints:
 - Body under 200 lines. Bundle longer content in a `references/` subfolder if needed.
 - `description` field is what determines auto-invocation. Include phrases users would actually say, across the four domains (engineering, ops, business infra, knowledge work).
@@ -66,10 +68,10 @@ Hook changes need to be smoke-tested against the input JSON shapes documented at
 `templates/role-definition.md` is the schema every generated role derives from. If you want every future generated role to behave differently, change the template — don't change individual role files (those are user-generated and user-owned).
 
 Constraints:
-- Keep the YAML frontmatter compatible with Claude Code's subagent fields (see <https://code.claude.com/docs/en/sub-agents#supported-frontmatter-fields>). The frontmatter is `name`, `description`, `tools`, `model`, optionally `isolation`.
+- Keep the YAML frontmatter compatible with Claude Code's subagent fields (see <https://code.claude.com/docs/en/sub-agents#supported-frontmatter-fields>). The frontmatter the template emits is `name`, `description`, `tools`, `model`, optionally `effort`, optionally `isolation`. `model` accepts `sonnet` | `opus` | `haiku` | `fable` | `inherit`, or a full model ID (e.g. `claude-opus-5`); `effort` accepts `low` | `medium` | `high` | `xhigh` | `max` and must stay **optional** — a role without it inherits the session's effort, which is today's behavior. Role names are kebab-case and must not contain `:` (reserved for plugin-scoped ids).
 - All `{{placeholder}}` values must be substitutable by `squad-role` from its interactive Q&A.
 - Document every new placeholder in the comment block at the top of the file.
-- The body becomes a subagent system prompt AND, in Multi-use mode, gets appended to an Agent Teams teammate's system prompt. Per Claude Code's agent-teams doc, `skills` and `mcpServers` frontmatter fields do not propagate when used as a teammate; `tools` and `model` do. Reflect this constraint in any frontmatter additions.
+- The body becomes a subagent system prompt AND, in Multi-use mode, gets appended to an Agent Teams teammate's system prompt. Per Claude Code's agent-teams doc, `skills` and `mcpServers` frontmatter fields do not propagate when used as a teammate; `tools` and `model` do. `hooks:` would not fire for a teammate either — so never put enforcement in role frontmatter; it belongs in the plugin's project-level hooks, which do fire because a teammate is a full session. A teammate inherits the lead session's `effort`, not the role file's. Reflect these constraints in any frontmatter additions.
 
 ### 4. Proposing a new mode
 
@@ -104,7 +106,7 @@ Two layers:
 
 ```
 shellcheck hooks/*.sh skills/**/scripts/*.sh
-bats tests/permission-request.bats tests/spawn.bats tests/provision.bats tests/verify.bats
+bats tests/*.bats
 ```
 
 `permission-request.bats` covers the hook's allow/defer matrix (in-scope Edit/Write allow, in-sandbox Bash scaffolding allow, out-of-scope/main-session/unknown-role defer, single-segment and mid-path glob semantics — `*` never crosses `/`, `..` traversal defer, metacharacter/verb/operand-escape defer, missing-jq fail-open). `spawn.bats` covers `spawn.sh` preflight refusals and idempotent worktree creation. `provision.bats` covers `provision.sh` sandbox materialization (dirs, sourced env file, local context copy, tool verification, local-install vs global-needs classification). `verify.bats` covers `verify.sh` (preflight refusals, Definition-of-done parsing incl. frontmatter/HTML-comment exclusion, per-role scope counting, JSON-lines validity). CI additionally lints every example roster JSON block against the canonical `roster.json` schema — invented keys silently disable the permission hook, so they fail the build. Install the tools with `brew install bats-core shellcheck` (macOS) or `apt-get install bats shellcheck` (Linux). These run automatically on every push/PR.

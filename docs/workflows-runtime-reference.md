@@ -18,7 +18,7 @@ This feature has an unusual documentation split. Read this first.
 
 | Tier | What | Source | Confidence |
 | --- | --- | --- | --- |
-| 🟢 **Operational** | triggers, approval matrix, limits, resume, permission mode, save, availability | **Publicly documented** at `code.claude.com/docs/en/workflows` + `/agents`, verified 2026-05-31 | High — quoted below |
+| 🟢 **Operational** | triggers, approval matrix, limits, resume, permission mode, save, availability | **Publicly documented** at `code.claude.com/docs/en/workflows` + `/agents`, verified 2026-05-31, re-verified 2026-07-29 | High — quoted below |
 | 🔵 **Script DSL** | `meta`, `agent()`, `parallel()`, `pipeline()`, `phase()`, `log()`, `workflow()`, `budget`, `args`, the `schema` option | **NOT publicly documented.** The docs say "Claude writes the script" and treat the calling API as opaque. The signatures here come from the **runtime contract the authoring model operates under** (authoritative for execution, but not a published spec). | High for behavior, but treat names/shapes as runtime-internal, not a stable public API |
 
 > The official docs deliberately present the workflow script as Claude-authored
@@ -81,7 +81,8 @@ export const WorkflowTrigger = z.enum([
   the word cancels it; `/config` → **Workflow keyword trigger** turns it off.
 - *Ultracode:* combines `xhigh` reasoning effort **and** automatic workflow
   orchestration. **Session-only**; resets next session. Only on models that
-  support `xhigh` (Opus 4.8/4.7). One request can spawn several workflows in a row.
+  support `xhigh` (Sonnet 5, Opus 5, Fable 5 — not older Sonnet/Opus 4.6, which
+  have no `xhigh` tier). One request can spawn several workflows in a row.
 
 > **A skill cannot launch a workflow programmatically.** There is no
 > skill→workflow call; the four triggers above are the only entry points, and
@@ -122,10 +123,15 @@ export const APPROVAL_BY_MODE = z.record(PermissionMode, LaunchApproval).parse({
 
 ```ts
 export const WorkflowAvailability = z.object({
-  status: z.literal("research-preview"),
   minVersion: z.literal("2.1.154"),                 // Claude Code v2.1.154+
-  plans: z.array(z.string()).default(["pro", "max", "team", "enterprise"]), // all paid; Pro via /config
-  surfaces: z.array(z.enum(["api", "bedrock", "vertex", "foundry"])),
+  plans: z.literal("all paid plans"),                // Pro, Max, Team, Enterprise
+  surfaces: z.array(z.enum([
+    "anthropic-api",                // Anthropic API access
+    "amazon-bedrock",
+    "google-cloud-agent-platform",
+    "microsoft-foundry",
+  ])),
+  proOptIn: z.literal("/config → Dynamic workflows row"),
   disable: z.object({
     configToggle: z.boolean(),                       // /config → Dynamic workflows row
     userSetting: z.literal('"disableWorkflows": true'), // ~/.claude/settings.json
@@ -134,6 +140,14 @@ export const WorkflowAvailability = z.object({
   }),
 });
 ```
+
+> *"Dynamic workflows require Claude Code v2.1.154 or later and are available
+> on all paid plans, with Anthropic API access, and on Amazon Bedrock, Google
+> Cloud's Agent Platform, and Microsoft Foundry. On Pro, turn them on from the
+> Dynamic workflows row in `/config`."*
+
+There is no "research preview" tier on the current page — that framing is
+gone; only the version floor carries forward.
 
 > When workflows are disabled: bundled commands vanish, the `workflow` keyword
 > stops triggering, and `ultracode` is removed from the `/effort` menu.
@@ -146,7 +160,10 @@ export const WorkflowAvailability = z.object({
 Every workflow script begins with `export const meta = {...}`.
 
 ```ts
-export const ModelTier = z.enum(["sonnet", "opus", "haiku"]);
+export const ModelTier = z.enum(["sonnet", "opus", "haiku", "fable"]);
+// Mirrors the documented subagent `model:` alias set (which also takes a full
+// model ID, e.g. "claude-opus-5"). The DSL's own accepted values are 🔵 — not
+// published separately — so treat the full-ID form here as inferred, not quoted.
 
 export const PhaseMeta = z.object({
   /** Title — matched EXACTLY (string equality) to phase() calls and opts.phase. */
@@ -191,9 +208,14 @@ export const AgentOptions = z.object({
   phase:     z.string().optional(),                 // assign to a progress group (match meta.phases.title)
   schema:    z.record(z.unknown()).optional(),      // a JSON Schema → forces structured output (§5)
   model:     ModelTier.optional(),                  // per-agent model; omit = inherit session model
+  effort:    z.enum(["low", "medium", "high", "xhigh", "max"]).optional(), // per-agent reasoning effort; omit = inherit
   isolation: z.literal("worktree").optional(),      // run agent in a throwaway git worktree
   agentType: z.string().optional(),                 // use a named subagent type (e.g. "Explore", a role)
 });
+// CONFIRMED current agent() options surface: label, phase, schema, model,
+// effort, isolation, agentType. `budget` and `workflow()` are also part of
+// the in-script surface, but they're globals, not agent() opts — see the
+// RuntimeApi.workflow entry and §4.1 below.
 
 /**
  * RuntimeApi — the globals available inside the script body. z.function() shapes
@@ -336,18 +358,21 @@ whole set, early-exit on zero, "compare against the other findings").
 export const RUNTIME_LIMITS = z.object({
   maxConcurrentAgents: z.literal(16),      // fewer on machines with limited CPU cores
   maxAgentsPerRun:     z.literal(1000),    // runaway-loop backstop
+  largeWorkflowWarning: z.literal("25 agents or 1.5M projected tokens"), // fires past either threshold
   scriptFilesystemAccess: z.literal(false),
   scriptShellAccess:      z.literal(false),
   midRunUserInput:        z.literal(false),// only agent permission prompts can pause
 }).parse({
   maxConcurrentAgents: 16, maxAgentsPerRun: 1000,
+  largeWorkflowWarning: "25 agents or 1.5M projected tokens",
   scriptFilesystemAccess: false, scriptShellAccess: false, midRunUserInput: false,
 });
 ```
 
 > Pass 100 items to `pipeline()`/`parallel()` freely — only ~16 run at once; the
-> rest queue. For sign-off **between** stages, run each stage as its **own**
-> workflow (there is no mid-run input).
+> rest queue. Past 25 agents or 1.5M projected tokens the runtime surfaces a
+> "large workflow" warning before it proceeds. For sign-off **between** stages,
+> run each stage as its **own** workflow (there is no mid-run input).
 
 ---
 
@@ -363,14 +388,23 @@ export const SaveLocation = z.enum([
 
 export const ResumeSemantics = z.object({
   scope: z.literal("same-session-only"),               // exit Claude Code → next session starts FRESH
-  completedAgents: z.literal("return-cached-results"),
-  remainingAgents: z.literal("run-live"),
+  cachedResultsStopAt: z.literal("first-agent-that-did-not-finish"),
+  agentsAfterThatPoint: z.literal("rerun-even-if-they-already-completed"),
   howTo: z.enum([
     "/workflows → select → press p",
     "ask Claude to relaunch with the same script",
   ]),
 });
 ```
+
+> *"An agent that was still running when you stopped isn't saved... Cached
+> results stop at the first agent that didn't finish, and every agent that
+> started after that one runs again, even if it completed."*
+
+Read that literally: resume does **not** mean "everything already done stays
+done." It means "cached up to the first straggler, live from there on" — an
+agent that finished *after* the straggler started still re-runs. Budget and
+side effects accordingly (idempotent agent prompts help).
 
 > The press coverage of "multi-day jobs that pick up where they left off" is
 > **tempered by reality**: resume is *session-scoped*. Quitting mid-run loses the
@@ -385,7 +419,7 @@ export const ResumeSemantics = z.object({
 export const AgentPermissionModel = z.object({
   /** Spawned subagents ALWAYS run in acceptEdits, regardless of session mode. */
   mode: z.literal("acceptEdits"),
-  fileEdits: z.literal("auto-approved"),               // bypasses any file-scope hook gating
+  fileEdits: z.literal("auto-approved"),               // not gated by a role's file_scope on this path
   inheritsToolAllowlist: z.literal(true),
   /** Non-allowlisted shell/web/MCP can still PROMPT mid-run. */
   canStillPrompt: z.array(z.enum(["bash", "web-fetch", "mcp"])),
@@ -393,12 +427,20 @@ export const AgentPermissionModel = z.object({
 });
 ```
 
+> *"The subagents the workflow spawns always run in `acceptEdits` mode and
+> inherit your tool allowlist, regardless of your session's mode. File edits
+> are auto-approved."*
+
 > 🔴 **Key gotcha:** the only thing your session's permission mode controls is the
 > *launch* prompt. Once running, every workflow subagent has **file edits
-> auto-approved**. If you rely on a `PermissionRequest`/file-scope hook for write
-> discipline (as this repo does), a workflow **bypasses it** — so confine
-> workflow agents to read/analyze + self-scoped writes, and keep code-mutating
-> work on a hook-gated path.
+> auto-approved** — the practical effect is that a role's writes are **not
+> gated by its `file_scope`** on this path. Whether that's because a
+> `PermissionRequest`/file-scope hook (as this repo uses) never fires for
+> workflow subagents, or fires and its result is simply overridden by
+> `acceptEdits`, is **not established** — don't assume either mechanism. What's
+> certain is the effect, so **don't rely on file-scope enforcement here**:
+> confine workflow agents to read/analyze + self-scoped writes, and keep
+> code-mutating work on a hook-gated path.
 
 ---
 
@@ -478,6 +520,7 @@ export const WorkflowCheatSheet = z.object({
   triggers:           WorkflowTrigger.options,                 // keyword · ultracode · bundled · saved
   skillCanInvoke:     z.literal(false),                        // must be user-triggered
   concurrency:        z.literal("≤16 (CPU-bound), 1000 total/run"),
+  largeWorkflowWarning: z.literal("past 25 agents or 1.5M projected tokens"),
   scriptCanTouchFS:   z.literal(false),                        // agents can; script can't
   forbiddenInScript:  z.array(z.string()).default(["Date.now()", "Math.random()", "new Date()"]),
   intermediateState:  z.literal("script variables"),
@@ -485,10 +528,10 @@ export const WorkflowCheatSheet = z.object({
   agentReturn:        z.literal("string | validated-object | null"),
   parallel:           z.literal("BARRIER, nulls on failure"),
   pipeline:           z.literal("NO barrier, item-independent, default"),
-  agentsRunIn:        z.literal("acceptEdits (file edits auto-approved)"),
-  resume:             z.literal("same session only"),
+  agentsRunIn:        z.literal("acceptEdits (file edits auto-approved, not gated by file_scope)"),
+  resume:             z.literal("same session only — cached results stop at the first unfinished agent; everything after it re-runs"),
   budgetCeiling:      z.literal("hard — agent() throws past budget.total"),
-  availability:       z.literal("research preview · v2.1.154+ · paid plans · /config on Pro"),
+  availability:       z.literal("v2.1.154+ · all paid plans + Anthropic API access, Amazon Bedrock, Google Cloud's Agent Platform, Microsoft Foundry · /config on Pro"),
   disable:            z.literal('"disableWorkflows": true | CLAUDE_CODE_DISABLE_WORKFLOWS=1'),
 });
 ```
@@ -504,7 +547,15 @@ export const WorkflowCheatSheet = z.object({
 - `https://code.claude.com/docs/en/model-config`
 - `https://code.claude.com/docs/en/agent-sdk/structured-outputs`
 
+Re-verified 2026-07-29 against the same `docs/en/workflows` page — availability
+(§2.3, no more "research preview" tier, surface list widened), the
+large-workflow warning threshold (§6.1), and resume semantics (§7, the
+first-unfinished-agent cutoff) changed or firmed up since the 2026-05-31 pass
+and supersede it. Everything else in the 🟢 tier is unchanged.
+
 🔵 script-DSL signatures are sourced from the **Workflow tool runtime contract**
 the authoring model operates under — accurate for execution, but **not published**
 on `code.claude.com` (the docs treat the script as Claude-authored and opaque).
 Treat DSL names/shapes as runtime-internal rather than a frozen public API.
+`workflow()` nesting (§4: one level deep, nesting throws) is confirmed via this
+same contract as of 2026-07-29.

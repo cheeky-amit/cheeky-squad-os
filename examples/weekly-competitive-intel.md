@@ -158,7 +158,7 @@ squad-role:
   (it renders JS); fall back to WebFetch if Firecrawl is unavailable.
 
 squad-role:
-  Q5. Model. haiku / sonnet / opus?
+  Q5. Model. haiku / sonnet / opus / fable / inherit, or a full model ID?
        Heuristic: mechanical high-volume work -> haiku;
                   analysis/diff work          -> sonnet;
                   synthesis/writing           -> opus.
