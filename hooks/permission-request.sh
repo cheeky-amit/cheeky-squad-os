@@ -136,8 +136,42 @@ fi
 
 # normalize_rel <raw-path> → prints the project-relative form on stdout.
 # Returns 1 if the path is absolute and outside the project root (caller defers).
+#
+# Cosmetic path noise is collapsed FIRST, before any containment test runs:
+# "//", "/./", and a leading "./" all name the same file, and a reservation
+# enforced by a textual prefix test is not a reservation if it only recognizes
+# one spelling. Before this, ".squad/verification.md" was reserved but
+# "./.squad/verification.md" fell through to file_scope and a role scoped "**"
+# auto-approved it — the v0.4.1 forgery hole, reopened by two characters, and
+# the exact write that would let a role mint its own ruling (hard rules #10,
+# #14). skills/squad-verify/scripts/verify.sh's is_squad_path() already
+# recognized the "./" form; this brings the hook in line with it.
+#
+# ".." is deliberately NOT resolved here — has_traversal rejects it outright,
+# and textually resolving it would change what a path means whenever a symlink
+# is involved. Fail closed, don't get clever.
 normalize_rel() {
-  local p="$1" rel
+  local p="$1" rel lead='' rest seg out=''
+
+  case "$p" in
+    /*) lead=/ ;;
+  esac
+  # Rebuild from "/"-separated segments, dropping "" (from "//" or a trailing
+  # "/") and "." (from "/./" or a leading "./"). Done with parameter expansion
+  # rather than `set -- $p`, so a path containing a glob character is never
+  # accidentally expanded here. ".." segments are kept VERBATIM — has_traversal
+  # is what rejects them, and it must still be able to see them.
+  rest="$p"
+  while [ -n "$rest" ]; do
+    seg="${rest%%/*}"
+    if [ "$seg" = "$rest" ]; then rest=''; else rest="${rest#*/}"; fi
+    case "$seg" in
+      ''|.) continue ;;
+    esac
+    out="${out:+$out/}$seg"
+  done
+  p="$lead$out"
+
   case "$p" in
     /*)
       case "$p" in
@@ -428,6 +462,19 @@ case "$TOOL_NAME" in
       REL=$(normalize_rel "$tok") || exit 0   # outside project → defer
       if has_traversal "$REL"; then
         exit 0  # traversal → defer
+      fi
+      # An operand under .squad/ takes the SAME structural reservation the
+      # Edit/Write surface takes — squad_grant decides, the workspace prefix
+      # never does. Without this, a roster declaring
+      # environment.workspace: ".squad" made every reserved path a sandbox
+      # path on this surface: `cp forged.md .squad/verification.md` was
+      # auto-approved, and with it a role could mint the human's ruling,
+      # clear its own escalation, and unblock a `met` verdict (hard rules
+      # #10, #14). The Edit/Write surface has guarded exactly this since
+      # v0.4.1 (squad_grant's ws != ".squad" clause); this one did not.
+      if rel_under_squad "$REL"; then
+        squad_grant "$REL" "$AGENT_TYPE" "$WS" || exit 0
+        continue
       fi
       if ! rel_under_dir "$REL" "$WS"; then
         exit 0  # operand escapes the sandbox → defer

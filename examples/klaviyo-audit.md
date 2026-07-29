@@ -136,11 +136,15 @@ model: sonnet
 ---
 ```
 
-Generated `.squad/role-goal-klaviyo-data-puller.md` (outcome paragraph + hand-offs):
+Generated `.squad/role-goal-klaviyo-data-puller.md` (outcome paragraph + hand-offs + stop conditions):
 
 > Pull last-90-days flow performance for every active Klaviyo flow, list-level health metrics (growth, churn, engagement deciles), deliverability signals (bounce, complaint, open-rate by ISP), and cross-reference the same window of Shopify orders. Write everything as typed JSON to `data/klaviyo/` and a human-readable raw summary to `reports/klaviyo/raw/summary.md`. Do not interpret — just extract.
 >
 > **Hand-offs:** compliance-checker and report-writer — both consume `data/klaviyo/*.json` and `reports/klaviyo/raw/summary.md` from disk.
+>
+> **Stop conditions** (hard rule #14, derived by `squad-role` from this role's purpose, tools, and the goal's Out of scope):
+> - `needs:` the Klaviyo MCP connector responds to a read call
+> - `stop:` any API returns 403 twice
 
 ---
 
@@ -313,6 +317,12 @@ User: /cheeky-squad-os:squad-spawn
 squad-spawn: Mode = one-time. Preflight passed — goal, roster, all
 three agent files and all three .squad/role-goal-*.md files present.
 
+Dispatch triage (checkable `needs:` bullets only — the user may always
+dispatch anyway):
+  klaviyo-data-puller   starts: machine   (Klaviyo MCP connector responded to a read)
+  compliance-checker    starts: machine   (no needs: declared)
+  report-writer         starts: machine   (no needs: declared)
+
 The role goals' Hand-offs sections imply a sequence — the data-puller's
 artifacts feed the compliance-checker, and the report-writer reads both:
 
@@ -469,3 +479,198 @@ Total subscribers: 184,302 | Engaged 30d: 41,118 (22.3%)
 - The squad goal is injected into every spawn prompt (hard rule). Subagents have no other context channel from the parent — what's in the prompt is what they know.
 - `SessionStart` and `UserPromptSubmit` hooks keep the goal in scope across the parent session too, so you never drift mid-audit.
 - When the report ships, the squad is done. No recurring triggers, no scheduling. If the brand wants a monthly version next quarter, that's a new `squad-onboard` run in Evergreen mode — different dispatch path.
+
+---
+
+## 9. When a stop condition fires — the escalation beat
+
+Sections 1–8 walked the clean run. Same squad, same roster, a harder day:
+partway through `klaviyo-data-puller`'s pull, the Klaviyo API starts
+returning 403 on the deliverability endpoint. This section walks the
+escalation and evidence-bar machinery (hard rules #14–#15) end to end.
+
+### 9.1 It fires
+
+Two consecutive calls to `GET /api/metric-aggregates` (the bounce-by-ISP
+breakdown, step 3 of the role's intended approach) return HTTP 403 — the
+declared `stop: any API returns 403 twice` bound trips. `klaviyo-data-puller`
+does not retry a third time and does not silently stop. It writes its own
+engagement record with the escalation — the record's own file, nothing
+else, is the hand-back:
+
+```markdown
+---
+role: klaviyo-data-puller
+created: 2026-05-27T10:00:00Z
+status: escalated
+fired: "any API returns 403 twice"
+---
+
+# Engagement record — klaviyo-data-puller
+
+## Task read
+Pull last-90-days flow performance, list health, deliverability, and
+Shopify orders; dump structured JSON; do not interpret.
+
+## Intended approach
+1. Pull flow performance → data/klaviyo/flows-performance.json
+2. Pull list health → data/klaviyo/list-health.json
+3. Pull deliverability (bounce/complaint/open-rate by ISP) → data/klaviyo/deliverability.json
+4. Pull Shopify orders (90d) → data/klaviyo/shopify-orders-90d.json
+5. Write reports/klaviyo/raw/summary.md from all four
+
+## Deliverables
+- `data/klaviyo/flows-performance.json`
+- `data/klaviyo/list-health.json`
+- `data/klaviyo/deliverability.json`
+- `data/klaviyo/shopify-orders-90d.json`
+- `reports/klaviyo/raw/summary.md`
+
+## Assumptions
+- [reported] Klaviyo API key has read scope across all four endpoints — source: role goal / squad-role's tool grant.
+
+## What happened
+The `stop:` bound "any API returns 403 twice" fired on step 3 (pull
+deliverability signals). Two consecutive calls to `GET
+/api/metric-aggregates` for the bounce-by-ISP breakdown returned HTTP 403.
+Steps 1–2 completed cleanly before this happened.
+
+## State of the work
+- `data/klaviyo/flows-performance.json` — complete
+- `data/klaviyo/list-health.json` — complete
+- `data/klaviyo/deliverability.json` — untouched
+- `data/klaviyo/shopify-orders-90d.json` — complete (step 4 ran before the
+  role stopped; steps are declared in order, not enforced sequentially)
+- `reports/klaviyo/raw/summary.md` — partial: missing deliverability section
+
+## What would unblock
+Confirm the Klaviyo API key has the `metrics:read` scope (403 on this one
+endpoint, 200 on the other three, points at a scope gap rather than a rate
+limit) — or issue a fresh key. Once confirmed, re-dispatch this role;
+everything else it produced stands and does not need re-pulling.
+```
+
+There is no `resolved` status this role could write instead, and no
+`resolution:` field in the schema for it to add — see `templates/role-plan.md`.
+Whether this is actually resolved is the human's call, made later, in a file
+this role cannot reach.
+
+### 9.2 `squad-verify` shows `met` blocked
+
+`compliance-checker` and `report-writer` are held back — their role goals'
+Hand-offs say they consume `klaviyo-data-puller`'s artifacts, and the
+deliverability data never landed. Running
+`/cheeky-squad-os:squad-verify` against the goal's Definition of done:
+
+```markdown
+---
+verdict: partial
+verified_at: 2026-05-27T11:00:00Z
+goal_mode: one-time
+signals_pass: 4
+signals_fail: 0
+signals_human: 1
+escalations_open: 1
+resolved_escalations: []
+---
+
+# Squad verification
+
+## Signal: Compliance flags surfaced for any deliverability or consent risks
+
+- **Status:** NEEDS-HUMAN
+- **Evidence (machine):** `data/klaviyo/deliverability.json` does not exist —
+  the source data was never pulled (see klaviyo-data-puller's engagement
+  record, `status: escalated`).
+
+<!-- the other four Definition-of-done signals read PASS; omitted here -->
+
+## Escalations
+
+### klaviyo-data-puller
+
+- **Fired:** "any API returns 403 twice"
+- **Blocks:** "Compliance flags surfaced for any deliverability or consent
+  risks" — the signal's only source data is the deliverability pull that
+  never landed.
+- **Ruling:** UNRESOLVED
+
+## Verdict
+
+Partial. One signal blocked by an open escalation (see ## Escalations
+above) — `met` is not available while `escalations_open > 0`. Resolve the
+escalation, or grant a fresh Klaviyo key and re-dispatch
+klaviyo-data-puller, then re-verify.
+```
+
+### 9.3 The human rules
+
+The founder checks the Klaviyo dashboard directly and confirms: the key was
+scoped to `campaigns:read` only, never `metrics:read`. She rotates the key,
+`klaviyo-data-puller` is re-dispatched and completes cleanly this time. At
+the next `squad-verify` run, she rules on the escalation itself — not by
+editing the role's record (no role's write reaches `verification.md`; hers
+doesn't either, by hand), but by answering `squad-verify`'s prompt:
+
+```text
+squad-verify: klaviyo-data-puller's escalation ("any API returns 403
+twice") — has this been resolved, and how do you know?
+
+Founder: Yes — the API key was scoped to campaigns:read only, not
+metrics:read. Rotated the key on 2026-05-28, re-ran the pull, all four
+data/klaviyo/*.json files are now present.
+```
+
+`squad-verify` records that verbatim, with attribution and date (hard rule
+#15) — this is the only place it can be recorded:
+
+```markdown
+## Escalations
+
+### klaviyo-data-puller
+
+- **Fired:** "any API returns 403 twice"
+- **Blocks:** "Compliance flags surfaced for any deliverability or consent
+  risks" — the signal's only source data is the deliverability pull that
+  never landed.
+- **Ruling:** **Evidence (human attestation, 2026-05-28):** "The API key was
+  scoped to campaigns:read only, not metrics:read. Rotated the key on
+  2026-05-28, re-ran the pull, all four data/klaviyo/*.json files are now
+  present." — founder
+```
+
+There is no `RESOLVED` tag and no status word invented for the ruling: the
+quoted ruling **is** the record, and the frontmatter list is what actually
+closes the escalation. That list gains:
+
+```yaml
+resolved_escalations:
+  - klaviyo-data-puller
+```
+
+The two move together — a name in `resolved_escalations` with no ruling
+written here, or a ruling here with no name added, is a malformed resolution
+`squad-verify` flags rather than counts as closed.
+
+### 9.4 Re-verify passes
+
+With `data/klaviyo/deliverability.json` now on disk and the escalation
+resolved, `compliance-checker` and `report-writer` dispatch. A final
+`squad-verify` run recomputes `escalations_open = 1 − 1 = 0`. The signal
+that was NEEDS-HUMAN now reads:
+
+```markdown
+## Signal: Compliance flags surfaced for any deliverability or consent risks
+
+- **Status:** PASS (attested)
+- **Evidence (human attestation, 2026-05-28):** "The API key was scoped to
+  campaigns:read only, not metrics:read. Rotated the key, re-ran the pull,
+  all four data/klaviyo/*.json files are now present."
+```
+
+`PASS (attested)` stays on the record permanently — it never quietly
+becomes an ordinary machine `PASS`; anyone reading `verification.md` later
+can tell a human closed this gap, not a script. With every signal PASS and
+`escalations_open: 0`, the verdict is `met`, and `reports/klaviyo/final-report.md`
+ships exactly as it does in section 7 — one day later than the clean run,
+with an audit trail of exactly what went wrong and who signed off on the fix.

@@ -41,6 +41,11 @@ These are the load-bearing invariants the rest of the document references by num
 10. **Synthesis summarizes, verification decides** — `.squad/verification.md` is the only authority for declaring the goal met.
 11. **Plan before act.** Before a role's first write to anywhere else, it publishes its engagement record — `.squad/role-plan-<role>.md` (schema: `templates/role-plan.md`) — stating what it read the task to be, its intended approach, its deliverables, and its assumptions, each graded by evidence class (never by number — see "Evidence grades" below). Until that record exists, the `PermissionRequest` hook defers every in-scope Edit/Write and in-sandbox Bash call for that role; it never denies. The record's own path is the one grant that needs no record: a role cannot publish its plan if publishing the plan required a plan. Autonomy is purchased with intent.
 
+*(Hard rules #12 and #13 are reserved for a later PR — the numbering is append-only, so the gap is deliberate; they are not documented here.)*
+
+14. **Declared bounds.** Every role declares `needs:` preconditions and `stop:` bounds in its role goal. A fired condition ends the run with `status: escalated` on the engagement record. An open escalation blocks a `met` verdict; escalations are opened by roles and closed only in `verification.md` by the human's recorded ruling. Escalation is evidence generation, never decision — hard rule #10 holds. *Stopping well is a deliverable.*
+15. **The human meets the same evidence bar.** A NEEDS-HUMAN row or open escalation converts to PASS only against a stated what-you-checked / what-you-found, recorded verbatim in `verification.md` with attribution and date, permanently marked distinct from machine-verified truth. The human is never blocked — they are put on the record.
+
 ## Evidence grades
 
 Hard rule #11's engagement record grades every assumption by evidence class, never by number — a role cannot derive "73% confident," so a number here would be theatre. This is the **one vocabulary**, defined here once; `templates/role-plan.md`, `templates/verification.md`, `squad-verify`, and every generated role cite it rather than restate it.
@@ -53,6 +58,28 @@ Hard rule #11's engagement record grades every assumption by evidence class, nev
 | `[assumed]` | Names what breaks if it's wrong, as `if wrong → <deliverable or Definition-of-done signal>`. |
 
 The `[assumed]` grade's `if wrong →` clause is load-bearing, not decorative: `squad-verify`'s forcing rule refuses to mark a Definition-of-done signal PASS on the strength of that same role's own `[assumed]` bullet — at most NEEDS-HUMAN, with the assumption quoted (`templates/verification.md`, "Assumptions surfaced to the human"). Naming the blast radius up front is what makes a guess reviewable instead of invisible. See `examples/landing-page-redesign.md` for a worked case where this forcing rule actually fires.
+
+## Escalation lifecycle
+
+Hard rules #14 and #15 give the engagement record (hard rule #11) a second job: not just declaring what a role intends, but declaring where it will stop, and making sure that stopping produces evidence a human can act on rather than a run that just goes quiet.
+
+**Declaring the bounds.** Every role goal (`templates/role-goal.md`) carries a `## Stop conditions` section — 2–4 bullets, derived by `squad-role` from the role's purpose, its tools, and the squad goal's `Out of scope`, shown in the existing confirm block (no new question). Each bullet has exactly one of two verbs: `needs:` is a precondition, checked at `squad-spawn`'s dispatch triage and again by the role itself at the start of its run; `stop:` is a mid-run bound the role self-polices — there is no external monitor for it. A condition nothing can check ("if things get complicated") is not a condition. These ride the already-prompt-baked role goal (hard rule #4) — no new context channel.
+
+**Firing.** When a `stop:` bound trips, the role does not push through it and does not quietly stop. It writes its own engagement record — `.squad/role-plan-<role>.md` — with `status: escalated` and `fired:` set to the bullet, verbatim, that fired. Three sections carry the hand-back: `## What happened` (which condition fired, on what evidence, at which step of the declared approach), `## State of the work` (per declared deliverable: complete / partial: `<gap>` / untouched), and `## What would unblock` (the smallest grant, file, or ruling that would let the role resume). That record is the only hand-back — there is no second escalation channel, in any mode: a Multi-use role additionally messages the lead, and a workflow-dispatched role additionally sets `status: "blocked"` on its structured result (`templates/squad-dispatch.workflow.js`), but the record is what every path treats as the source of truth.
+
+**Blocking.** An open escalation blocks a `met` verdict. `verify.sh` emits one escalation line per record with `status: escalated` (matched by filename, not by the record's own `role:` field, on a mismatch — same discipline as everywhere else the record is read), and the summary's `escalations_open` count is computed mechanically from two inputs neither of which a role controls:
+
+```
+escalations_open = |records with status: escalated| − |their roles named in verification.md's resolved_escalations|
+```
+
+**Ruling.** The human's ruling lives in exactly one place — `.squad/verification.md` — never in the engagement record. Resolving an escalation means `squad-verify` adds the role's name to the frontmatter's `resolved_escalations:` list and quotes the ruling verbatim in the body's `## Escalations` section, alongside every fired condition, blocked signal, and (once ruled) the ruling itself. The same attestation protocol governs a bare NEEDS-HUMAN row: it converts to PASS only against a stated what-was-checked / what-was-found, recorded verbatim with attribution and date, and permanently marked `PASS (attested)` — never silently laundered into an ordinary machine PASS.
+
+### The load-bearing invariant
+
+**A role can never mint the human's ruling.** The engagement record's status enum stops at `active | amended | escalated` — there is no `resolved` status and no `resolution:` field anywhere in that schema, for any role to write. If a role could mark its own escalation resolved, one in-scope write would unblock a `met` verdict, and hard rule #10 ("verification decides") would be defeated exactly as the pre-v0.4.1 `.squad/` forgery hole defeated it (see the v0.4.1 CHANGELOG entry). The ruling is producible only by a human, through `squad-verify`, in a file no role can reach — the `.squad/` reservation (hard rule #7) makes `.squad/verification.md` structurally unwritable by any role, at any `file_scope`.
+
+**Residual hole, stated honestly.** A role can flip its own `status: escalated` back to `status: active` — nothing above stops that, and nothing in a future release should pretend otherwise. That is behaviorally identical to never having stopped at all, which is already the acknowledged aspirational half of hard rule #14: *"stopping well is a deliverable"* is asked of a role, not mechanically enforced on it. What a role *cannot* do, under any status value it writes, is manufacture the human's ruling — that half is mechanical, not aspirational, because it lives in a file the role structurally cannot reach.
 
 ## The three modes
 
@@ -317,8 +344,12 @@ For EACH definition-of-done signal:
     — never guess: an unverifiable signal goes to NEEDS-HUMAN
 
 Compute verdict: met | partial | unmet
+  — met additionally requires escalations_open == 0 (hard rule #14);
+    an open escalation makes `met` unreachable regardless of signals
+    (partial if anything passed, unmet if nothing did)
 Write .squad/verification.md (from templates/verification.md — frontmatter:
-  verdict, verified_at, goal_mode, signals_pass/fail/human)
+  verdict, verified_at, goal_mode, signals_pass/fail/human,
+  escalations_open* / resolved_escalations — * omitted when unused)
 ```
 
 **Writes:** `.squad/verification.md` **only** — it never modifies `goal.md` or `roster.json`. The verification report is the only authority for declaring the goal met; a squad's synthesized report is a summary, not a verdict.
@@ -406,7 +437,12 @@ Both surfaces share the same containment primitives (normalize-to-relative, reje
 4. inside the role's **own** `environment.workspace` (hard rule #8) → allow;
 5. anything else under `.squad/` → defer.
 
-Steps 1 and 2 precede step 3 because both paths live inside namespaces step 3 reserves; a role reaches only its own, since the name in the pattern is its own sanitized `agent_type`. Every grant is derived from that `agent_type`, so it cannot be forged or widened; step 3 precedes step 4 so a roster that points a sandbox at `.squad/` itself cannot swallow another role's contract paths. Stated plainly, because the previous invariant was cleaner: this is a net *widening* of three derived paths (a role now gets its own record, outbox, and sandbox structurally, whether or not the human registered them) and a net *narrowing* of everything else under `.squad/`. "The hook can only ever remove an auto-approval" is no longer true; "the hook can only ever grant a role its own state" is.
+Steps 1 and 2 precede step 3 because both paths live inside namespaces step 3 reserves; a role reaches only its own, since the name in the pattern is its own sanitized `agent_type`. Every grant is derived from that `agent_type`, so it cannot be forged or widened; step 3 precedes step 4 so a roster that points a sandbox at `.squad/` itself cannot swallow another role's contract paths.
+
+Two properties of this list are load-bearing enough to name separately, because each was violated in practice before v1.0 and each violation reached `verification.md` — the file hard rules #10 and #14 depend on being unreachable:
+
+- **It applies to both auto-approve surfaces, not just Edit/Write.** A `.squad/` operand of a scaffolding-Bash call takes the same five-step decision. `cp` and `ln` write real content, so a surface that checked only the workspace prefix was a full forgery channel for any roster declaring `workspace: ".squad"`.
+- **It is decided on a normalized path.** The reservation is a textual prefix test, and a prefix test is only as strong as the set of spellings it recognizes. `//`, `/./`, and a leading `./` are collapsed before any containment check, so `./.squad/verification.md` cannot slip past a rule written for `.squad/verification.md`. `..` is never resolved — only rejected — because resolving it textually would change what a path means across a symlink. Stated plainly, because the previous invariant was cleaner: this is a net *widening* of three derived paths (a role now gets its own record, outbox, and sandbox structurally, whether or not the human registered them) and a net *narrowing* of everything else under `.squad/`. "The hook can only ever remove an auto-approval" is no longer true; "the hook can only ever grant a role its own state" is.
 
 **The plan gate and its bootstrap grant (hard rule #11).** Outside `.squad/`, both auto-approve surfaces — in-scope Edit/Write and in-sandbox Bash — are additionally conditioned on the role having published its engagement record at `.squad/role-plan-<agent_type>.md`. That path is checked inside the `.squad/` reservation above (`squad_grant`'s first case) and is granted **unconditionally** — the bootstrap: a role cannot publish its plan if publishing the plan required a plan. Everything else that isn't structurally reserved — its own hand-off outbox (gated the same way, inside `squad_grant`'s second case), in-scope Edit/Write outside `.squad/`, and in-sandbox Bash — waits on that record existing. The check itself is a bare file-existence test, not a schema validation: judging whether the plan is any good is `squad-verify`'s job (reading it as process evidence, LOGIC.md §5.2), not the hook's — a hook that could fail closed on a malformed record would be deny-shaped, and this plugin never denies. As everywhere else in this hook, the gate **defers, never denies**: a role that declines to declare gets exactly the behavior an out-of-scope write got in v0.4.x — the human is asked — which is also why no roster migration is needed to adopt it.
 
@@ -436,6 +472,7 @@ The plan gate is mechanical where it applies, and honestly limited where it does
 | The gate itself | A bare file-existence check: `.squad/role-plan-<agent_type>.md` must exist before in-scope Edit/Write (outside `.squad/`) or in-sandbox Bash auto-approve. | Whether the record is honest, complete, or well-reasoned. The hook cannot distinguish a careful, evidence-graded plan from a one-line stub — that judgment belongs to `squad-verify`, reading the record as process evidence (LOGIC.md §5.2), not to this hook. |
 | `acceptEdits` / `bypassPermissions`, including the Workflow dispatch path (see ["Dynamic Workflows"](#dynamic-workflows--where-they-fit-and-where-they-dont)) | Nothing — the gate is inert here. The session's own permission mode decides before this hook's decision is consulted (or overrides it; which of the two is not established — see the CHANGELOG's `acceptEdits` honesty fix). A role can write anywhere its `tools` allow, record or no record. | That the role plans first is asked of it by the baked spawn prompt's Step 0, not enforced by the hook, on this path. |
 | Worktree isolation (hard rule #7) | Nothing mid-run from the main checkout. A worktree-isolated role's record lives in *that worktree's* `.squad/`, resolved via the `cwd` fallback above. It is gitignored, so merging the role's branch never carries it back — no git operation syncs it. | That record reaches the project root — and so becomes visible to a human or to `squad-verify` reading from the main checkout — only at collect time: `skills/squad-spawn/scripts/spawn.sh collect`, which `squad-spawn` runs once at synthesis and copies exactly `.squad/role-plan-<role>.md` per active role, newer-mtime wins. Not continuously while the role runs, and never automatically — a `squad-verify` run with no synthesis before it sees whatever the last collect left behind. |
+| Escalation resolution (hard rules #14–#15) | `escalations_open` is a mechanical count: `verify.sh` reads two role-unwritable inputs — `status: escalated` records and `verification.md`'s `resolved_escalations` list — and a `met` verdict is blocked until the subtraction reaches zero. The human's ruling is producible only by `squad-verify`: no role can write to `.squad/verification.md` (the `.squad/` reservation, hard rule #7) or add a `resolved` status to its own record (there is no such status in the schema). | Whether a role's `stop:` bound fires *honestly* at all — nothing watches for a bound that should have fired but didn't. And nothing stops a role from flipping its own `status: escalated` back to `active`, which is behaviorally identical to never having stopped; that is the acknowledged aspirational half of hard rule #14 ("Escalation lifecycle" above). |
 
 **Field confirmed:** `agent_type` is the correct identifier per both hooks doc (common input schema) and sub-agents doc ("Hooks receive this value as `agent_type`"). Not `subagent_type`, not `agent_name`, not `subagent_name`.
 
@@ -483,7 +520,7 @@ Schemas for `goal.md` and `roster.json` are above. `role-goal-<role-name>.md` mi
 | `.squad/verification.md` | **Commit** | The verdict of record (hard rule #10) — the evidence trail for "the goal is met" should travel with the project. Overwritten on each re-verify. |
 | `.squad/workspaces/<role>/` | **Gitignore** | Per-role sandboxes materialized by `provision.sh`; ephemeral, recreated on each provision. The `environment` spec in `roster.json` is the committed source of truth. |
 | `.squad/role-comm-*` | **Gitignore** | Hand-off manifests (`role-comm-<from>--<to>.md`, shape: `templates/role-comm.md`) — per-run working state, overwritten each dispatch. The deliverables they point at live in committed `file_scope` paths; the manifest itself is ephemeral routing. |
-| `.squad/role-plan-*` | **Gitignore** | The engagement record (hard rule #11) — `.squad/role-plan-<role>.md`, shape: `templates/role-plan.md`. Per-engagement working state: the role writes it before its first write anywhere else, the `PermissionRequest` hook gates on its existence, and the dispatcher clears the records of the roles it's about to (re)dispatch — same lifecycle as `role-comm-*` above. `squad-verify` quotes what must outlive it into `.squad/verification.md`'s `## Process` section. |
+| `.squad/role-plan-*` | **Gitignore** | The engagement record (hard rule #11) — `.squad/role-plan-<role>.md`, shape: `templates/role-plan.md`. Per-engagement working state: the role writes it before its first write anywhere else, the `PermissionRequest` hook gates on its existence, and the dispatcher clears the records of the roles it's about to (re)dispatch — same lifecycle as `role-comm-*` above. `squad-verify` quotes what must outlive it into `.squad/verification.md`'s `## Process` section. A record with `status: escalated` additionally blocks a `met` verdict until the human's ruling lands in `verification.md` — see "Escalation lifecycle" above (hard rules #14–#15). |
 | `.claude/agents/<role>.md` | **Commit** | Generated subagent definitions are part of the project's reproducible setup; committing them lets a teammate clone and run the same squad. |
 | `.claude/worktrees/<role>/` | **Gitignore** | Git worktrees `spawn.sh` pre-creates for Multi-use teammates (per worktrees-doc tip); ephemeral, recreated on each spawn. |
 | `.claude/workflows/squad-dispatch.js` | **Commit** | Generated dynamic-Workflow dispatch script (One-time mode, optional); committing it makes the squad's fan-out rerunnable by anyone who clones. |
@@ -635,6 +672,12 @@ A user running these skills under a different agent runner gets the discipline (
 | `UserPromptSubmit` hook errors | Exit 0 — never block user turns (v1 is observational) |
 | `squad-role` invoked with no goal | Refuse, point user at `squad-onboard` |
 | Role name collision in `.claude/agents/` | Refuse, prompt user to choose a different name |
+
+## Footprint
+
+What hard rules #14–#15 cost a human, stated as plainly as what they buy:
+
+> Zero new setup questions; one new mandatory friction point at verification, placed deliberately at the exact moment a tired human wants to rubber-stamp. That is the design working, and it is a real cost.
 
 ## What v1 deliberately does not do
 

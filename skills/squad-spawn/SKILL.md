@@ -22,13 +22,17 @@ You orchestrate dispatch. The squad has been onboarded (`.squad/goal.md` exists)
 6. **Provision environments.** If any active role has an `environment` block, run `/cheeky-squad-os:squad-env` (or directly `${CLAUDE_PLUGIN_ROOT}/skills/squad-env/scripts/provision.sh .squad/roster.json .squad/goal.md`) **before** dispatching. This builds each role's sandbox and surfaces any `global_needs` for the user to approve. Do not dispatch a role whose sandbox could not be provisioned (the summary's `errors` > 0) — fix the `environment` first. Roles with no `environment` block skip this.
 7. **Clear the hand-off channel (staleness).** Manifests under `.squad/role-comm-*.md` are per-engagement working state. If any exist from a prior run, delete them before dispatching — baking them would feed roles stale hand-offs (the deliverables they referenced live on in committed `file_scope` paths; only the routing note is discarded). **Exception:** keep them when this dispatch is an explicit follow-on stage consuming a previous run's hand-offs (the user says so, or the previous run's synthesis planned this stage). In Evergreen mode, every iteration is a fresh engagement — clear at the start of each.
 8. **Clear engagement records — dispatched roles only.** Delete `.squad/role-plan-<role.name>.md` for each role you are about to dispatch **in this invocation**, and only those, before dispatching. This is narrower than step 7's blanket clear: a parallel dispatch — say, `squad-role` just registered one new teammate and you're dispatching only that role — must never delete a currently-running role's record just because it shares the roster. **Exception, same as step 7:** keep a role's record when this dispatch is an explicit follow-on stage for that role (the `--chain` case at the `/cheeky-squad-os:squad-workflow` command, or the equivalent explicit continuation on this path) — the record still describes the still-current engagement. In Evergreen mode, clear at the start of each iteration, for the role(s) that iteration dispatches.
+9. **Dispatch triage (§3.4 — "who starts?").** For each role you are about to dispatch this invocation, read its `## Stop conditions` from `.squad/role-goal-<role.name>.md` (hard rule #14) and filter to the `needs:`-prefixed bullets only — `stop:` bullets are mid-run bounds the role self-polices, not something a preflight check can evaluate before the role has started. Probe each `needs:` bullet that's actually checkable from here: a file/path existing on disk, a declared tool being present in the role's `tools` list, or one cheap read-only MCP call if the bullet names one explicitly and a matching tool is available. A bullet phrased as a judgment call isn't checkable — skip it silently, it neither passes nor fails triage. Print one line per role:
+   - `starts: machine — <role.name>` — every checkable `needs:` bullet passed (or none were checkable).
+   - `starts: YOU — <role.name>: <failing precondition, verbatim from the bullet>` — at least one checkable bullet failed.
+   This **informs, it never gates** — dispatch every role the user asked for regardless of what triage printed. Its only job is to surface a knowable-in-advance blocker before the run starts instead of thirty seconds in.
 
 ## Build the spawn prompt (per role)
 
-Every spawn — subagent, teammate, scheduled — follows the same canonical prompt order, regardless of mode: **goal → role-goal → hand-offs → file scope → Step 0 → task.**
+Every spawn — subagent, teammate, scheduled — follows the same canonical prompt order, regardless of mode: **goal → role-goal → hand-offs → file scope → Step 0 → stop-condition contract → task.**
 
 ```
-You are the <role.name> teammate on a cheeky-squad-os squad.
+You are the <role.name> role on a cheeky-squad-os squad.
 
 # Squad goal (binding north-star)
 <full contents of .squad/goal.md>
@@ -63,13 +67,53 @@ DEFER until this file exists: the `PermissionRequest` hook checks for it
 before granting either surface, and it does not deny — it just waits, and
 so does your own progress. Write it first.
 
+# Your stop conditions (hard rules #14–#15)
+Your role goal declares this role's `## Stop conditions` — 2-4 bullets,
+each prefixed `needs:` (a precondition, checked before you start) or
+`stop:` (a mid-run bound you self-police; nothing external monitors it). If
+a `stop:` bound becomes true at any point during this run, do not guess
+forward and do not ask a question — a One-time subagent has no mid-run
+channel back to a human; your engagement record is the only hand-back
+there is. Instead:
+
+1. Update your own engagement record (`.squad/role-plan-<role.name>.md`) in
+   place: set frontmatter `status: escalated` and `fired: <the bullet that
+   fired, verbatim from ## Stop conditions>`.
+2. Fill three sections at the end of the record's body, exactly as
+   `templates/role-plan.md` describes: `## What happened` (which condition
+   fired, on what evidence, at which numbered step of your `## Intended
+   approach` you were on — "it seemed stuck" is not evidence, "step 3,
+   `POST /flows/{id}/actions`, returned 403 on the second attempt" is),
+   `## State of the work` (one line per path in `## Deliverables`: complete
+   / partial: `<the gap, named plainly>` / untouched), and `## What would
+   unblock` (the smallest grant, file, or ruling that would let you
+   resume — not "someone should look at this").
+3. Stop. Leave in place whatever deliverables you already finished before
+   the stop condition fired — only the blocked one is left undone. Do not
+   poll for a ruling, do not retry, do not add a fourth section.
+
+Never write `resolved`, `resolution:`, or anything that closes your own
+escalation, anywhere, on this or any file — that ruling belongs to the
+human alone, recorded later in `.squad/verification.md` by
+`/cheeky-squad-os:squad-verify`, never by you (hard rule #10). A role that
+could clear its own escalation could mint the verdict.
+
+**[Multi-use teammate]** Also message the team lead directly (Agent Teams
+mailbox) that you've escalated and where the record is — the message is
+faster visibility, the record is still the authority.
+
+**[Workflow subagent]** Return `status: "blocked"` from this step alongside
+writing the same record. `verify.sh` never trusts a workflow step's return
+value on its own — it reads only `.squad/role-plan-<role.name>.md`, so the
+record is not optional even though you also returned a status.
+
 # Your task on this invocation
 <task description — see below per mode>
 
 Read .squad/goal.md and .squad/role-goal-<role.name>.md at any time during your work. Stay inside your file scope. Hand off deliverables by writing to your scope. When a deliverable is ready for another role, publish a hand-off manifest at .squad/role-comm-<role.name>--<consumer>.md (shape: templates/role-comm.md — what's ready, how to consume, caveats).
 ```
 
-Include the workspace block only for roles that have an `environment`; omit it otherwise. Include the Step 0 block always — it is baked unconditionally, in every mode, with no opt-out.
+Include the workspace block only for roles that have an `environment`; omit it otherwise. Include the Step 0 block and the "Your stop conditions" block always — both are baked unconditionally, in every mode, with no opt-out. A role with an empty `## Stop conditions` section (shouldn't happen post-`squad-role`, but don't assume) still gets the contract block — it just has nothing to fire on.
 
 **Hard rule #4:** the full text of `.squad/goal.md` and the role's `.squad/role-goal-<role.name>.md` is the only reliable channel from parent to subagent. The SessionStart hook does not fire for subagents. Bake the goal text in; don't rely on hook injection for the One-time path.
 
@@ -97,7 +141,7 @@ For a **larger One-time squad** (4+ active roles), or when you want deterministi
 
 You (a skill) **cannot launch a workflow yourself** — the only triggers are the literal keyword `workflow` in a user prompt, `/effort ultracode`, a bundled command, or a saved `/<name>` command, and every run needs the user's approval. So do **not** try to invoke it. Instead, point the user at the dedicated command:
 
-> *"This squad has N roles — it's a good fit for the Workflow dispatch path: deterministic fan-out, structured hand-offs, resumable in-session. Run `/cheeky-squad-os:squad-workflow` to dispatch it that way (you'll be asked to approve the workflow run). Note: workflow subagents run with file edits auto-approved, so a role's writes are not gated by its file_scope on that path — it fans out read/analyze roles with self-policed scoped writes; keep code-mutating roles on this direct path."*
+> *"This squad has N roles — it's a good fit for the Workflow dispatch path: deterministic fan-out, structured hand-offs, resumable in-session. Run `/cheeky-squad-os:squad-workflow` to dispatch it that way (you'll be asked to approve the workflow run). Note: workflow subagents run with file edits auto-approved, so a role's writes are not gated by its file_scope on that path — it fans out read/analyze roles with self-policed scoped writes; keep code-mutating roles on this direct path. A role that hits a stop condition on this path returns `status: "blocked"` from its step AND still writes its engagement record with `status: escalated` — `verify.sh` trusts only the record, never the step's return value alone."*
 
 Then stop, or proceed with the direct-`Agent` path if the user prefers it. See the ["Dynamic Workflows"](../../ARCHITECTURE.md) section of `ARCHITECTURE.md` for where this fits and the canonical script shape in `templates/squad-dispatch.workflow.js`.
 
@@ -172,6 +216,16 @@ For One-time and Multi-use modes, after the squad finishes (or per-iteration in 
 6. Surface any role that failed or returned an error.
 7. Suggest follow-up actions (replace a role, change a scope, replace the goal).
 8. Hand off to `/cheeky-squad-os:squad-verify` to check the goal's Definition of done and write `.squad/verification.md`. Synthesis summarizes; verification decides — never declare the goal met from the summary alone.
+9. **The partnership receipt.** After the summary, compose at most one closing paragraph, built **only** from artifacts that already exist by this point in synthesis — never re-derived, never estimated:
+   - **N `[assumed]` bullets quoted** — the count from step 4 above (every `[assumed]` bullet pulled into this summary this run).
+   - **K blocking a PASS** — of those, how many `squad-verify`'s forcing rule actually capped a signal on. Read this back from `.squad/verification.md`'s "Assumptions surfaced to the human" section *if* step 8 already ran this synthesis; if verification hasn't run yet, drop this clause rather than guess it.
+   - **N escalations** — count of roles dispatched this run whose engagement record now shows `status: escalated`.
+
+   Format: `This run: N [assumed] bullets quoted, K blocking a PASS · N escalations.`
+
+   Emit it only when **at least one** of the counted lines is non-zero — a fully quiet run (nothing assumed, nothing capped, nothing escalated) gets no receipt at all. A line that prints "0 and 0 and 0" every time is the exact ritual hard rule #15 warns against; earn the sentence or skip it.
+
+   Two more counters — a partner-model tally and a world-model tally — arrive in later PRs. Leave the sentence's `·`-separated shape room to grow, but do not print a number for either now; those systems don't exist yet in this codebase, and a count for a system that doesn't exist is the unearned-confidence failure mode this plugin argues against.
 
 ## Refusals
 

@@ -33,7 +33,7 @@
 #       a project with no engagement record anywhere yields the same KEYS as
 #       v0.4.x — these are omitted entirely, never emitted as 0 or null):
 #       "role_plan_present":true
-#       "role_plan_status":"<active|amended|whatever the frontmatter says>"
+#       "role_plan_status":"<active|amended|escalated|whatever the frontmatter says>"
 #       "role_plan_frontmatter_role_match":bool   (false -> filename still wins;
 #                                                    also increments `errors`)
 #       "role_plan_assumption_grades":{"confirmed":N,"reported":N,"inferred":N,"assumed":N}
@@ -41,7 +41,35 @@
 #                                                    not found on disk)
 #       "role_plan_assumed_risks":["<if-wrong target>", …]  (one per [assumed]
 #                                                    bullet in ## Assumptions)
-#   {"summary":true,"roles":N,"signals":N,"errors":K}               final line
+#       "role_plan_fired":"<verbatim>"            (frontmatter "fired:" —
+#                                                    empty string unless the
+#                                                    record is escalated)
+#       "role_plan_hand_back_sections_present":{"what_happened":bool,
+#         "state_of_work":bool,"what_would_unblock":bool}   (the three
+#         "escalated only" sections in templates/role-plan.md — hard rule
+#         #14; present means the heading exists AND has non-blank body once
+#         comments are stripped, not just a bare heading)
+#   {"summary":true,"roles":N,"signals":N,"errors":K}               final line,
+#     PLUS "escalations_open":N — but ONLY once at least one engagement
+#     record exists anywhere in this run (the absence contract again: a
+#     squad that never used #11/#14 produces this exact summary shape with
+#     no escalation key at all, not 0, not null).
+#
+# THE LOAD-BEARING COMPUTATION (hard rule #14/#15, FIX-1) — a role can never
+# mint the human's ruling. escalations_open is computed from two inputs
+# neither of which a role controls:
+#   escalations_open = |records with status: escalated|
+#                     - |their roles named in .squad/verification.md's
+#                        resolved_escalations|
+# by SET DIFFERENCE on role names (not a raw count subtraction) — a role
+# named in resolved_escalations that is not, or is no longer, escalated
+# must never push the count negative. verification.md is squad-verify-owned
+# and structurally unwritable by any role (the .squad/ reservation, v0.4.1
+# / FIX-2), so this subtraction cannot be forged from inside a role's own
+# invocation. Residual, stated honestly: a role CAN flip its own record's
+# status back from escalated to active — that is behaviorally identical to
+# never having stopped, the already-acknowledged aspirational half of #14.
+# What a role cannot do is manufacture the human's ruling that closes one.
 #
 # One honest exception to that "same keys" claim, and it is a VALUE change, not
 # a key change: files_found no longer counts anything under .squad/ (see
@@ -56,6 +84,12 @@ set -u  # no -e: a partial scaffold beats a dead one — count errors instead
 
 ROSTER="${1:-.squad/roster.json}"
 GOAL="${2:-.squad/goal.md}"
+
+# .squad/verification.md — squad-verify-owned, structurally unwritable by any
+# role (the .squad/ reservation). Not a positional parameter: every other
+# .squad/ path in this script (role-plan files below) is hardcoded relative
+# to the project root the same way, per the established convention.
+VERIFICATION=".squad/verification.md"
 
 err() { echo "verify.sh: $*" >&2; }
 
@@ -313,7 +347,92 @@ plan_assumed_risks() {
   fi
 }
 
+# --- Escalation & the evidence bar (hard rules #14-#15) ------------------------
+#
+# section_has_content <file> <heading> → prints "true"/"false". "Present"
+# means the heading exists AND has non-blank body content once frontmatter
+# and HTML comments are stripped (section_lines) — a bare heading left
+# exactly as the template ships it (comment-only) counts as NOT present. A
+# role that escalates without actually saying what happened has handed
+# nothing real back.
+section_has_content() {
+  local file="$1" heading="$2" body
+  body=$(section_lines "$file" "$heading" \
+    | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' \
+    | grep -v '^[[:space:]]*$' || true)
+  if [ -n "$body" ]; then printf 'true'; else printf 'false'; fi
+}
+
+# resolved_escalation_roles <file> → prints one role name per line, read from
+# the frontmatter "resolved_escalations:" YAML list (FIX-1). This is the
+# ONLY place a human's ruling reaches this script, and the file it reads is
+# structurally unwritable by any role (the .squad/ reservation).
+#
+# Accepts EITHER YAML shape a squad-verify run could produce:
+#   block style   resolved_escalations:\n  - roleA\n  - roleB
+#   flow style    resolved_escalations: [roleA, roleB]   (incl. bare `[]`)
+# Block style is canonical (templates/verification.md, and the worked example
+# in examples/klaviyo-audit.md); flow style is parsed too so a real resolution
+# is never missed on a format guess. Block-style dashes are matched with
+# OPTIONAL leading indentation — the canonical YAML spelling indents them two
+# spaces, and a parser that only accepted a column-0 dash silently ignored a
+# ruling a human had actually recorded, leaving escalations_open permanently
+# above zero and `met` unreachable.
+#
+# Never fatal: a missing file, a missing key, or a malformed / partially-
+# written file (no closing fence, garbage body, whatever) all degrade to
+# "nothing resolved" — empty output — rather than erroring. That is what
+# keeps a parse failure from silently ZEROING the open count: an empty
+# resolved list subtracts nothing, so the full escalated count stands
+# rather than being (wrongly) driven to 0.
+resolved_escalation_roles() {
+  local file="$1"
+  [ -f "$file" ] || return 0
+  awk '
+    BEGIN { fm = 0; seen_fence = 0; in_key = 0 }
+    /^---[[:space:]]*$/ {
+      if (!seen_fence) { fm = 1; seen_fence = 1; next }
+      else if (fm)     { exit }
+    }
+    fm {
+      if ($0 ~ /^resolved_escalations:/) {
+        line = $0
+        sub(/^resolved_escalations:[[:space:]]*/, "", line)
+        sub(/[[:space:]]+#.*$/, "", line)
+        sub(/[[:space:]]+$/, "", line)
+        if (line == "") { in_key = 1; next }
+        if (line ~ /^\[.*\]$/) {
+          inner = substr(line, 2, length(line) - 2)
+          n = split(inner, items, ",")
+          for (i = 1; i <= n; i++) {
+            item = items[i]
+            gsub(/^[[:space:]]+|[[:space:]]+$/, "", item)
+            gsub(/^["\x27]+|["\x27]+$/, "", item)
+            if (item != "") print item
+          }
+        }
+        in_key = 0
+        next
+      }
+      if (in_key) {
+        if ($0 ~ /^[[:space:]]*-[[:space:]]+[^[:space:]]/) {
+          line = $0
+          sub(/^[[:space:]]*-[[:space:]]+/, "", line)
+          sub(/[[:space:]]+#.*$/, "", line)
+          sub(/[[:space:]]+$/, "", line)
+          gsub(/^["\x27]+|["\x27]+$/, "", line)
+          if (line != "") print line
+          next
+        }
+        in_key = 0
+      }
+    }
+  ' "$file" 2>/dev/null || true
+}
+
 ROLE_COUNT=0
+ROLE_PLAN_COUNT=0        # roles with a published engagement record, any status
+ESCALATED_LIST=()        # filenames (role names) whose record's status is "escalated"
 ROLES_JSON=$(jq -c '.roles[]? | select(.active == true)' "$ROSTER" 2>/dev/null)
 
 while IFS= read -r ROLE_JSON; do
@@ -361,6 +480,27 @@ while IFS= read -r ROLE_JSON; do
     PLAN_DELIV_MISSING=$(plan_deliverables_missing "$PLAN_FILE")
     PLAN_RISKS=$(plan_assumed_risks "$PLAN_FILE")
 
+    # Escalation half of the schema (hard rule #14) — computed for every
+    # published record, not only escalated ones, so the per-role shape
+    # stays stable regardless of status (same discipline as the fields
+    # above): an active/amended record simply reports an empty "fired" and
+    # all-false sections.
+    PLAN_FIRED=$(frontmatter_field "$PLAN_FILE" "fired")
+    PLAN_WH=$(section_has_content "$PLAN_FILE" "What happened")
+    PLAN_SW=$(section_has_content "$PLAN_FILE" "State of the work")
+    PLAN_WU=$(section_has_content "$PLAN_FILE" "What would unblock")
+    PLAN_SECTIONS=$(jq -nc \
+      --argjson wh "$PLAN_WH" --argjson sw "$PLAN_SW" --argjson wu "$PLAN_WU" \
+      '{what_happened: $wh, state_of_work: $sw, what_would_unblock: $wu}')
+
+    ROLE_PLAN_COUNT=$((ROLE_PLAN_COUNT + 1))
+    # Filename wins (same rule PLAN_ROLE_MATCH already enforces above): this
+    # record is attributed to $NAME for the open-escalation count too, never
+    # to whatever the frontmatter "role:" happens to say.
+    if [ "$PLAN_STATUS" = "escalated" ]; then
+      ESCALATED_LIST+=("$NAME")
+    fi
+
     jq -nc \
       --arg r "$NAME" --argjson scope "$SCOPE_JSON" \
       --argjson n "$FILES" --argjson rg "$RG_PRESENT" \
@@ -369,13 +509,17 @@ while IFS= read -r ROLE_JSON; do
       --argjson pgrades "$PLAN_GRADES" \
       --argjson pmissing "$PLAN_DELIV_MISSING" \
       --argjson prisks "$PLAN_RISKS" \
+      --arg pfired "$PLAN_FIRED" \
+      --argjson psections "$PLAN_SECTIONS" \
       '{role: $r, scope: $scope, files_found: $n, role_goal_present: $rg,
         role_plan_present: true,
         role_plan_status: $pstatus,
         role_plan_frontmatter_role_match: $pmatch,
         role_plan_assumption_grades: $pgrades,
         role_plan_deliverables_missing: $pmissing,
-        role_plan_assumed_risks: $prisks}'
+        role_plan_assumed_risks: $prisks,
+        role_plan_fired: $pfired,
+        role_plan_hand_back_sections_present: $psections}'
   else
     jq -nc \
       --arg r "$NAME" --argjson scope "$SCOPE_JSON" \
@@ -386,12 +530,42 @@ while IFS= read -r ROLE_JSON; do
   ROLE_COUNT=$((ROLE_COUNT + 1))
 done <<< "$ROLES_JSON"
 
+# --- Escalations open (hard rule #14/#15, FIX-1) --------------------------------
+#
+# escalations_open = |escalated roles| - |those roles named in
+# verification.md's resolved_escalations| — a SET DIFFERENCE, computed only
+# once at least one engagement record exists anywhere (ROLE_PLAN_COUNT > 0).
+# Neither input is role-controlled: the escalated set comes from records
+# this script has already read above, keyed by filename; the resolved set
+# comes from .squad/verification.md, which no role can write.
+
+ESCALATIONS_OPEN=0
+if [ "$ROLE_PLAN_COUNT" -gt 0 ]; then
+  RESOLVED=$(resolved_escalation_roles "$VERIFICATION")
+  if [ "${#ESCALATED_LIST[@]}" -gt 0 ]; then
+    for ESC_ROLE in "${ESCALATED_LIST[@]}"; do
+      if ! grep -Fxq "$ESC_ROLE" <<< "$RESOLVED" 2>/dev/null; then
+        ESCALATIONS_OPEN=$((ESCALATIONS_OPEN + 1))
+      fi
+    done
+  fi
+fi
+
 # --- Summary -------------------------------------------------------------------
 
-jq -nc \
-  --argjson roles "$ROLE_COUNT" \
-  --argjson signals "$SIGNAL_COUNT" \
-  --argjson errs "$ERRORS" \
-  '{summary: true, roles: $roles, signals: $signals, errors: $errs}'
+if [ "$ROLE_PLAN_COUNT" -gt 0 ]; then
+  jq -nc \
+    --argjson roles "$ROLE_COUNT" \
+    --argjson signals "$SIGNAL_COUNT" \
+    --argjson errs "$ERRORS" \
+    --argjson open "$ESCALATIONS_OPEN" \
+    '{summary: true, roles: $roles, signals: $signals, errors: $errs, escalations_open: $open}'
+else
+  jq -nc \
+    --argjson roles "$ROLE_COUNT" \
+    --argjson signals "$SIGNAL_COUNT" \
+    --argjson errs "$ERRORS" \
+    '{summary: true, roles: $roles, signals: $signals, errors: $errs}'
+fi
 
 exit 0
