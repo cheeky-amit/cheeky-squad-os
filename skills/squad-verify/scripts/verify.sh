@@ -674,7 +674,12 @@ claims_live_keys() {
   local valid key status
   while IFS=$'\t' read -r valid key status; do
     [ -z "$key" ] && continue
-    [ "$valid" = "valid" ] && [ "$status" = "live" ] || continue
+    # Only valid, live beliefs can participate in a conflict — an invalid block
+    # never reaches a projection (hard rule #13), and a superseded or retired
+    # one is history, not a live claim.
+    if [ "$valid" != "valid" ] || [ "$status" != "live" ]; then
+      continue
+    fi
     if [ -n "$dup_keys" ] && printf '%s\n' "$dup_keys" | grep -Fxq "$key"; then
       continue
     fi
