@@ -21,10 +21,11 @@ You orchestrate dispatch. The squad has been onboarded (`.squad/goal.md` exists)
 5. Note the squad's mode from `goal.md` frontmatter.
 6. **Provision environments.** If any active role has an `environment` block, run `/cheeky-squad-os:squad-env` (or directly `${CLAUDE_PLUGIN_ROOT}/skills/squad-env/scripts/provision.sh .squad/roster.json .squad/goal.md`) **before** dispatching. This builds each role's sandbox and surfaces any `global_needs` for the user to approve. Do not dispatch a role whose sandbox could not be provisioned (the summary's `errors` > 0) — fix the `environment` first. Roles with no `environment` block skip this.
 7. **Clear the hand-off channel (staleness).** Manifests under `.squad/role-comm-*.md` are per-engagement working state. If any exist from a prior run, delete them before dispatching — baking them would feed roles stale hand-offs (the deliverables they referenced live on in committed `file_scope` paths; only the routing note is discarded). **Exception:** keep them when this dispatch is an explicit follow-on stage consuming a previous run's hand-offs (the user says so, or the previous run's synthesis planned this stage). In Evergreen mode, every iteration is a fresh engagement — clear at the start of each.
+8. **Clear engagement records — dispatched roles only.** Delete `.squad/role-plan-<role.name>.md` for each role you are about to dispatch **in this invocation**, and only those, before dispatching. This is narrower than step 7's blanket clear: a parallel dispatch — say, `squad-role` just registered one new teammate and you're dispatching only that role — must never delete a currently-running role's record just because it shares the roster. **Exception, same as step 7:** keep a role's record when this dispatch is an explicit follow-on stage for that role (the `--chain` case at the `/cheeky-squad-os:squad-workflow` command, or the equivalent explicit continuation on this path) — the record still describes the still-current engagement. In Evergreen mode, clear at the start of each iteration, for the role(s) that iteration dispatches.
 
 ## Build the spawn prompt (per role)
 
-Every spawn — subagent, teammate, scheduled — receives the same prompt structure:
+Every spawn — subagent, teammate, scheduled — follows the same canonical prompt order, regardless of mode: **goal → role-goal → hand-offs → file scope → Step 0 → task.**
 
 ```
 You are the <role.name> teammate on a cheeky-squad-os squad.
@@ -35,6 +36,9 @@ You are the <role.name> teammate on a cheeky-squad-os squad.
 # Your role's goal
 <full contents of .squad/role-goal-<role.name>.md>
 
+# Incoming hand-offs — only if any .squad/role-comm-*--<role.name>.md (or --any.md) with status: ready exist
+<full contents of each ready manifest addressed to this role>
+
 # Your role's file scope
 <role.file_scope from roster.json>
 
@@ -43,8 +47,21 @@ Your sandbox is <role.environment.workspace>. Work inside it freely. Before
 running tooling, load your environment: `set -a; . <workspace>/env; set +a; <cmd>`.
 Seeded reference material is under the sandbox.
 
-# Incoming hand-offs — only if any .squad/role-comm-*--<role.name>.md (or --any.md) with status: ready exist
-<full contents of each ready manifest addressed to this role>
+# Step 0 — publish your engagement record (hard rule #11)
+Before your first write to anything else, write your engagement record to
+`.squad/role-plan-<role.name>.md`, using the schema in `templates/role-plan.md`:
+frontmatter `role: <role.name>`, `created: <ISO-8601>`, `status: active`;
+body sections in order — `## Task read`, `## Intended approach`,
+`## Deliverables`, `## Assumptions`, `## Amendments`. Grade every assumption
+with exactly one of `[confirmed]`, `[reported]`, `[inferred]`, `[assumed]` —
+never a number — and for every `[assumed]` bullet, name what breaks:
+`if wrong → <deliverable or DoD signal>`. This path is granted
+unconditionally, before anything else — it is the bootstrap, not a
+generation choice you can skip your way around. Every other in-scope
+Edit/Write, and your hand-off outbox (`.squad/role-comm-<role.name>--*`),
+DEFER until this file exists: the `PermissionRequest` hook checks for it
+before granting either surface, and it does not deny — it just waits, and
+so does your own progress. Write it first.
 
 # Your task on this invocation
 <task description — see below per mode>
@@ -52,7 +69,7 @@ Seeded reference material is under the sandbox.
 Read .squad/goal.md and .squad/role-goal-<role.name>.md at any time during your work. Stay inside your file scope. Hand off deliverables by writing to your scope. When a deliverable is ready for another role, publish a hand-off manifest at .squad/role-comm-<role.name>--<consumer>.md (shape: templates/role-comm.md — what's ready, how to consume, caveats).
 ```
 
-Include the workspace block only for roles that have an `environment`; omit it otherwise.
+Include the workspace block only for roles that have an `environment`; omit it otherwise. Include the Step 0 block always — it is baked unconditionally, in every mode, with no opt-out.
 
 **Hard rule #4:** the full text of `.squad/goal.md` and the role's `.squad/role-goal-<role.name>.md` is the only reliable channel from parent to subagent. The SessionStart hook does not fire for subagents. Bake the goal text in; don't rely on hook injection for the One-time path.
 
@@ -98,7 +115,7 @@ Then stop, or proceed with the direct-`Agent` path if the user prefers it. See t
    - Print a one-paragraph explanation of what Agent Teams adds: shared task list, mailbox, direct teammate-to-teammate messaging, true parallel execution.
    - Offer to write `{"env": {"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"}}` to `~/.claude/settings.json`. **Ask consent in the same turn.** Never write the setting silently. Format the proposed change so the user sees the exact JSON before accepting.
    - If user accepts: write the setting (merge with existing JSON, don't clobber). Tell them to restart Claude Code. Stop — they'll resume `squad-spawn` after restart.
-   - If user declines: fall back to **One-time mode dispatch** (sequential subagents). Print a warning: *"Falling back to subagents — mailbox, shared task list, and direct teammate-to-teammate messaging are unavailable. File isolation now comes from each subagent honoring its `file_scope`, plus per-subagent worktrees where a role sets `isolation: worktree` in its frontmatter."*
+   - If user declines: fall back to **One-time mode dispatch** (sequential subagents). Print a warning: *"Falling back to subagents — mailbox, shared task list, and direct teammate-to-teammate messaging are unavailable. File isolation now comes from each subagent honoring its `file_scope`, plus per-subagent worktrees where a role sets `isolation: worktree` in its frontmatter."* This fallback path uses the same spawn-prompt template as One-time mode — Step 0 is still baked in, unconditionally; nothing about the fallback exempts a role from publishing its engagement record first.
 
 ### Mode: Evergreen
 
@@ -147,11 +164,14 @@ After the user picks an option, confirm: *"Squad is set up for Evergreen mode vi
 
 For One-time and Multi-use modes, after the squad finishes (or per-iteration in Evergreen):
 
-1. Read each role's outputs from their `file_scope`.
-2. Compose a user-facing summary: what each role produced, where the artifacts live, what's next.
-3. Surface any role that failed or returned an error.
-4. Suggest follow-up actions (replace a role, change a scope, replace the goal).
-5. Hand off to `/cheeky-squad-os:squad-verify` to check the goal's Definition of done and write `.squad/verification.md`. Synthesis summarizes; verification decides — never declare the goal met from the summary alone.
+1. **Collect worktree-isolated records first.** Run `bash "${CLAUDE_PLUGIN_ROOT}/skills/squad-spawn/scripts/spawn.sh" collect .squad/roster.json`. A role dispatched under `isolation: worktree` (hard rule #7) wrote its engagement record inside its worktree — invisible at the project root until this copies it in. Cheap and always safe to run even when no role used worktree isolation (it reports `skipped-no-worktree` per role and moves on); skipping this step means step 3 below silently sees "no record" for a worktree role that actually declared one.
+2. Read each role's outputs from their `file_scope`.
+3. **Declared-vs-produced diff.** For each dispatched role, read its engagement record at `.squad/role-plan-<role.name>.md`, if it published one. Diff the record's `## Deliverables` list against what actually landed in `file_scope`: name every path the role declared but never produced, and every path it produced but never declared. A role with no record has nothing to diff against — say so plainly in that role's row rather than skipping it silently.
+4. **Quote every `[assumed]` bullet, verbatim.** Pull every `## Assumptions` bullet graded `[assumed]` out of each record into the summary, unedited — the claim and its `if wrong → …` clause together. These are the guesses the human should see even when nothing failed; do not paraphrase, summarize, or drop the `if wrong →` clause.
+5. Compose a user-facing summary: what each role produced, where the artifacts live, what's next.
+6. Surface any role that failed or returned an error.
+7. Suggest follow-up actions (replace a role, change a scope, replace the goal).
+8. Hand off to `/cheeky-squad-os:squad-verify` to check the goal's Definition of done and write `.squad/verification.md`. Synthesis summarizes; verification decides — never declare the goal met from the summary alone.
 
 ## Refusals
 

@@ -119,6 +119,27 @@ ${role.handoffs.join("\n\n---\n\n")}
 		: ""
 }
 
+# Step 0 (hard rule #11) — publish your engagement record BEFORE any other write
+Before writing anything else — including your deliverables — publish your
+engagement record at .squad/role-plan-${role.name}.md, following the schema in
+templates/role-plan.md exactly: frontmatter (role: ${role.name}, created,
+status: active), then the sections ## Task read, ## Intended approach,
+## Deliverables, ## Assumptions, ## Amendments. Grade every assumption by
+evidence class, never by a confidence number — [confirmed] names the file,
+command, or URL that proves it; [reported] names the source (goal / hand-off
+/ artifact / human); [inferred] says how you reasoned to it; [assumed] names
+what breaks if wrong, as "if wrong → <deliverable or Definition-of-done
+signal>". If your read of the task diverges from your role goal above, say so
+here — that divergence is the headline, not a footnote.
+
+Note for this dispatch path: you run under acceptEdits (see below), so the
+PermissionRequest plan gate that defers an ungated role's writes elsewhere in
+this plugin is inert for you — nothing here mechanically blocks a skipped
+Step 0. Publish the record anyway. It is what squad-verify's Process table
+and this run's synthesis diff (declared-vs-produced) read; skipping it makes
+your run's reasoning invisible to the human afterward, even though your
+files still land.
+
 You are running with file edits auto-approved (acceptEdits) — the squad's
 PermissionRequest scope hook does NOT gate you here. Therefore you MUST police
 your own scope: write deliverables ONLY to the paths above. Do not edit, move,

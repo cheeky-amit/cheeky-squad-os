@@ -8,6 +8,13 @@
 #   in-scope allow · out-of-scope defer · Bash defer · main-session defer ·
 #   unknown-role defer · single-segment glob semantics · ".." traversal defer ·
 #   missing-jq fail-open.
+#
+# THE PLAN GATE (hard rule #11). Since v1.0 both auto-approve surfaces are
+# additionally gated on the role having published .squad/role-plan-<role>.md.
+# So `setup` publishes a record for every roster role: with the gate satisfied,
+# every pre-existing case below asserts exactly the scope/reservation semantics
+# it always asserted, unchanged. The gate itself is exercised by its own
+# section at the bottom, which removes the record first.
 
 setup() {
   HOOK="$BATS_TEST_DIRNAME/../hooks/permission-request.sh"
@@ -25,10 +32,26 @@ setup() {
     { "name": "broadscope", "file_scope": ["**"],
       "environment": { "workspace": ".squad/workspaces/broadscope/" } },
     { "name": "greedy", "file_scope": ["**"],
-      "environment": { "workspace": ".squad/" } }
+      "environment": { "workspace": ".squad/" } },
+    { "name": "Weird.Name", "file_scope": ["**"] }
   ]
 }
 JSON
+  for r in reporter rootdoc datakeeper builder broadscope greedy; do
+    publish_record "$r"
+  done
+}
+
+# publish_record <role> → the role's engagement record exists (hard rule #11).
+# The hook's gate is a bare file-existence check, so the body is irrelevant.
+publish_record() {
+  printf -- '---\nrole: %s\nstatus: active\n---\n' "$1" \
+    > "$PROJECT_DIR/.squad/role-plan-$1.md"
+}
+
+# withdraw_record <role> → the role has NOT declared its intent.
+withdraw_record() {
+  rm -f "$PROJECT_DIR/.squad/role-plan-$1.md"
 }
 
 teardown() {
@@ -312,6 +335,133 @@ run_hook() {
 @test "reservation: an unreserved .squad/ path defers even for a broad scope" {
   # Nothing owns .squad/scratch.md — under the reservation it is not grantable.
   run_hook '{"agent_type":"broadscope","tool_name":"Write","tool_input":{"file_path":".squad/scratch.md"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+# --- the plan gate (hard rule #11, v1.0) --------------------------------------
+#
+# Both auto-approve surfaces are conditioned on the role having published its
+# engagement record. The record's own path is the bootstrap and is granted
+# unconditionally. The gate DEFERS — it never denies — so an undeclared role
+# gets exactly v0.4.x's out-of-scope behavior: the human is asked.
+
+@test "gate: in-scope Write DEFERS until the engagement record exists" {
+  withdraw_record reporter
+  run_hook '{"agent_type":"reporter","tool_name":"Write","tool_input":{"file_path":"reports/audit.md"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "gate: the same in-scope Write is auto-approved once the record exists" {
+  withdraw_record reporter
+  run_hook '{"agent_type":"reporter","tool_name":"Write","tool_input":{"file_path":"reports/audit.md"}}'
+  [ -z "$output" ]
+  publish_record reporter
+  run_hook '{"agent_type":"reporter","tool_name":"Write","tool_input":{"file_path":"reports/audit.md"}}'
+  [ "$status" -eq 0 ]
+  printf '%s' "$output" | jq -e '.hookSpecificOutput.decision.behavior == "allow"'
+}
+
+@test "gate: in-sandbox Bash DEFERS until the engagement record exists" {
+  withdraw_record builder
+  run_hook '{"agent_type":"builder","tool_name":"Bash","tool_input":{"command":"mkdir -p .squad/workspaces/builder/outputs"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "gate: the role's OWN hand-off outbox DEFERS until the record exists" {
+  withdraw_record reporter
+  run_hook '{"agent_type":"reporter","tool_name":"Write","tool_input":{"file_path":".squad/role-comm-reporter--builder.md"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "gate: DEFERS, never denies — no decision object is ever emitted" {
+  withdraw_record reporter
+  run_hook '{"agent_type":"reporter","tool_name":"Write","tool_input":{"file_path":"reports/audit.md"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  [[ "$output" != *deny* ]]
+}
+
+@test "bootstrap: writing the role's OWN record is allowed with no record present" {
+  # A role cannot publish its plan if publishing the plan required a plan.
+  withdraw_record reporter
+  run_hook '{"agent_type":"reporter","tool_name":"Write","tool_input":{"file_path":".squad/role-plan-reporter.md"}}'
+  [ "$status" -eq 0 ]
+  printf '%s' "$output" | jq -e '.hookSpecificOutput.decision.behavior == "allow"'
+}
+
+@test "bootstrap: the record grant is derived, not scoped — a narrow role gets it too" {
+  # `datakeeper` is scoped "data/*" and registers nothing under .squad/.
+  withdraw_record datakeeper
+  run_hook '{"agent_type":"datakeeper","tool_name":"Write","tool_input":{"file_path":".squad/role-plan-datakeeper.md"}}'
+  [ "$status" -eq 0 ]
+  printf '%s' "$output" | jq -e '.hookSpecificOutput.decision.behavior == "allow"'
+}
+
+@test "bootstrap: a legacy roster with no .squad/ paths registered still bootstraps" {
+  # Pre-v1.0 rosters need no migration — the grant is derived from agent_type.
+  cat > "$PROJECT_DIR/.squad/roster.json" <<'JSON'
+{ "roles": [ { "name": "legacy", "file_scope": ["docs/**"] } ] }
+JSON
+  run_hook '{"agent_type":"legacy","tool_name":"Write","tool_input":{"file_path":".squad/role-plan-legacy.md"}}'
+  [ "$status" -eq 0 ]
+  printf '%s' "$output" | jq -e '.hookSpecificOutput.decision.behavior == "allow"'
+}
+
+@test "gate: a broad-scope role CANNOT write ANOTHER role's engagement record" {
+  # Forgery check — the record is reserved, whatever the scope says, and even
+  # with the forging role's own record in place.
+  run_hook '{"agent_type":"broadscope","tool_name":"Write","tool_input":{"file_path":".squad/role-plan-reporter.md"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "gate: a workspace declared as '.squad/' cannot reach another role's record" {
+  run_hook '{"agent_type":"greedy","tool_name":"Write","tool_input":{"file_path":".squad/role-plan-reporter.md"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "gate: the role's own sandbox Edit/Write is ungated (reservation, hard rule #8)" {
+  # The sandbox grant lives inside the .squad/ reservation branch, which runs
+  # before the gate — hard rule #8 is not conditioned on hard rule #11 here.
+  withdraw_record builder
+  run_hook '{"agent_type":"builder","tool_name":"Write","tool_input":{"file_path":".squad/workspaces/builder/inputs/x.csv"}}'
+  [ "$status" -eq 0 ]
+  printf '%s' "$output" | jq -e '.hookSpecificOutput.decision.behavior == "allow"'
+}
+
+@test "gate: a non-kebab agent_type gets no record grant and no auto-approval" {
+  # safe_agent_name refuses to build a derived path from it, so it can neither
+  # bootstrap nor pass the gate — even scoped "**".
+  run_hook '{"agent_type":"Weird.Name","tool_name":"Write","tool_input":{"file_path":".squad/role-plan-Weird.Name.md"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  run_hook '{"agent_type":"Weird.Name","tool_name":"Write","tool_input":{"file_path":"src/app.ts"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+# --- project-root resolution (v1.0, worktree isolation) -----------------------
+
+@test "root resolution: falls back to the hook input's cwd when CLAUDE_PROJECT_DIR has no roster" {
+  # A role under `isolation: worktree` (hard rule #7) works in the worktree,
+  # and its .squad/ — record included — lives there.
+  other="$(mktemp -d)"
+  run env CLAUDE_PROJECT_DIR="$other" bash "$HOOK" <<< "{\"agent_type\":\"reporter\",\"cwd\":\"$PROJECT_DIR\",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"reports/audit.md\"}}"
+  rm -rf "$other"
+  [ "$status" -eq 0 ]
+  printf '%s' "$output" | jq -e '.hookSpecificOutput.decision.behavior == "allow"'
+}
+
+@test "root resolution: no roster at either candidate defers" {
+  other="$(mktemp -d)"
+  empty="$(mktemp -d)"
+  run env CLAUDE_PROJECT_DIR="$other" bash "$HOOK" <<< "{\"agent_type\":\"reporter\",\"cwd\":\"$empty\",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"reports/audit.md\"}}"
+  rm -rf "$other" "$empty"
   [ "$status" -eq 0 ]
   [ -z "$output" ]
 }

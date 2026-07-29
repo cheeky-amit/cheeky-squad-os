@@ -7,6 +7,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 
 Work toward 1.0.0 — "the partnership release". Entries accumulate here and the version bumps once, when the release lands.
 
+### Added
+
+- **Hard rule #11 — plan before act. The engagement record.** A role now publishes `.squad/role-plan-<role>.md` — its read of the task, its intended approach, the exact deliverables it will produce, and its assumptions — **before its first write to anything else**. Until that record exists, the `PermissionRequest` hook defers the role's in-scope Edit/Write, its in-sandbox Bash, and its hand-off outbox. It never denies: a role that declines to declare gets exactly the behavior an out-of-scope write got before, so no roster needs migrating. The record's own path is granted unconditionally — a role cannot publish its plan if publishing the plan required a plan. *Autonomy is purchased with intent.*
+
+  **Uncertainty is graded by evidence class, never by number.** A role cannot derive "73% confident", so a number would be theatre. Every assumption carries one of four grades and each owes something: `[confirmed]` names the file, command, or URL that proves it · `[reported]` names the source · `[inferred]` says how · `[assumed]` names what breaks, as `if wrong → <deliverable or Definition-of-done signal>`. That last clause is load-bearing: **`squad-verify` refuses to PASS a Definition-of-done signal resting on the same role's `[assumed]` bullet** — it is at most NEEDS-HUMAN, with the guess quoted verbatim. Naming the blast radius is what makes a guess reviewable instead of invisible.
+
+  `squad-spawn` bakes the record as Step 0 of every dispatch (all three modes, the fallback path, and the workflow path), clears the records of **only the roles it is dispatching**, and its synthesis diffs declared-versus-produced. `squad-verify` gains a `## Process` section — evidence about *how* the work was done, not only what it produced. `spawn.sh collect` brings records back from worktree-isolated roles, since a gitignored record is never carried by a merge.
+
+### Fixed
+
+- **Worktree-isolated roles could lose auto-approval entirely.** The hook resolved both the roster and its containment root from `$CLAUDE_PROJECT_DIR`. For a role running under `isolation: worktree` (hard rule #7), that variable may point at the main checkout while the role's `.squad/` lives in the worktree — in which case the hook found no roster, deferred every write, and additionally rejected absolute worktree paths as outside the project. It now resolves to whichever of `$CLAUDE_PROJECT_DIR` or the hook input's `cwd` actually holds `.squad/roster.json`, and defers exactly as before when neither does.
+
 ### Changed
 
 - **Runtime truth sync.** v0.4.0's docs were written 2026-06-10 and several claims had gone stale. Re-verified against live documentation on 2026-07-29 and corrected across `ARCHITECTURE.md`, `LOGIC.md`, `README.md`, `CONTRIBUTING.md`, `docs/workflows-runtime-reference.md`, `commands/squad-workflow.md`, the skills, the templates, and the examples:

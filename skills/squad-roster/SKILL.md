@@ -96,6 +96,7 @@ If the user asks "audit scopes", "show file scopes", or similar:
 1. Read all roles' `file_scope` arrays.
 2. Print a table: scope glob → role name.
 3. Highlight overlaps — if two roles claim the same path, print a warning. In Multi-use mode, overlaps cause merge conflicts; in One-time mode, they may produce inconsistent writes.
+4. **Note the structural `.squad/` grants — not overlaps.** `hooks/permission-request.sh` grants each role three paths structurally, derived from its own `agent_type`/roster entry, and checked *before* `file_scope` is ever consulted for a `.squad/` path: its own engagement record `.squad/role-plan-<name>.md` (hard rule #11, granted unconditionally — it is the bootstrap), its own hand-off outbox `.squad/role-comm-<name>--*` (granted once that record exists), and — when it has an `environment` block — its own `<environment.workspace>/**` sandbox. None of the three need to appear in `file_scope` for the grant to work; a roster that lists one or more anyway (pre-v0.4.1 rosters commonly list the outbox) is **valid but redundant**, not an error. Do not flag them as overlaps between roles even when two roles' listed globs both happen to cover them — the hook never reaches `file_scope` for a `.squad/` path either way. (The `<environment.workspace>/**` glob is the one exception this skill still asks for explicitly — see Validation below — kept for the human-readable roster view, not because the grant needs it.)
 
 ### Regenerate human view
 

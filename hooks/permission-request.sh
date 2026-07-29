@@ -39,15 +39,31 @@
 # is selected by the agent_type Claude Code reports, and roster.json itself is
 # now deferred.
 #
-# Granted (v0.4.1):
+# Granted:
+#   - .squad/role-plan-<agent>.md        its own engagement record (rule #11)
 #   - .squad/role-comm-<agent>--*        its own hand-off outbox
 #   - <its own environment.workspace>/** its own sandbox (hard rule #8)
 # Deferred: every other .squad/ path, for every role, at every scope.
 #
-# Note this is a net WIDENING of two paths and a net NARROWING of everything
-# else: a role with a narrow scope that never registered its outbox now gets it
-# structurally, and a role with a broad scope loses the rest. Stated plainly
-# because "the hook only ever removes an auto-approval" is no longer true.
+# THE PLAN GATE (hard rule #11)
+# -----------------------------
+# Both auto-approve surfaces above — in-scope Edit/Write and in-sandbox Bash —
+# are additionally conditioned on the role having published its engagement
+# record at .squad/role-plan-<agent>.md. Autonomy is purchased with intent.
+#
+# The record's own path is granted UNCONDITIONALLY (see squad_grant): a role
+# cannot publish its plan if publishing the plan required a plan. Everything
+# else waits on it.
+#
+# The gate DEFERS, it never denies. A role that declines to declare gets
+# exactly the behavior an out-of-scope write got in v0.4.x — the human is
+# asked. That is also why a pre-v1.0 roster needs no migration.
+#
+# Note this is a net WIDENING of three derived paths and a net NARROWING of
+# everything else: a role with a narrow scope that never registered its record
+# or outbox now gets both structurally, and a role with a broad scope loses the
+# rest. Stated plainly because "the hook only ever removes an auto-approval" is
+# no longer true. What is true: the hook only ever grants a role its own state.
 #
 # Always exits 0. Fail-open on any error.
 
@@ -57,9 +73,6 @@ set -u
 # ranges must never change a containment decision.
 LC_ALL=C
 export LC_ALL
-
-PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$PWD}"
-ROSTER="$PROJECT_DIR/.squad/roster.json"
 
 # Read hook input from stdin into a variable. If anything fails downstream
 # we exit 0 with no output, which means "no decision — defer to user".
@@ -73,6 +86,28 @@ fi
 if ! command -v jq >/dev/null 2>&1; then
   exit 0
 fi
+
+# --- Resolve the project root ------------------------------------------------
+#
+# A role running under `isolation: worktree` (hard rule #7) works in a git
+# worktree, not the main checkout — and its .squad/ lives there. Resolving
+# solely from CLAUDE_PROJECT_DIR is therefore not safe: if that variable points
+# at the main checkout, this hook reads the wrong roster (or none), every
+# containment check runs against the wrong root, and the role gets no
+# auto-approval at all.
+#
+# The hook input carries `cwd` — where the tool call is actually happening.
+# Prefer whichever of the two candidates actually holds a roster. Both come
+# from Claude Code, not from the role, so neither is attacker-controlled; and
+# if neither has one we defer exactly as before.
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$PWD}"
+if [ ! -f "$PROJECT_DIR/.squad/roster.json" ]; then
+  HOOK_CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // empty' 2>/dev/null)
+  if [ -n "$HOOK_CWD" ] && [ -f "$HOOK_CWD/.squad/roster.json" ]; then
+    PROJECT_DIR="$HOOK_CWD"
+  fi
+fi
+ROSTER="$PROJECT_DIR/.squad/roster.json"
 
 if [ ! -f "$ROSTER" ]; then
   exit 0
@@ -194,6 +229,22 @@ path_in_scope() {
   return 1
 }
 
+# has_engagement_record <agent> → returns 0 if this role has published its
+# engagement record (hard rule #11). This is the plan gate: autonomy is
+# purchased with intent. Until the record exists a role's in-scope Edit/Write
+# and in-sandbox Bash DEFER — they are never denied, so a role that declines to
+# plan simply falls back to v0.4.x's out-of-scope behavior (the human is asked).
+#
+# Deliberately a bare file-existence check, not a schema validation: the gate's
+# job is "did you declare before acting", and squad-verify is what judges the
+# declaration's quality. A hook that parsed the record could fail closed on a
+# malformed one, which would be deny-shaped — this plugin never denies.
+has_engagement_record() {
+  local agent="$1"
+  safe_agent_name "$agent" || return 1
+  [ -f "$PROJECT_ABS/.squad/role-plan-$agent.md" ]
+}
+
 # rel_under_squad <rel> → returns 0 if <rel> is the .squad/ dir or nested in it.
 # Anything matching this takes the reservation path and never sees file_scope.
 rel_under_squad() {
@@ -231,7 +282,17 @@ squad_grant() {
 
   if safe_agent_name "$agent"; then
     case "$rel" in
-      ".squad/role-comm-$agent--"*) return 0 ;;
+      # The engagement record (hard rule #11). ALWAYS granted, unconditionally
+      # — it is the bootstrap: a role cannot publish its plan if publishing the
+      # plan required a plan. This is also what lets a pre-v1.0 roster upgrade
+      # with no migration, since the grant is derived, not registered.
+      ".squad/role-plan-$agent.md") return 0 ;;
+      # The role's own hand-off outbox — granted only once it has declared
+      # intent. Publishing a hand-off is acting; #11 applies.
+      ".squad/role-comm-$agent--"*)
+        has_engagement_record "$agent" && return 0
+        return 1
+        ;;
     esac
   fi
 
@@ -240,7 +301,7 @@ squad_grant() {
   case "$rel" in
     .squad/goal.md|.squad/roster.json|.squad/roster.md|.squad/verification.md) return 1 ;;
     .squad/partner.md) return 1 ;;
-    .squad/role-goal-*|.squad/role-comm-*|.squad/role-plan-*|.squad/role-esc-*) return 1 ;;
+    .squad/role-goal-*|.squad/role-comm-*|.squad/role-plan-*) return 1 ;;
     .squad/world/*) return 1 ;;
     .squad/squads/*) return 1 ;;
   esac
@@ -289,6 +350,13 @@ case "$TOOL_NAME" in
       exit 0  # granted or not, .squad/ never falls through to file_scope
     fi
 
+    # ----- The plan gate (hard rule #11) -------------------------------------
+    # Outside .squad/, scope auto-approval is conditioned on the role having
+    # declared its intent first. Defer — never deny — until it has.
+    if ! has_engagement_record "$AGENT_TYPE"; then
+      exit 0
+    fi
+
     SCOPES=$(printf '%s' "$ROLE_JSON" | jq -r '.file_scope[]?' 2>/dev/null)
     if [ -z "$SCOPES" ]; then
       exit 0  # no file_scope → defer
@@ -312,6 +380,12 @@ case "$TOOL_NAME" in
   Bash)
     # ----- Surface 2: in-sandbox scaffolding ---------------------------------
     if [ -z "$COMMAND" ]; then
+      exit 0
+    fi
+
+    # The plan gate applies to the sandbox surface too (hard rule #11) — a role
+    # scaffolding its workspace is still acting, and intent is bought first.
+    if ! has_engagement_record "$AGENT_TYPE"; then
       exit 0
     fi
 
