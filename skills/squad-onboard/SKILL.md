@@ -1,6 +1,6 @@
 ---
 name: squad-onboard
-description: Use when the user is starting any new initiative — engineering ("I want to build/ship/refactor…"), operations ("set up a weekly report", "monitor X every day"), business infrastructure ("run a Klaviyo audit", "audit our paid funnel"), knowledge work ("research X", "produce a decision memo on Y") — or any time a Claude Code session begins without .squad/goal.md present. Asks one question ("Do you have a goal?"), reformulates the user's answer as a measurable outcome, infers the squad mode from goal shape, decomposes the work into parallel workstreams, proposes a bespoke role composition, and hands off to squad-role for generation. This is the entry point for cheeky-squad-os.
+description: Use when the user is starting any new initiative — engineering ("I want to build/ship/refactor…"), operations ("set up a weekly report", "monitor X every day"), business infrastructure ("run a Klaviyo audit", "audit our paid funnel"), knowledge work ("research X", "produce a decision memo on Y") — or any time a Claude Code session begins without .squad/goal.md present. Asks one question ("Do you have a goal?"), reformulates the user's answer as a measurable outcome, infers the squad mode from goal shape, offers one optional pass of guided domain research before decomposing, decomposes the work into parallel workstreams, proposes a bespoke role composition, and hands off to squad-role for generation. This is the entry point for cheeky-squad-os.
 version: 0.1.0
 author: cheeky-squad-os
 license: MIT
@@ -9,9 +9,9 @@ compatible-with: [claude-code, agentskills-1.0]
 
 # squad-onboard
 
-You are running the entry-point flow for cheeky-squad-os. Your job is to turn the user's intent into a goal, a mode, a workstream decomposition, and a proposed role list — then hand off to `squad-role` for role generation.
+You are running the entry-point flow for cheeky-squad-os. Your job is to turn the user's intent into a goal, a mode, an optional grounding pass, a workstream decomposition, and a proposed role list — then hand off to `squad-role` for role generation.
 
-Run the steps below in order. Do not skip steps. Do not ask multiple questions at once.
+Run the steps below in order. Do not skip steps. Do not ask multiple questions at once — Step 3 is the one place two things ride in a single message, and that compression is deliberate (see below), not a license to bundle more.
 
 ## Step 1 — Ask the one question
 
@@ -40,9 +40,9 @@ Examples:
 
 Show the user your reformulation and ask them to confirm or adjust. **Do not save the goal until they confirm.**
 
-## Step 3 — Infer the mode (do not ask)
+## Step 3 — Infer the mode, offer research
 
-Based on the confirmed outcome's *shape*, classify the mode silently. State your inference in one line and let the user override if they disagree.
+Based on the confirmed outcome's *shape*, classify the mode silently. State your inference **and offer domain research in the same message** — this is the one deliberate compression in this flow (see "Why one message" below).
 
 | Signal in the outcome | Mode |
 | --- | --- |
@@ -52,18 +52,73 @@ Based on the confirmed outcome's *shape*, classify the mode silently. State your
 
 Print: *"This looks like a [mode] goal — [one-line justification]. Override if you want."*
 
-If the user overrides, accept and continue.
+**Write `.squad/goal.md` now, before the research offer below — hand to `squad-goal`'s write path with the confirmed outcome and the inferred mode.** This is a file write, not a question: it adds no beat, and the user has already confirmed everything it contains at Step 2. It happens here rather than at the end of the flow because everything downstream of this point needs the goal *on disk*, not merely agreed: hard rule #4 bakes the full file into every research dispatch, R2's contradiction stop must quote a line **from the file** (no quoted goal line, no stop — so an unwritten goal silently disables the stop entirely), R2's amend option routes to `squad-goal`'s **replace** flow, which needs a file to replace, and `squad-role` reads it at preflight. A goal that exists only in the transcript is a goal no mechanism in this plugin can reach.
+
+Then, in the same message as the mode inference, print the research offer. Derive a **research plan** from the confirmed outcome — 3–6 questions, each one falsifiable and each one such that its answer would actually change a workstream, a role, or a stop condition (not "tell me more about Klaviyo" — that changes nothing). For each question, name which of the four source classes would answer it: **web search+fetch** · **this codebase and project files** · **connected MCP tools** · **a document you hand me**.
+
+Print the plan and ask: *"Want me to check the domain before I decompose? [plan, numbered] Say `skip` to decompose from what I already know, or `go` to run this as written — or tell me what to cut or add first."*
+
+This is **Gate 1** — the research plan, built from the goal you just confirmed, approved (or adjusted) by the human before anything runs. One word answers it (`skip` or `go`); an edit is a real edit — a reworded question, a dropped one, an added one — read back once, not re-litigated.
+
+- **`skip`** → go straight to Step 4. Nothing runs, nothing is written to `.squad/world/`, and the rest of this flow behaves exactly as it did before this feature existed — no citations, no delta line, no belief-derived stop conditions later in `squad-role`.
+- **`go`** (as written, or after an edit) → hand the approved plan, plus the confirmed goal for grounding, to `squad-world`'s `research` verb.
+
+### What research does, honestly
+
+`squad-world` executes the approved plan across the four source classes, bounded to **≤4 concurrent** — this is a squad-composing pass, not a standing research agent. It never re-runs on its own, never crawls past the approved plan, and never starts without a confirmed goal.
+
+Each source degrades on its own terms, never silently:
+
+- No network → the question is marked **skipped**, never guessed.
+- No connector for a claimed system → **unresearchable**, never inferred.
+- A question no available source can answer → **unanswered** — never backfilled with a claim wearing a finding's clothes.
+
+Every finding that does land is graded **`confirmed`** or **`reported`** only — `world.sh` treats `inferred` or `assumed` in `.squad/world/claims-research.md` as invalid, mechanically, the same parser that enforces hard rule #13 everywhere else. Research is not allowed to write a hunch.
+
+**The contradiction stop (R2).** If a finding makes a Definition-of-done signal already-true, impossible, or unmeasurable; falsifies a premise of the outcome; requires something the goal lists as Out of scope; or makes the deadline or quality bar unachievable as written — **stop immediately.** This is the only thing on screen; Gate 2 is unreachable until it's ruled.
+
+Two non-triggers, and they are what keep this from firing on everything. **A finding that merely makes the goal harder is not a contradiction** — a slower export, a clumsier API, more manual steps: that is composition input (it reorders workstreams, per Step 4's rewrite rule 3), not a stop. And **no quoted goal line, no stop**: if you cannot point at the sentence in `.squad/goal.md` the finding falsifies, there is nothing to rule on. A finding that contradicts another *finding* is an ordinary dispute, not this — `squad-world`'s **adjudicate** handles it.
+
+When it does fire, quote the goal's exact line next to the finding and its source, then offer exactly: amend the goal (hand off to `squad-goal`), reject the finding with the ruling recorded, proceed on the record as-is, or stop outright. Never amend the goal yourself — hard rule #1 makes it binding, only the human changes it. Say plainly that nothing enforces this stop but this skill's own body — no hook checks it.
+
+Once research returns (or a contradiction is ruled past), go to Gate 2.
+
+### Gate 2 — approve the findings
+
+Only reached if Step 3 was accepted. Show:
+
+- Every finding written to `.squad/world/claims-research.md`: key, claim, grade (`confirmed` or `reported` — nothing else can be there), source.
+- Every question that came back skipped, unresearchable, or unanswered, plainly labeled as such.
+
+Ask: *"Approve these — or tell me what to drop, correct, or downgrade."* One word (`go`) accepts everything as written. An edit is a real edit: drop a finding, correct a claim, or move a grade from `confirmed` down to `reported` — never the other direction; research doesn't get to claim more certainty than it earned by being adjusted. A human who wants to assert something with more confidence than research earned writes it themselves, as their own belief, via `squad-world`'s **seed** operation into `claims-user.md` — that is a different artifact with a different author, not an upgrade to this one.
+
+Whatever is approved here is what `squad-world` commits to the ledger; whatever is dropped never reaches it. **This approval flows straight into the decomposition below — there is no separate "shall we decompose now" question.** Skip that ceremony; the findings and the decomposition arrive in the same beat.
+
+### Why one message, and why this shape
+
+Every R1-compliant compression available has already been taken: Gate 1 rides the existing mode-inference message instead of opening a new one; both gates complete in one word on the happy path; the plan's cost (question count, source classes) is printed at the offer instead of discovered later; Gate 2's approval lands directly in the decomposition instead of asking again. Do not add a beat beyond these — no "are you sure", no confirmation of the confirmation.
 
 ## Step 4 — Decompose into workstreams
 
-Now break the goal into **parallel workstreams** — units of work that can be done independently by different roles. List them in your reply as a numbered list. Three to five is typical; more if the goal is genuinely large.
+Break the goal into **parallel workstreams** — units of work that can be done independently by different roles. Each should be independent, self-contained, and named with a verb.
 
-Each workstream should be:
-- **Independent** (doesn't block another workstream)
-- **Self-contained** (produces an artifact the squad uses)
-- **Named with a verb** ("Extract Klaviyo flow performance", "Draft homepage hero copy", "Scrape competitor pricing pages")
+**If Step 3 was skipped:** decompose from what you already know, exactly as before — list them, ask *"Does this decomposition cover the goal? Any to merge, split, or drop?"*, done. No citations, no delta line — a squad that skips research is indistinguishable from one running a version of this plugin that never shipped it.
 
-Show the workstreams. Ask: *"Does this decomposition cover the goal? Any to merge, split, or drop?"*
+**If Step 3 was accepted:** you are grounding this decomposition, not decorating it. Citations alone are not enough — a model can decompose from priors and paste belief keys on afterward. Do the actual rewrite, in this order, against the decomposition you would otherwise have proposed from priors alone:
+
+1. **Already exists.** A finding whose claim says a workstream's target is already built, already solved, or already monitored **removes** that workstream.
+2. **Changed or broke.** A finding whose claim says something changed, broke, or — same shape — was never set up in the first place, **inserts a precursor** workstream ahead of whatever depended on the assumption that it worked.
+3. **Weight.** A finding that establishes one area carries materially more risk or revenue impact than assumed **reorders** the list around it.
+
+Every workstream that survives gets a citation — the belief key(s) that justify it, e.g. `Compliance (citing: gmail-bulk-sender-complaint-ceiling-0.3pct)`. A workstream with none is marked **`(from priors)`**, visibly — that mark is what makes an uncited workstream honest instead of silently indistinguishable from a grounded one.
+
+Print the delta line, always, in the same message as the (possibly rewritten) list:
+
+> *"Research changed the decomposition: +list-health workstream (new), compliance re-anchored on the Feb-2024 0.3% Gmail rule."*
+
+If research changed nothing, say that too — it's real information, not a null result to bury: *"Research changed nothing — this decomposition matches what I'd have proposed from priors."*
+
+Then ask the same question Step 4 always asked: *"Does this decomposition cover the goal? Any to merge, split, or drop?"* — the same question, in the same place, whether research ran or not. What Gate 2 saved is the *extra* question, not this one: the findings' approval flows straight into the rewrite instead of stopping to ask permission to decompose. Gate 2's own reply is still its own beat — it has to be, because the rewrite rules above run against approved findings and cannot be printed before the human has ruled on them.
 
 ## Step 5 — Propose roles
 
@@ -75,15 +130,17 @@ For each proposed role, state in one line:
 - **Likely file scope** (where it'll write outputs)
 - **Likely model** (Sonnet for most, Haiku for high-volume mechanical work, Opus for deep reasoning, Fable for a long-running role that has to investigate and self-verify across more than one sitting)
 
+If research ran, carry a workstream's citation forward into its role's purpose line — don't derive anything new here, just hand the belief keys through so `squad-role` can turn a `confirmed` one into a binding stop condition and an unanswered question into a `needs:` bullet (see `squad-role`).
+
 Ask: *"Does this squad look right? I'll generate each role next — you'll confirm the details per role."*
 
 ## Step 6 — Hand off to squad-role
 
-For each confirmed role, invoke the `squad-role` skill once. `squad-role` walks the user through the interactive role-definition flow per role and writes the subagent file plus the role goal.
+For each confirmed role, invoke the `squad-role` skill once, passing along any belief keys or unanswered-question notes this role's workstream carries. `squad-role` walks the user through the interactive role-definition flow per role and writes the subagent file plus the role goal.
 
 Wait for each role to be generated before moving to the next. Do not batch — the user needs to be present for each role's interactive questions.
 
-After all roles are generated, confirm with the user: *"Squad is ready: [list of role names]. Roster saved to .squad/roster.json. Goal saved to .squad/goal.md."*
+After all roles are generated, confirm with the user: *"Squad is ready: [list of role names]. Roster saved to .squad/roster.json. Goal saved to .squad/goal.md."* If research ran, add one line: *"Domain findings saved to .squad/world/claims-research.md — run `/cheeky-squad-os:squad-world` any time to inspect or adjudicate them."*
 
 ## Step 7 — Permissions and Agent Teams walkthrough
 
@@ -107,8 +164,13 @@ Before spawning, walk the user through what permissions the squad will need:
 
 End onboarding with: *"Ready to spawn. Run `/cheeky-squad-os:squad-spawn` to dispatch the squad, or `/cheeky-squad-os:squad-roster` to inspect what was generated. When the squad reports done, run `/cheeky-squad-os:squad-verify` to check the Definition of done before declaring victory."*
 
+## What guided research does NOT do
+
+Say this plainly if asked, or if the user tries to push past it: this is not a general-purpose research agent. It researches **to compose a squad, once, at onboarding**, and stops. No standing monitoring, no research without a confirmed goal, no autonomous re-run, no crawling beyond the approved plan. Running research again for a *later* squad decision is `squad-world`'s **research** verb invoked fresh, with a fresh plan and its own two gates — never a background process.
+
 ## Refusals and edge cases
 
 - If the user gives an ask that cannot be reformulated as a measurable outcome (e.g. "make my code better"), push back: ask for a specific quality bar and deadline. Do not save a vague goal.
 - If `.squad/goal.md` already exists: read it, summarize it back to the user, and ask whether they want to **replace it** (run onboarding fresh), **park it and start a new squad** (hand to `squad-goal`'s park operation first — the old squad stays restorable under `.squad/squads/<slug>/` — then run onboarding fresh), **add roles** to the existing squad (hand straight to `squad-role`), or **inspect the squad** (hand to `squad-roster`).
 - If the user resists reformulation (insists on an ask, not an outcome): explain once that the framework binds work to outcomes, then accept whatever they say and save it — your job is discipline, not coercion.
+- If every question in an accepted plan comes back skipped, unresearchable, or unanswered (no findings at all): say so plainly at Gate 2 — *"Nothing came back confirmed or reported — every question is [skipped/unresearchable/unanswered]."* — then decompose from priors exactly as the skip path does, with every workstream marked `(from priors)` and a delta line reading "Research changed nothing — nothing came back."

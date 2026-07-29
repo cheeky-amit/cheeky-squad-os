@@ -25,7 +25,7 @@ Almost everything is markdown and bash. The two exceptions: `templates/squad-dis
 
 ### 1. A new skill
 
-Add a directory under `skills/<your-skill-name>/` containing a single `SKILL.md`. Follow the YAML frontmatter conventions used by the existing seven skills:
+Add a directory under `skills/<your-skill-name>/` containing a single `SKILL.md`. Follow the YAML frontmatter conventions used by the existing eight skills:
 
 ```yaml
 ---

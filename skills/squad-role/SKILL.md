@@ -16,6 +16,7 @@ You generate one bespoke role per invocation. Roles are tailored to the squad's 
 1. Read `.squad/goal.md`. If absent: refuse with *"No squad goal set. Run `/cheeky-squad-os:squad-onboard` first."*
 2. Read `.squad/roster.json` if it exists. Note existing role names — your new role's name must not collide.
 3. Note the squad's mode (`one-time`, `multi-use`, `evergreen`). It affects the `isolation` field decision below.
+4. If `.squad/world/claims-research.md` exists, read it. It holds domain-research findings the human gated during `squad-onboard` (Grade `confirmed` or `reported` only — `world.sh` rejects anything else from that file). Feed it into **Derive stop conditions** below. Absent file → this source is simply skipped; nothing about the rest of this flow changes. A squad that never ran research looks identical to one running a version of this plugin that never shipped the feature.
 
 ## Interactive flow — ask one question at a time
 
@@ -107,11 +108,12 @@ Do not ask the user anything here. Once Q1–Q7 are answered, derive one thing f
 - `needs:` — a **precondition**, checked before the role starts (mechanically: `squad-spawn`'s dispatch triage probes it at preflight, §3.4, and the role itself re-checks at the start of its own run). Must be mechanically checkable — file/path existence, a tool the role was given in Q4 being present, or one cheap read-only check. "The data looks reasonable" is not a `needs:` bullet; nothing runs against it, nothing fails it.
 - `stop:` — a **mid-run bound** the role self-polices while working; there is no external monitor for it. Hitting it ends the run — the role writes `status: escalated` and `fired: <this bullet, verbatim>` on its own engagement record (the contract every generated role gets — see `{{stop_conditions_block}}` below) and stops.
 
-Derive the mix from three sources, in this order, stopping once you have 2–4 total:
+Derive the mix from four sources, in this order, stopping once you have 2–4 total:
 
-1. **The goal's Out of scope.** Read `## Out of scope` from `.squad/goal.md`. For every bullet that plausibly overlaps this role's purpose (Q1) or `file_scope` (Q3), add a `stop:` bullet: *"stop: the task would require `<out-of-scope item>` — excluded by the squad goal."*
-2. **Purpose- and tool-specific edges.** From Q1's purpose and Q4's tools, name the one or two ways this specific role's work goes ambiguous or unsafe — a data-pulling role stops on empty/unauthorized results, a writing role stops on a contradiction between two sources it was handed, an MCP-heavy role gets a matching `needs:` (the MCP server is reachable) plus a `stop:` for that same tool returning an error or "not found" mid-run for something the task assumed existed. If Q7 gave this role a sandbox, add `needs: the provisioned workspace at <workspace> exists`.
-3. **Two floor bullets, always available if 1–2 didn't reach the minimum of 2:** `needs: a required input this role depends on (data, prior hand-off, file) exists and is non-empty` and `stop: making progress would require writing outside this role's file_scope`.
+1. **Belief-derived bounds (only when `.squad/world/claims-research.md` exists — see Preflight step 4).** For every `confirmed` finding in that file whose claim plausibly constrains this role's purpose (Q1) or `file_scope` (Q3), add a `stop:` bullet naming the constraint the finding implies, citing the belief key so the bound is traceable: *"stop: `<the constraint>` — per `<belief-key>`."* Only `confirmed` findings earn a binding bound this way; a `reported` one is context the role can read, not a bound it self-polices — the human downgraded it to `reported` at Gate 2 precisely because it wasn't strong enough to bind. For every research question that came back **unanswered** and touches this role's purpose or scope, add a `needs:` bullet: *"needs: `<the question>` is answered before this role commits — unanswered by research."* `squad-spawn`'s dispatch triage can't mechanically resolve an open question, so this bullet doesn't block dispatch — it routes to the human at the triage step the same way any other non-checkable `needs:` does (the user may always dispatch anyway).
+2. **The goal's Out of scope.** Read `## Out of scope` from `.squad/goal.md`. For every bullet that plausibly overlaps this role's purpose (Q1) or `file_scope` (Q3), add a `stop:` bullet: *"stop: the task would require `<out-of-scope item>` — excluded by the squad goal."*
+3. **Purpose- and tool-specific edges.** From Q1's purpose and Q4's tools, name the one or two ways this specific role's work goes ambiguous or unsafe — a data-pulling role stops on empty/unauthorized results, a writing role stops on a contradiction between two sources it was handed, an MCP-heavy role gets a matching `needs:` (the MCP server is reachable) plus a `stop:` for that same tool returning an error or "not found" mid-run for something the task assumed existed. If Q7 gave this role a sandbox, add `needs: the provisioned workspace at <workspace> exists`.
+4. **Two floor bullets, always available if 1–3 didn't reach the minimum of 2:** `needs: a required input this role depends on (data, prior hand-off, file) exists and is non-empty` and `stop: making progress would require writing outside this role's file_scope`.
 
 Cap at 4 — pick the most concrete and likely, not every conceivable one. A condition that cannot be checked is not a condition ("if things get complicated" is a mood, not a bound); a condition that never fires in practice is noise the human has to read past.
 
@@ -277,8 +279,9 @@ created: <ISO-8601>
 
 ## Stop conditions
 
-<!-- Hard rule #14. 2-4 bullets, derived above from purpose + tools + the
-     goal's Out of scope. Every bullet is prefixed needs: (a precondition,
+<!-- Hard rule #14. 2-4 bullets, derived above from confirmed/unanswered
+     research findings (if any) + purpose + tools + the goal's Out of scope.
+     Every bullet is prefixed needs: (a precondition,
      checked at squad-spawn's dispatch triage and again by the role at
      start) or stop: (a mid-run bound the role self-polices — no external
      monitor). When a stop: bound fires, the role writes status: escalated

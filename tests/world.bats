@@ -198,6 +198,81 @@ $(valid_block ok-key)"
   [ "$(grep -c '"belief":"evolves"' <<< "$output")" -eq 2 ]
 }
 
+# --- research grade ceiling (per-owner, claims-research.md ONLY) ------------------
+#
+# Owner-approved mechanism (PR5): in claims-research.md, and only there, a
+# field-valid `inferred` or `assumed` block is INVALID with its own reason
+# — `research_grade_ceiling`, distinct from `bad_grade` — so squad-world's
+# inspect can tell a human WHY a research finding was rejected. No other
+# owner is affected: claims-user.md has no ceiling, and an ordinary role's
+# own claims-<role>.md is unaffected.
+
+@test "research owner: inferred grade is invalid under the ceiling" {
+  write_claims "research" "$(valid_block ok-key)
+$(printf '## Belief: risky-inference\n\nClaim: c.\nSource: x\nGrade: inferred\nObserved: 2026-07-01\nStatus: live\n')"
+  run_world
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"invalid":"risky-inference"'* ]]
+  [[ "$output" == *'"research_grade_ceiling"'* ]]
+  [[ "$output" != *'"belief":"risky-inference"'* ]]
+}
+
+@test "research owner: assumed grade is invalid under the ceiling" {
+  write_claims "research" "$(valid_block ok-key)
+$(printf '## Belief: risky-assumption\n\nClaim: c.\nSource: none\nGrade: assumed\nObserved: 2026-07-01\nStatus: live\n')"
+  run_world
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"invalid":"risky-assumption"'* ]]
+  [[ "$output" == *'"research_grade_ceiling"'* ]]
+  [[ "$output" != *'"belief":"risky-assumption"'* ]]
+}
+
+@test "research owner: confirmed and reported both clear the ceiling" {
+  write_claims "research" "$(printf '## Belief: checked-directly\n\nClaim: c.\nSource: x\nGrade: confirmed\nObserved: 2026-07-01\nStatus: live\n\n## Belief: carried-in\n\nClaim: d.\nSource: y\nGrade: reported\nObserved: 2026-07-02\nStatus: live\n')"
+  run_world
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"belief":"checked-directly"'* ]]
+  [[ "$output" == *'"belief":"carried-in"'* ]]
+  [[ "$output" != *'"invalid":"checked-directly"'* ]]
+  [[ "$output" != *'"invalid":"carried-in"'* ]]
+  [[ "$output" != *'"research_grade_ceiling"'* ]]
+}
+
+@test "claims-user.md has no ceiling: inferred is valid there" {
+  write_claims "user" "$(printf '## Belief: human-inference\n\nClaim: c.\nSource: my own reasoning\nGrade: inferred\nObserved: 2026-07-01\nStatus: live\n')"
+  run_world
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"belief":"human-inference"'*'"owner":"user"'* ]]
+  [[ "$output" != *'"invalid":"human-inference"'* ]]
+  [[ "$output" != *'"research_grade_ceiling"'* ]]
+}
+
+@test "an ordinary role's own claims file has no ceiling: inferred is valid there" {
+  write_claims "auditor" "$(printf '## Belief: role-inference\n\nClaim: c.\nSource: reasoned from the lighthouse report\nGrade: inferred\nObserved: 2026-07-01\nStatus: live\n')"
+  run_world
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"belief":"role-inference"'*'"owner":"auditor"'* ]]
+  [[ "$output" != *'"invalid":"role-inference"'* ]]
+  [[ "$output" != *'"research_grade_ceiling"'* ]]
+}
+
+@test "the ceiling's reason string is distinct and greppable, never folded into bad_grade" {
+  write_claims "research" "$(printf '## Belief: ceiling-check\n\nClaim: c.\nSource: x\nGrade: assumed\nObserved: 2026-07-01\nStatus: live\n')"
+  run_world
+  [ "$status" -eq 0 ]
+  line=$(grep '"invalid":"ceiling-check"' <<< "$output")
+  [[ "$line" == *"research_grade_ceiling"* ]]
+  [[ "$line" != *"bad_grade"* ]]
+}
+
+@test "a ceiling-rejected research block never reaches --index" {
+  write_claims "research" "$(printf '## Belief: solid-finding\n\nClaim: c.\nSource: x\nGrade: confirmed\nObserved: 2026-07-01\nStatus: live\n\n## Belief: ceiling-blocked\n\nClaim: d.\nSource: y\nGrade: inferred\nObserved: 2026-07-02\nStatus: live\n')"
+  run_world --index
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"solid-finding"* ]]
+  [[ "$output" != *"ceiling-blocked"* ]]
+}
+
 # --- superseded / retired lifecycle -----------------------------------------------
 
 @test "superseded and retired blocks are parsed but never projected" {

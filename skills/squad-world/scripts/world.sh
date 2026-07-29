@@ -28,6 +28,10 @@
 #     - its key is duplicated by another FIELD-VALID `live`-status block IN
 #       THE SAME FILE (same owner asserting two different live beliefs under
 #       one key is a self-contradiction the parser refuses to arbitrate)
+#     - owner is `research` (derived from the filename claims-research.md,
+#       positionally — see below) AND Grade is `inferred` or `assumed`
+#       (reason: research_grade_ceiling — see THE RESEARCH GRADE CEILING,
+#       below)
 #
 # ORDER IS LOAD-BEARING: the duplicate check runs AFTER field validation,
 # over the survivors only. Running it first meant a malformed sibling block
@@ -38,6 +42,33 @@
 # the owner is asserting exactly one thing and fumbling a second write.
 # skills/squad-verify/scripts/verify.sh's independent re-derivation of
 # world_conflicts applies the same order, deliberately.
+#
+# THE RESEARCH GRADE CEILING — a per-owner grade ceiling, and the ONE
+# deliberate research fingerprint in shipped script code (owner-approved
+# explicitly, over the alternative of a sentence in a skill body: guarding
+# the plugin's single most tempting rumor path with an instruction is
+# exactly what this repo says it does not do).
+#
+#   In claims-research.md — and ONLY there, matched by owner == "research"
+#   as derived positionally from the filename above, the SAME derivation
+#   every other owner check in this script uses — a field-valid block whose
+#   Grade is `inferred` or `assumed` is INVALID, with reason
+#   `research_grade_ceiling`, distinct from `bad_grade` on purpose: the
+#   grade IS on-vocabulary, it is simply too weak a grade for this owner.
+#   Research may produce only `confirmed` or `reported`.
+#
+#   This is not a general per-owner policy engine — it is one hard-coded
+#   comparison against the literal string "research". No other owner is
+#   affected: claims-user.md has no ceiling at all (the human may assert an
+#   inference; that is their prerogative and their name is on it), and
+#   every ordinary role's claims-<role>.md is unaffected — an engagement's
+#   own `inferred`/`assumed` claims about its own work are exactly what
+#   templates/role-plan.md's Assumptions vocabulary is for.
+#
+#   Checked in Pass 1 (field validation), alongside the vocabulary check —
+#   NOT a separate pass, and it never touches the duplicate-live-key order
+#   documented above: a ceiling-rejected block is already excluded before
+#   Pass 2 runs, so it can never masquerade as a live duplicate.
 #
 # A BLOCK ENDS AT THE NEXT MARKDOWN HEADING of any level, not only at the
 # next "## Belief:". A field line sitting under some other heading is
@@ -82,7 +113,7 @@
 #    "reasons":["missing_source", …]}               one per INVALID block
 #      reasons ⊂ {missing_claim, missing_source, missing_grade,
 #                 missing_observed, bad_grade, bad_status,
-#                 duplicate_live_key}
+#                 duplicate_live_key, research_grade_ceiling}
 #   {"conflict":"<key>","owners":["a","b", …]}       one per disputed key
 #   {"summary":true,"files":N,"beliefs":N,"live":N,"invalid":N,
 #    "conflicts":N}                                  final line, always last
@@ -307,6 +338,17 @@ while IFS="$US" read -r owner cf key claim source grade observed status notes; d
       confirmed|reported|inferred|assumed) ;;
       *) reasons="${reasons:+$reasons,}bad_grade" ;;
     esac
+    # THE RESEARCH GRADE CEILING (see header) — owner "research", derived
+    # positionally from claims-research.md, may assert only confirmed or
+    # reported. On-vocabulary but too weak a grade for this one owner gets
+    # its own reason, distinct from bad_grade, so squad-world's inspect
+    # can tell a human WHY a research finding was rejected, not just THAT
+    # it was.
+    if [ "$owner" = "research" ]; then
+      case "$grade" in
+        inferred|assumed) reasons="${reasons:+$reasons,}research_grade_ceiling" ;;
+      esac
+    fi
   fi
   # An off-vocabulary Status is INVALID, not silently non-live. Left to fall
   # through, a typo'd or annotated status produced a block that was neither

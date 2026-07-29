@@ -248,17 +248,18 @@ See [`tests/smoke-test.md`](tests/smoke-test.md) for a copy-pasteable end-to-end
 
 ---
 
-## The seven skills & three hooks
+## The eight skills & three hooks
 
 | Component | Kind | What it does |
 | --- | --- | --- |
-| `squad-onboard` | skill | Reformulates a goal as an outcome, infers mode, proposes a bespoke squad. |
+| `squad-onboard` | skill | Reformulates a goal as an outcome, infers mode, offers one optional pass of guided domain research, proposes a bespoke squad. |
 | `squad-goal` | skill | Manages `.squad/goal.md` as the binding north-star; parks/switches whole squads (`.squad/squads/<slug>/`) so one project can hold several initiatives. |
 | `squad-role` | skill | Interactive role generator → `.claude/agents/<role>.md` + roster. |
 | `squad-env` | skill | Provisions each role's sandbox (workspace, env, tools) from the goal; proposes what it can't contain. |
 | `squad-spawn` | skill | Dispatches the squad, branching on mode. |
 | `squad-roster` | skill | Manages `roster.json` + auto-generated `roster.md`. |
 | `squad-verify` | skill | Verifies deliverables against the goal's Definition of done; writes `.squad/verification.md` with a met/partial/unmet verdict. |
+| `squad-world` | skill | The shared belief ledger (`.squad/world/claims-<owner>.md`, hard rule #13) — seed a belief, inspect what the squad believes, adjudicate two owners who disagree, retire what stopped being true, and **research** the domain before the goal is decomposed, behind two human gates. |
 | `SessionStart` | hook | Injects the goal into every session. |
 | `UserPromptSubmit` | hook | Tags each turn with the goal (observational). |
 | `PermissionRequest` | hook | Auto-approves in-scope Edit/Write + in-sandbox scaffolding; defers everything else. |

@@ -771,6 +771,65 @@ $(live_belief dup 'second.')"
   printf '%s\n' "$output" | tail -n 1 | jq -e '.world_conflicts == 0'
 }
 
+# --- The research grade ceiling, re-derived here as well as in world.sh -------
+#
+# These two scripts are INDEPENDENT re-derivations of the same number, which is
+# only worth having if they agree. They did not: world.sh applied the per-owner
+# ceiling to claims-research.md and verify.sh did not, so the same ledger read
+# conflicts:0 from one script and world_conflicts:1 from the other — squad-verify
+# sent the human to adjudicate a dispute squad-world would not show them,
+# because one of its two claimants was a block the ceiling had already excluded.
+
+@test "research: an inferred block never counts toward world_conflicts (the ceiling)" {
+  write_goal "$THREE_SIGNALS"
+  default_roster
+  write_claims "scout" "$(live_belief shared)"
+  write_claims "research" "$(printf '## Belief: shared\n\nClaim: a synthesis wearing a finding.\nSource: reasoned from two other findings\nGrade: inferred\nObserved: 2026-07-02\nStatus: live\n')"
+  run_verify
+  [ "$status" -eq 0 ]
+  printf '%s\n' "$output" | tail -n 1 | jq -e '.world_conflicts == 0'
+}
+
+@test "research: an assumed block never counts toward world_conflicts (the ceiling)" {
+  write_goal "$THREE_SIGNALS"
+  default_roster
+  write_claims "scout" "$(live_belief shared)"
+  write_claims "research" "$(printf '## Belief: shared\n\nClaim: a guess.\nSource: none\nGrade: assumed\nObserved: 2026-07-02\nStatus: live\n')"
+  run_verify
+  [ "$status" -eq 0 ]
+  printf '%s\n' "$output" | tail -n 1 | jq -e '.world_conflicts == 0'
+}
+
+@test "research: a reported block DOES count — the ceiling stops at inferred/assumed" {
+  write_goal "$THREE_SIGNALS"
+  default_roster
+  write_claims "scout" "$(live_belief shared)"
+  write_claims "research" "$(printf '## Belief: shared\n\nClaim: a sourced finding.\nSource: https://example.com/spec\nGrade: reported\nObserved: 2026-07-02\nStatus: live\n')"
+  run_verify
+  [ "$status" -eq 0 ]
+  printf '%s\n' "$output" | tail -n 1 | jq -e '.world_conflicts == 1'
+}
+
+@test "the ceiling is research-only: claims-user.md inferred still counts" {
+  write_goal "$THREE_SIGNALS"
+  default_roster
+  write_claims "scout" "$(live_belief shared)"
+  write_claims "user" "$(printf '## Belief: shared\n\nClaim: the human own inference, which is their prerogative.\nSource: reasoned from three quarters of tickets\nGrade: inferred\nObserved: 2026-07-02\nStatus: live\n')"
+  run_verify
+  [ "$status" -eq 0 ]
+  printf '%s\n' "$output" | tail -n 1 | jq -e '.world_conflicts == 1'
+}
+
+@test "the ceiling is research-only: an ordinary role's inferred block still counts" {
+  write_goal "$THREE_SIGNALS"
+  default_roster
+  write_claims "scout" "$(live_belief shared)"
+  write_claims "analyst" "$(printf '## Belief: shared\n\nClaim: a role inference about its own work.\nSource: reasoned from the deploy timeline\nGrade: inferred\nObserved: 2026-07-02\nStatus: live\n')"
+  run_verify
+  [ "$status" -eq 0 ]
+  printf '%s\n' "$output" | tail -n 1 | jq -e '.world_conflicts == 1'
+}
+
 @test "superseded and retired blocks never count toward world_conflicts" {
   write_goal "$THREE_SIGNALS"
   default_roster
