@@ -36,18 +36,24 @@
 # lives entirely outside the main checkout. So the record ends up at
 # .claude/worktrees/<role>/.squad/role-plan-<role>.md, and at the project
 # root — where squad-verify and squad-spawn's synthesis step read — it is
-# invisible. `collect` closes that gap: for each ACTIVE role (per roster.json)
-# with a worktree under .claude/worktrees/<role>/, it copies
-# .squad/role-plan-<role>.md from the worktree to the project root,
-# newer-mtime wins.
+# invisible. The same is true of a role's belief-ledger claims file
+# (.squad/world/claims-<role>.md, hard rule #13) — it too is written inside
+# the worktree and is invisible at the root until collected.
+#
+# `collect` closes that gap: for each ACTIVE role (per roster.json) with a
+# worktree under .claude/worktrees/<role>/, it copies BOTH
+# .squad/role-plan-<role>.md and .squad/world/claims-<role>.md from the
+# worktree to the project root, newer-mtime wins, independently per artifact
+# (a role can have collected one and not the other — e.g. it published its
+# record but never asserted a belief this run).
 #
 # It copies NOTHING else under .squad/. permission-request.sh's .squad/
 # structural reservation (v0.4.1) guarantees a role can only ever WRITE its
-# own record and its own outbox; `collect` is that same guarantee applied on
-# the read/consolidate side — it names the one file it moves, and never
-# globs or directory-copies .squad/.
+# own record, its own claims file, and its own outbox; `collect` is that same
+# guarantee applied on the read/consolidate side — it names exactly the two
+# files it moves, and never globs or directory-copies .squad/.
 #
-# Extension seam: if a later release gives a role a second contract artifact
+# Extension seam: if a later release gives a role a third contract artifact
 # under .squad/, collecting it is one more collect_artifact() call below with
 # that filename — do not widen this to a directory copy to get there.
 #
@@ -55,8 +61,10 @@
 #   $1 — path to .squad/roster.json (default: .squad/roster.json relative to
 #        CWD). CWD is assumed to be the project root, same as spawn's default.
 #
-# Outputs (stdout, one JSON object per line):
+# Outputs (stdout, one JSON object per line — one PER ARTIFACT per role, so
+# two lines per role with a worktree):
 #   {"role": "<name>", "artifact": ".squad/role-plan-<name>.md", "status": "copied|skipped-no-worktree|skipped-not-newer|error"}
+#   {"role": "<name>", "artifact": ".squad/world/claims-<name>.md", "status": "copied|skipped-no-worktree|skipped-not-newer|error"}
 #   {"summary": {"collected": N, "skipped": M, "errors": K}}
 #
 # Errors go to stderr. Exit non-zero ONLY on a real per-role copy error —
@@ -74,8 +82,12 @@ err() { echo "spawn.sh: $*" >&2; }
 # Copies .claude/worktrees/<role>/.squad/<filename> to .squad/<filename> at
 # the project root if the worktree's copy is newer than the root's (or the
 # root has none yet). Prints one JSON status line and updates the running
-# COLLECTED/SKIPPED/COLLECT_ERRORS counters. The engagement record is the
-# only artifact collected today — see the extension-seam note in the header.
+# COLLECTED/SKIPPED/COLLECT_ERRORS counters. <filename> may itself contain a
+# "/" (e.g. "world/claims-<role>.md") — the destination's parent directory is
+# created on demand so a nested contract artifact collects the same way a
+# flat one does; this does NOT widen the copy to a directory (see header).
+# Two artifacts are collected today, independently: the engagement record
+# and the belief-ledger claims file — see the extension-seam note above.
 collect_artifact() {
   local role="$1" filename="$2"
   local wt_dir="$WORKTREE_BASE/$role"
@@ -93,6 +105,8 @@ collect_artifact() {
     SKIPPED=$((SKIPPED + 1))
     return 0
   fi
+
+  mkdir -p "$(dirname "$dst")"
 
   if cp -p "$src" "$dst" 2>/dev/null; then
     printf '{"role":"%s","artifact":".squad/%s","status":"copied"}\n' "$role" "$filename"
@@ -132,6 +146,7 @@ cmd_collect() {
     while IFS= read -r role; do
       [ -z "$role" ] && continue
       collect_artifact "$role" "role-plan-$role.md"
+      collect_artifact "$role" "world/claims-$role.md"
     done <<< "$roles"
   fi
 

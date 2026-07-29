@@ -158,18 +158,51 @@ teardown() {
   [ ! -f .squad/role-plan-beta.md ]
 }
 
-@test "collect: copies only the engagement record, never other .squad/ paths" {
+@test "collect: copies only the two named contract artifacts, never other .squad/ paths" {
   run "$SPAWN"; [ "$status" -eq 0 ]
-  mkdir -p .claude/worktrees/alpha/.squad
+  mkdir -p .claude/worktrees/alpha/.squad/world
   printf 'record\n' > .claude/worktrees/alpha/.squad/role-plan-alpha.md
+  printf 'claims\n' > .claude/worktrees/alpha/.squad/world/claims-alpha.md
   printf 'decoy outbox\n' > .claude/worktrees/alpha/.squad/role-comm-alpha--beta.md
-  printf 'decoy claims\n' > .claude/worktrees/alpha/.squad/claims-alpha.md
+  printf 'decoy sibling\n' > .claude/worktrees/alpha/.squad/world/claims-beta.md
+  printf 'decoy flat claims\n' > .claude/worktrees/alpha/.squad/claims-alpha.md
 
   run "$SPAWN" collect
   [ "$status" -eq 0 ]
   [ -f .squad/role-plan-alpha.md ]
+  [ -f .squad/world/claims-alpha.md ]
   [ ! -f .squad/role-comm-alpha--beta.md ]
+  [ ! -f .squad/world/claims-beta.md ]
   [ ! -f .squad/claims-alpha.md ]
+}
+
+# A worktree role's claims file is invisible at the project root until this
+# runs — and an uncollected ledger is what the NEXT dispatch's world index is
+# computed from, so a silent miss propagates.
+@test "collect: brings back a worktree role's claims file, creating world/ on demand" {
+  run "$SPAWN"; [ "$status" -eq 0 ]
+  [ ! -d .squad/world ]
+  mkdir -p .claude/worktrees/alpha/.squad/world
+  printf '## Belief: k\n\nClaim: c\nSource: s\nGrade: confirmed\nObserved: 2026-07-01\nStatus: live\n' \
+    > .claude/worktrees/alpha/.squad/world/claims-alpha.md
+
+  run "$SPAWN" collect
+  [ "$status" -eq 0 ]
+  [ -f .squad/world/claims-alpha.md ]
+  printf '%s\n' "$output" | grep '"artifact":".squad/world/claims-alpha.md"' | jq -e '.status == "copied"'
+}
+
+@test "collect: a role with a record but no claims file reports each artifact separately" {
+  run "$SPAWN"; [ "$status" -eq 0 ]
+  mkdir -p .claude/worktrees/alpha/.squad
+  printf 'record\n' > .claude/worktrees/alpha/.squad/role-plan-alpha.md
+
+  run "$SPAWN" collect
+  [ "$status" -eq 0 ]
+  [ -f .squad/role-plan-alpha.md ]
+  [ ! -f .squad/world/claims-alpha.md ]
+  printf '%s\n' "$output" | grep '"artifact":".squad/role-plan-alpha.md"' | jq -e '.status == "copied"'
+  printf '%s\n' "$output" | grep '"artifact":".squad/world/claims-alpha.md"' | jq -e '.status != "copied"'
 }
 
 @test "collect: emits valid JSON on every line" {
@@ -195,4 +228,58 @@ JSON
   [ "$status" -eq 0 ]
   [[ "$output" == *'"collected":0'* ]]
   [[ "$output" == *'"errors":0'* ]]
+}
+
+# --- The workflow dispatch template's world-model wiring (hard rule #13) --------
+#
+# templates/squad-dispatch.workflow.js is shipped JavaScript that CI otherwise
+# only `node --check`s — a syntax check proves nothing about whether
+# args.worldIndex actually reaches the spawned prompt. It once did not: the
+# command built the field and the template never read it, so the belief ledger
+# was silently absent on the whole workflow path. And a rename that keeps the
+# file parseable (an unused-variable autofix, say) reintroduces exactly that,
+# invisibly. So: render the prompt for real and assert on the text.
+
+# render_workflow_prompt <args-json> → the spawnPrompt() output for one role.
+# Evaluates the template's DEFINITIONS only (everything before the runtime
+# phase call), so no agent is ever dispatched.
+render_workflow_prompt() {
+  node --input-type=module -e '
+    import fs from "fs";
+    let src = fs.readFileSync(process.argv[1], "utf8").replace(/^export /gm, "");
+    src = src.slice(0, src.indexOf("phase(\"Dispatch\")"));
+    const args = JSON.parse(process.argv[2]);
+    const render = new Function("args", "log",
+      "return (()=>{" + src +
+      "\nreturn spawnPrompt({name:\"scout\",roleGoal:\"RG\",fileScope:[\"src/**\"],task:\"T\"});})();");
+    process.stdout.write(render(args, () => {}));
+  ' "$TEMPLATE" "$1"
+}
+
+@test "workflow template: args.worldIndex reaches the spawned prompt verbatim" {
+  command -v node >/dev/null || skip "node not installed"
+  TEMPLATE="$BATS_TEST_DIRNAME/../templates/squad-dispatch.workflow.js"
+  IDX='## World model\n- rate-limit: 100rps. — scout [confirmed, observed 2026-07-01]\n\nInvalid: 0 (excluded from every projection)'
+  run render_workflow_prompt "{\"goal\":\"G\",\"roles\":[{\"name\":\"scout\"}],\"worldIndex\":\"$IDX\"}"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"# Shared world model"* ]]
+  [[ "$output" == *"- rate-limit: 100rps. — scout [confirmed, observed 2026-07-01]"* ]]
+  [[ "$output" == *".squad/world/claims-scout.md"* ]]
+}
+
+@test "workflow template: an absent worldIndex renders no world section at all" {
+  command -v node >/dev/null || skip "node not installed"
+  TEMPLATE="$BATS_TEST_DIRNAME/../templates/squad-dispatch.workflow.js"
+  run render_workflow_prompt '{"goal":"G","roles":[{"name":"scout"}]}'
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"Shared world model"* ]]
+  [[ "$output" != *"claims-scout.md"* ]]
+}
+
+@test "workflow template: a blank worldIndex renders no world section either" {
+  command -v node >/dev/null || skip "node not installed"
+  TEMPLATE="$BATS_TEST_DIRNAME/../templates/squad-dispatch.workflow.js"
+  run render_workflow_prompt '{"goal":"G","roles":[{"name":"scout"}],"worldIndex":"   \n  "}'
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"Shared world model"* ]]
 }

@@ -41,7 +41,9 @@ These are the load-bearing invariants the rest of the document references by num
 10. **Synthesis summarizes, verification decides** — `.squad/verification.md` is the only authority for declaring the goal met.
 11. **Plan before act.** Before a role's first write to anywhere else, it publishes its engagement record — `.squad/role-plan-<role>.md` (schema: `templates/role-plan.md`) — stating what it read the task to be, its intended approach, its deliverables, and its assumptions, each graded by evidence class (never by number — see "Evidence grades" below). Until that record exists, the `PermissionRequest` hook defers every in-scope Edit/Write and in-sandbox Bash call for that role; it never denies. The record's own path is the one grant that needs no record: a role cannot publish its plan if publishing the plan required a plan. Autonomy is purchased with intent.
 
-*(Hard rules #12 and #13 are reserved for a later PR — the numbering is append-only, so the gap is deliberate; they are not documented here.)*
+*(Hard rule #12 is reserved for a later PR — the numbering is append-only, so the gap is deliberate; it is not documented here.)*
+
+13. **A belief with no source is a rumor — and a rumor never reaches a prompt.** A role's claims about the domain — not the task, `goal.md` already owns that — live in `.squad/world/claims-<role>.md`, one file per owner, granted positionally by the role's own `agent_type` exactly as its engagement record and hand-off outbox are (the `.squad/` reservation, hard rule #7). Every belief block carries `Claim`, `Source`, `Grade`, `Observed` — the first three and the last are **required**, and a block missing any of them is invalid and is mechanically excluded from every projected index: the guarantee is enforced by `world.sh`'s parser, not by a role goal asking nicely. `Grade` reuses hard rule #11's four-class vocabulary (`confirmed | reported | inferred | assumed`) — one vocabulary across the plugin, never a number, never a second scheme invented for this artifact. Two `live` blocks under the same key, from different owners, are a dispute; nobody writes the word `disputed` — it is derived from state, never a field a role can set or clear. The human is the sole adjudicator: never averaged, never latest-wins, never auto-resolved. See "The belief ledger" below.
 
 14. **Declared bounds.** Every role declares `needs:` preconditions and `stop:` bounds in its role goal. A fired condition ends the run with `status: escalated` on the engagement record. An open escalation blocks a `met` verdict; escalations are opened by roles and closed only in `verification.md` by the human's recorded ruling. Escalation is evidence generation, never decision — hard rule #10 holds. *Stopping well is a deliverable.*
 15. **The human meets the same evidence bar.** A NEEDS-HUMAN row or open escalation converts to PASS only against a stated what-you-checked / what-you-found, recorded verbatim in `verification.md` with attribution and date, permanently marked distinct from machine-verified truth. The human is never blocked — they are put on the record.
@@ -80,6 +82,63 @@ escalations_open = |records with status: escalated| − |their roles named in ve
 **A role can never mint the human's ruling.** The engagement record's status enum stops at `active | amended | escalated` — there is no `resolved` status and no `resolution:` field anywhere in that schema, for any role to write. If a role could mark its own escalation resolved, one in-scope write would unblock a `met` verdict, and hard rule #10 ("verification decides") would be defeated exactly as the pre-v0.4.1 `.squad/` forgery hole defeated it (see the v0.4.1 CHANGELOG entry). The ruling is producible only by a human, through `squad-verify`, in a file no role can reach — the `.squad/` reservation (hard rule #7) makes `.squad/verification.md` structurally unwritable by any role, at any `file_scope`.
 
 **Residual hole, stated honestly.** A role can flip its own `status: escalated` back to `status: active` — nothing above stops that, and nothing in a future release should pretend otherwise. That is behaviorally identical to never having stopped at all, which is already the acknowledged aspirational half of hard rule #14: *"stopping well is a deliverable"* is asked of a role, not mechanically enforced on it. What a role *cannot* do, under any status value it writes, is manufacture the human's ruling — that half is mechanical, not aspirational, because it lives in a file the role structurally cannot reach.
+
+## The belief ledger
+
+Hard rule #13 gives the squad a shared **domain** representation to sit alongside `goal.md`'s shared **task** representation — desideratum 3, *"we understand the world"* (Collins et al. §2.3): a shared representation of the world, domain, or task, where partnership is synergy, not the sum of its parts. Without it, roles independently rediscover the same facts and — worse — can hold silently contradictory beliefs, with nothing in the system able to notice. See `examples/weekly-competitive-intel.md` for the ledger's own best case, worked across three weeks.
+
+**The artifact.** `.squad/world/claims-<owner>.md` — one file per owner. Ownership is **positional, by filename**, not by anything the file's contents assert: a role is granted exactly its own `.squad/world/claims-<agent_type>.md`, derived from `agent_type` the same way its engagement record (`role-plan-<agent_type>.md`) and hand-off outbox (`role-comm-<agent_type>--*`) are — the `.squad/` reservation (hard rule #7) makes forgery of another owner's file structurally impossible via the `PermissionRequest` hook, not merely discouraged by convention. The gate matches hard rule #11's: a role gets no grant to its own claims file until its engagement record exists — asserting a belief is acting.
+
+Two owners on the roster are not roles:
+
+| Owner | File | Holds |
+| --- | --- | --- |
+| The human | `.squad/world/claims-user.md` | The human's own beliefs, and the rulings that settle disputes. |
+| Research (reserved) | `.squad/world/claims-research.md` | Reserved for a later release — not built in this PR. The hook already refuses the name so nothing collides with it later. |
+
+**Reserved owner names.** `user` and `research` are refused unconditionally by the hook's grant logic — a role in the roster merely *named* `user` would otherwise be derived a grant to `.squad/world/claims-user.md` by the exact same mechanism that gives every other role its own file, and could then write the ruling that settles a contested belief under its own name. Nothing else in the system stops that: role names come from `roster.json`, which a human hand-edits, and the hook has no way to distinguish an innocent name collision from a deliberate one. The refusal lives in the hook itself (`squad_grant`), not in a convention roles are asked to respect.
+
+**The belief block:**
+
+```markdown
+## Belief: <kebab-key>
+
+Claim: <one sentence, falsifiable>
+Source: <file, command, URL, tool read, or person>   REQUIRED
+Grade: confirmed | reported | inferred | assumed      REQUIRED
+Observed: <ISO-8601 date>                             REQUIRED
+Status: live | superseded | retired
+Notes: <optional>
+```
+
+`Grade` is the same four-class vocabulary hard rule #11 defined for the engagement record (see "Evidence grades" above) — one vocabulary across the plugin, cited here rather than restated a second way.
+
+**The parser is the enforcement.** `world.sh` — the read-only evidence script that projects the ledger, following the same jq/awk, JSON-lines-emitting pattern `skills/squad-verify/scripts/verify.sh` established — treats a block missing `Claim`, `Source`, `Grade`, or `Observed` as **invalid**: counted, surfaced on its own line in the script's output, and excluded from every projected index a role or the human reads. That is hard rule #13's one-line law made mechanical rather than aspirational: *a belief with no source is a rumor — and a rumor never reaches a prompt.* Asking a role, in prose, to source its claims would be the aspirational half only; this rule has no aspirational half — the gate is a parser, the same discipline hard rule #14 already leans on for `section_has_content`.
+
+**`disputed` is derived, never written.** No belief block ever carries `Status: disputed`, and no script accepts one as input. Two `live` blocks under the same key, from different owners' files, *are* the dispute — `world.sh` detects it by grouping live blocks by key across every `claims-*.md` file and flagging any key with more than one, the same discipline `verify.sh` already uses to compute `escalations_open` from state nobody writes directly. A role cannot un-dispute its own claim by editing a `Status:` field, because no field's value means that.
+
+**The human is the sole adjudicator.** Resolving a dispute is not averaging, not latest-wins, not a vote among owners — it is a ruling, the same spirit as hard rule #10 restated for belief instead of verdict. The human reads the disputed keys, decides which claim stands, and records the ruling by hand in `.squad/world/claims-user.md`: the superseded claim's own block is edited to `Status: superseded` — **never deleted, so the superseded history persists** — and `claims-user.md` gains a `live` block carrying the ruling, sourced to the human. No script performs this edit, and nothing auto-resolves, ever.
+
+### Non-goals
+
+Stated explicitly, because they are what keep this feature honest:
+
+| Non-goal | What that means in practice |
+| --- | --- |
+| No TTL / no staleness decay | A belief observed a year ago is still `live` until something contests or retires it. Nothing ages it out on a timer. |
+| **No semantic contradiction detection** | The ledger detects a dispute only when two `live` blocks share the **identical key**. Two roles contradicting each other in different words, under different keys, go unnoticed — the ledger catches key collisions, not disagreement. |
+| No auto-resolution, ever | No script, hook, or role can write `Status: superseded` on another owner's block. Only the human's ruling does that, by hand, in `claims-user.md` — hard rule #10's spirit. |
+| No cross-squad merge | A parked squad's ledger travels with it under `.squad/squads/<slug>/world/`; nothing merges two squads' beliefs into one on switch or restore. |
+| Grades are self-reported | Nothing verifies a `Source:` line is truthful — a role can write `Source: reports/pricing.json` for a file it never opened, and the parser has no way to tell. The same honesty gap hard rule #11's evidence grades already carry, now shared by a second artifact. |
+
+### What the ledger enforces, and what it merely asks
+
+| Surface | What's enforced | What's merely asked |
+| --- | --- | --- |
+| The four required fields | `world.sh`'s parser: a block missing `Claim`, `Source`, `Grade`, or `Observed` is invalid, counted, and excluded from the projected index — it never reaches a prompt. | Whether `Source:` is true, `Grade:` is honest, or `Claim:` is actually falsifiable. The parser reads text; it has no way to check the world. |
+| Ownership | The `PermissionRequest` hook derives exactly one grant per role — its own `claims-<agent_type>.md`, gated on its engagement record existing — structurally impossible to forge another owner's file. | Nothing on this surface — it is mechanical, the same as the hook's other `.squad/` grants. |
+| `disputed` | Derived by `world.sh` from live-block key collisions across owners' files; no field a role can set or clear to fake or hide a dispute. | Whether a role *should* have noticed its claim conflicted with another owner's before asserting it — nothing polls for that; the collision surfaces only once both blocks exist. |
+| Resolution | The human's ruling is the only path to `Status: superseded` — recorded in `claims-user.md`, dated, sourced. | Nothing prevents the human from ruling badly, or from never getting to a disputed key at all — an unresolved dispute simply stays surfaced, indefinitely. |
 
 ## The three modes
 
@@ -488,6 +547,9 @@ All squad state lives under `.squad/` in the user's project. Generated role defi
 │   ├── goal.md                          # squad-onboard writes; squad-goal owns
 │   ├── role-goal-<role-name>.md         # squad-role writes one per role
 │   ├── role-plan-<role-name>.md         # the role itself writes it before its first act (rule #11)
+│   ├── world/                           # the belief ledger (rule #13)
+│   │   ├── claims-<role-name>.md        #   one per role — positional grant, own beliefs only
+│   │   └── claims-user.md               #   the human's beliefs + dispute rulings
 │   ├── roster.json                      # squad-roster owns (source of truth)
 │   ├── roster.md                        # squad-roster auto-generates (human view)
 │   └── workspaces/                      # provision.sh materializes one sandbox per role
@@ -518,6 +580,7 @@ Schemas for `goal.md` and `roster.json` are above. `role-goal-<role-name>.md` mi
 | `.squad/roster.md` | **Commit** | Auto-generated human view; committed for diff readability. |
 | `.squad/role-goal-*.md` | **Commit** | Per-role goals — derived from squad goal but stable artifacts. |
 | `.squad/verification.md` | **Commit** | The verdict of record (hard rule #10) — the evidence trail for "the goal is met" should travel with the project. Overwritten on each re-verify. |
+| `.squad/world/claims-*.md` | **Commit** | The belief ledger (hard rule #13) — unlike the engagement record, this is **never cleared on dispatch**; accumulating is the point. Committed so the domain knowledge travels with the project the same way `goal.md` and `roster.json` do. Parked and restored with the squad by `squad-goal`'s park/switch operations (see "One active squad, many parked" below) — a parked squad's beliefs go with it, not left behind at `.squad/world/`. |
 | `.squad/workspaces/<role>/` | **Gitignore** | Per-role sandboxes materialized by `provision.sh`; ephemeral, recreated on each provision. The `environment` spec in `roster.json` is the committed source of truth. |
 | `.squad/role-comm-*` | **Gitignore** | Hand-off manifests (`role-comm-<from>--<to>.md`, shape: `templates/role-comm.md`) — per-run working state, overwritten each dispatch. The deliverables they point at live in committed `file_scope` paths; the manifest itself is ephemeral routing. |
 | `.squad/role-plan-*` | **Gitignore** | The engagement record (hard rule #11) — `.squad/role-plan-<role>.md`, shape: `templates/role-plan.md`. Per-engagement working state: the role writes it before its first write anywhere else, the `PermissionRequest` hook gates on its existence, and the dispatcher clears the records of the roles it's about to (re)dispatch — same lifecycle as `role-comm-*` above. `squad-verify` quotes what must outlive it into `.squad/verification.md`'s `## Process` section. A record with `status: escalated` additionally blocks a `met` verdict until the human's ruling lands in `verification.md` — see "Escalation lifecycle" above (hard rules #14–#15). |

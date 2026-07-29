@@ -90,13 +90,15 @@ If the user is mid-edit and asks "show me what I'm changing":
 
 One project runs **one active squad** — `.squad/goal.md` + `.squad/roster.json` are what every hook, script, and skill reads, and concurrent squads would collide on `.claude/agents/` names and hook lookups. A second initiative doesn't replace the first, though: it parks it.
 
-**Layout:** parked squads live at `.squad/squads/<slug>/` (slug: short kebab-case name — derive from the goal, confirm with the user). Each holds the squad's durable state: `goal.md`, `roster.json`, `roster.md`, `role-goal-*.md`, `verification.md` (if present), and `agents/` (the role definition files, moved out of `.claude/agents/` so parked roles can't auto-delegate or collide with the active squad's names). Ephemeral state is **not** parked: `.squad/role-comm-*` manifests are deleted (per-engagement), `.squad/workspaces/<role>/` and `.claude/worktrees/<role>/` are left to be re-provisioned/re-created on resume. Parked dirs follow the same commit policy as active state — everything in them is commit-grade.
+**Layout:** parked squads live at `.squad/squads/<slug>/` (slug: short kebab-case name — derive from the goal, confirm with the user). Each holds the squad's durable state: `goal.md`, `roster.json`, `roster.md`, `role-goal-*.md`, `verification.md` (if present), `world/` (the belief ledger — every `claims-<owner>.md` under it, moved as a unit; hard rule #13), and `agents/` (the role definition files, moved out of `.claude/agents/` so parked roles can't auto-delegate or collide with the active squad's names). Ephemeral state is **not** parked: `.squad/role-comm-*` manifests are deleted (per-engagement), `.squad/workspaces/<role>/` and `.claude/worktrees/<role>/` are left to be re-provisioned/re-created on resume. Parked dirs follow the same commit policy as active state — everything in them is commit-grade.
+
+**No cross-squad merge.** A parked squad's `world/` is its own. Nothing in this skill, or anywhere in the plugin, merges two squads' belief ledgers into one — park and switch move `.squad/world/` wholesale, they never combine it with another squad's. Switching back to a squad restores exactly the ledger it had when parked; whatever the squad that was active in the meantime came to believe stays with *that* squad when it, in turn, gets parked.
 
 ### Park
 
 1. Confirm no dispatch is mid-flight (workers running, or worktrees with uncommitted changes the user hasn't dealt with). If in doubt, ask — never park under a running squad.
 2. Pick the slug with the user. Refuse if `.squad/squads/<slug>/` already exists.
-3. Move `goal.md`, `roster.json`, `roster.md`, all `role-goal-*.md`, and `verification.md` from `.squad/` into `.squad/squads/<slug>/`.
+3. Move `goal.md`, `roster.json`, `roster.md`, all `role-goal-*.md`, `verification.md`, and `world/` (if present — the whole directory, every `claims-<owner>.md` inside it) from `.squad/` into `.squad/squads/<slug>/`.
 4. For each role in the parked roster, move its `agent_file` from `.claude/agents/` into `.squad/squads/<slug>/agents/`.
 5. Delete any `.squad/role-comm-*.md`.
 6. Report: *"Squad `<slug>` parked. No active squad — run `squad-onboard` for a new one, or `switch` to a parked squad."*
@@ -105,7 +107,7 @@ One project runs **one active squad** — `.squad/goal.md` + `.squad/roster.json
 
 1. List parked squads (below); confirm the target.
 2. If a squad is currently active, **park it first** (full Park flow — needs its own slug).
-3. Restore the target: move its files from `.squad/squads/<slug>/` back to `.squad/`, and its `agents/*.md` back to `.claude/agents/`. If an agent filename already exists in `.claude/agents/` (a non-squad subagent), stop and surface the collision — never overwrite.
+3. Restore the target: move its files from `.squad/squads/<slug>/` back to `.squad/` — including `world/` if present, moved back as a whole directory, never merged with anything already at `.squad/world/` (Step 2 above already parked whatever squad was active, so it should be empty or absent at this point; if it isn't, stop and surface the collision rather than silently combining two belief ledgers) — and its `agents/*.md` back to `.claude/agents/`. If an agent filename already exists in `.claude/agents/` (a non-squad subagent), stop and surface the collision — never overwrite.
 4. Report the restored goal (one-line summary) and remind: workspaces/worktrees are not restored — `squad-spawn` re-provisions environments on next dispatch.
 
 ### List squads
@@ -137,5 +139,6 @@ If any check fails, fix it interactively with the user — don't write a broken 
 - Does not spawn workers (that's `squad-spawn`).
 - Does not modify `.squad/roster.json` (that's `squad-roster`).
 - Does not run the onboarding flow (that's `squad-onboard`).
+- Does not read or adjudicate belief content, and never merges two squads' `world/` ledgers into one — it only moves `.squad/world/` wholesale on park/switch (see "No cross-squad merge" above). Reading and adjudicating are `squad-world`.
 
 If the user asks for any of those, hand off to the appropriate skill.

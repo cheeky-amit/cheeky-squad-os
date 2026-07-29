@@ -38,6 +38,13 @@
 // INPUT — `args` (supplied by the runner; never read from disk):
 //   {
 //     "goal": "<full text of .squad/goal.md>",
+//     "worldIndex": "<verbatim stdout of world.sh --index>",  // optional;
+//                          // hard rule #13. Squad-wide, computed ONCE by the
+//                          // runner, identical in every role's prompt. OMIT
+//                          // THE KEY ENTIRELY when that stdout was empty —
+//                          // never "" and never a placeholder. The absence
+//                          // contract is the same one every other
+//                          // .squad/world/-touching surface honors.
 //     "roles": [
 //       {
 //         "name": "klaviyo-data-puller",      // matches .claude/agents/<name>.md
@@ -65,6 +72,11 @@ const goal =
 	squad.goal ||
 	"(no goal text supplied — refuse and ask the runner to bake .squad/goal.md into args.goal)";
 const roles = Array.isArray(squad.roles) ? squad.roles : [];
+// hard rule #13 — the shared world model. Squad-wide, so it is read once
+// here rather than per role. Absent/blank collapses to "" and the whole
+// section drops out of every prompt below; never render an empty heading.
+const worldIndex =
+	typeof squad.worldIndex === "string" ? squad.worldIndex.trim() : "";
 
 if (!roles.length) {
 	log("No active roles supplied in args.roles — nothing to dispatch.");
@@ -112,7 +124,38 @@ ${goal}
 
 # Your role's goal
 ${role.roleGoal || `(role goal not supplied — read .squad/role-goal-${role.name}.md before doing anything)`}
+${
+	worldIndex
+		? `
+# Shared world model (hard rule #13) — what this squad already believes
+${worldIndex}
 
+Standing instructions for using it:
+- Reuse an existing key rather than minting a near-duplicate — check the
+  index above before writing a new "## Belief:" heading to your own claims
+  file at .squad/world/claims-${role.name}.md.
+- Never edit another owner's claims file. Only .squad/world/claims-${role.name}.md
+  is yours. On this dispatch path you run under acceptEdits, so nothing
+  mechanically stops you — police it yourself, exactly as you police your
+  file scope below.
+- Contest a belief by writing your own counter-block under the same key, in
+  your own claims file — never by editing the block you disagree with. Two
+  live blocks under one key from different owners ARE the dispute; nobody
+  writes the word "disputed", including you.
+- A key shown above as DISPUTED may not be silently picked. If your work
+  depends on one, say in your engagement record's ## Assumptions which side
+  you used and why.
+- Every belief you write carries Claim, Source, Grade (confirmed | reported
+  | inferred | assumed — the same four grades as your assumptions, never a
+  number), and Observed. A block missing any of them is parsed as invalid
+  and reaches no prompt, ever — so an unsourced belief is not a shortcut,
+  it is a write that did nothing.
+- This file is never cleared between dispatches — unlike your engagement
+  record and the hand-offs, what is written here accumulates for the life of
+  the squad.
+`
+		: ""
+}
 # Your file scope (HARD BOUNDARY)
 ${(role.fileScope || []).map((g) => `- ${g}`).join("\n") || "- (none declared)"}
 ${

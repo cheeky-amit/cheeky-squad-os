@@ -566,3 +566,213 @@ manual 90-minute loop is gone; the brief is the loop now.
   (file written by 9am? ≤3 bullets per competitor? deltas explicit? "so what"
   line present?) and writes `.squad/verification.md`. Synthesis summarizes;
   verification decides.
+- **The world model turns week 3's rediscovery into inheritance.** Alongside
+  `intel/`, the squad also keeps a belief ledger under `.squad/world/` — one
+  file per role. A fact two roles independently observe doesn't have to be
+  re-derived from scratch every Monday, and when two roles *disagree*, the
+  system notices instead of quietly shipping whichever brief got written
+  last. Three weeks of it, end to end, below.
+
+## 9. The world model — three Mondays of belief
+
+This is the squad's shared **domain** representation (hard rule #13) — a
+belief ledger sitting alongside the shared **task** representation `goal.md`
+already provides. It is the best case for why a ledger beats a hand-off: a
+fact gets contested once, adjudicated once, and inherited forever after.
+
+The trigger is a loose thread already visible in Week 1's brief (§7 above):
+*"No blog post backs it yet, so feature depth is unclear — could be a rename
+of existing scheduling, could be net-new."* That uncertainty is exactly what
+a belief block is for.
+
+### 9.1 Week 1 (2026-06-01) — a belief is seeded
+
+`signal-analyst` doesn't just write the deltas file — it also asserts what it
+currently believes, in its own corner of the ledger. The grant is positional:
+`signal-analyst` can write `.squad/world/claims-signal-analyst.md` and
+nothing else under `.squad/world/`, whether or not that path is anywhere in
+its declared `file_scope` (`intel/competitors/deltas/**`) — the
+`PermissionRequest` hook derives the grant from `agent_type`, not from scope.
+
+```markdown
+<!-- .squad/world/claims-signal-analyst.md -->
+
+## Belief: servicetitan-ai-copilot-is-new
+
+Claim: ServiceTitan's "AI Dispatch Copilot" is a rebrand of existing
+  scheduling, not a new capability.
+Source: intel/competitors/raw/2026-06-01/servicetitan.json (homepage_hero
+  field only — blog_posts_last_7d was empty this week)
+Grade: inferred
+Observed: 2026-06-01
+Status: live
+Notes: No collateral backs the claim yet. Revisit once ServiceTitan
+  publishes anything about it.
+```
+
+`[inferred]` is the honest grade — nothing was fetched that proves it either
+way, it's a reasoned guess from the absence of supporting content. The claim
+goes `live` and sits quietly in the ledger. Nobody reads it again until it
+matters.
+
+### 9.2 Week 2 (2026-06-08) — a fresher source contests it
+
+`competitor-scraper`'s Monday run fetches ServiceTitan's blog index again.
+This week it isn't empty: a post titled *"Inside AI Dispatch Copilot: how it
+re-routes jobs in real time,"* published 2026-06-05, is sitting right there
+in `blog_posts_last_7d`. Reporting what a fetched page says is squarely
+inside the scraper's own lane — it isn't analyzing, it's dumping a source it
+just read, the same discipline its role goal already holds it to. It writes
+its own belief, under the *same key* `signal-analyst` used a week earlier:
+
+```markdown
+<!-- .squad/world/claims-competitor-scraper.md -->
+
+## Belief: servicetitan-ai-copilot-is-new
+
+Claim: ServiceTitan's "AI Dispatch Copilot" is a genuinely new
+  route-optimization engine — the vendor's own blog describes real-time
+  re-routing logic, not a UI rename.
+Source: intel/competitors/raw/2026-06-08/servicetitan.json
+  (blog_posts_last_7d — "Inside AI Dispatch Copilot: how it re-routes jobs
+  in real time", published 2026-06-05)
+Grade: confirmed
+Observed: 2026-06-08
+Status: live
+```
+
+`[confirmed]` this time — there's a URL, and a fetch timestamp behind it.
+Two different owners, `signal-analyst` and `competitor-scraper`, now each
+have a `live` block under the identical key `servicetitan-ai-copilot-is-new`,
+saying opposite things.
+
+The same run also records something entirely uncontroversial —
+`fieldpulse-pricing-page-has-no-badge`, `[confirmed]`, straight off the
+fetched pricing page. Most beliefs are like that. It matters below only
+because it shows what the projection does with a belief nobody disputes.
+
+### 9.3 The conflict surfaces
+
+Nothing writes the word `disputed` anywhere. `world.sh --index`, run as part
+of the Week 3 dispatch preflight, groups every `claims-*.md` file's `live`
+blocks by key and finds the collision on its own — the same shape of
+computation `verify.sh` already uses for `escalations_open` (LOGIC.md §5.4):
+state derived from two files neither of which was written *for* this
+purpose.
+
+This is the script's real output, verbatim — and verbatim is the point: what
+`squad-spawn` pastes into a role's prompt is exactly these bytes, never prose
+a model assembled from them.
+
+```
+$ bash skills/squad-world/scripts/world.sh --index
+## World model
+- fieldpulse-pricing-page-has-no-badge: FieldPulse's pricing page carries no ...
+
+## Disputed
+
+### servicetitan-ai-copilot-is-new
+- [competitor-scraper] confirmed · intel/competitors/raw/2026-06-08/servicetitan.json (blog_posts_last_7d) · observed 2026-06-08: ServiceTitan's "AI Dispatch Copilot" is a genuinely new route-optimization engine.
+- [signal-analyst] inferred · intel/competitors/raw/2026-06-01/servicetitan.json (homepage_hero field only) · observed 2026-06-01: ServiceTitan's "AI Dispatch Copilot" is a rebrand of existing scheduling, not a new capability.
+
+Invalid: 0 (excluded from every projection)
+```
+
+Read the shape, not just the content. The undisputed belief is truncated to
+one capped line — a prompt gets the gist and can go read the file. The
+**disputed** key is not: both claimants appear in full, with their sources
+and dates, because a one-line summary of a disagreement is how a
+disagreement gets missed. And the third live belief that *is* disputed never
+also appears up in `## World model` — a conflict is shown once, in full, or
+not at all.
+
+The plain (non-`--index`) mode is what a human runs, and it says the same
+thing as data:
+
+```
+$ bash skills/squad-world/scripts/world.sh | tail -1
+{"summary":true,"files":2,"beliefs":3,"live":3,"invalid":0,"conflicts":1}
+```
+
+No one asked for a dispute check. It fell out of two roles each doing their
+own job honestly, a week apart.
+
+### 9.4 The human adjudicates
+
+Maya reads both blocks over coffee Monday, along with the fetched blog post
+itself, and rules for `competitor-scraper`'s claim — it's backed by a primary
+source; `signal-analyst`'s was a guess made in the absence of one. This is
+the one step no script performs. She edits two files by hand:
+
+```markdown
+<!-- .squad/world/claims-signal-analyst.md — edited by Maya, not deleted -->
+
+## Belief: servicetitan-ai-copilot-is-new
+
+Claim: ServiceTitan's "AI Dispatch Copilot" is a rebrand of existing
+  scheduling, not a new capability.
+Source: intel/competitors/raw/2026-06-01/servicetitan.json (homepage_hero
+  field only — blog_posts_last_7d was empty this week)
+Grade: inferred
+Observed: 2026-06-01
+Status: superseded
+Notes: Superseded 2026-06-09 — see claims-user.md. The blog post that shipped
+  a week later confirmed this was net-new, not a rebrand. No collateral
+  backs the claim yet. Revisit once ServiceTitan publishes anything about it.
+```
+
+```markdown
+<!-- .squad/world/claims-user.md -->
+
+## Belief: servicetitan-ai-copilot-is-new
+
+Claim: ServiceTitan's "AI Dispatch Copilot" is a genuinely new
+  route-optimization engine, confirmed by the vendor's own blog post.
+Source: human ruling, 2026-06-09 — read both claims plus the primary
+  source at intel/competitors/raw/2026-06-08/servicetitan.json
+Grade: confirmed
+Observed: 2026-06-09
+Status: live
+```
+
+The superseded block is **edited in place, never deleted** — the original
+guess, its grade, and the date it was made all stay on disk. Six months from
+now, the same grep the founder ran for "when did ServiceTitan first lead with
+AI" (§8 above) also answers "who thought what, and when did we find out we
+were wrong."
+
+### 9.5 Week 3 (2026-06-15) — inherited knowledge, not rediscovery
+
+The dispatch trace now carries one more line than Week 1's did (§7):
+
+```
+[2026-06-15 09:00:01]  squad-spawn         world index loaded — .squad/world/
+                                            (3 owners, 0 disputed — 1 resolved 2026-06-09)
+[2026-06-15 09:00:02]  competitor-scraper  (haiku)   start
+[2026-06-15 09:00:11]  competitor-scraper            fetched all 3 competitors, 0 errors
+[2026-06-15 09:00:12]  competitor-scraper            done
+
+[2026-06-15 09:00:13]  signal-analyst      (sonnet)  start — spawn prompt
+                                            includes goal.md + role-goal.md +
+                                            world index (same prompt-baking
+                                            channel as hard rule #4)
+[2026-06-15 09:00:14]  signal-analyst                servicetitan-ai-copilot-is-new
+                                            already settled (claims-user.md,
+                                            confirmed) — not re-investigated
+[2026-06-15 09:00:29]  signal-analyst                wrote intel/competitors/deltas/2026-06-15.md
+[2026-06-15 09:00:29]  signal-analyst                done
+
+[2026-06-15 09:00:30]  summariser          (opus)    start
+[2026-06-15 09:00:51]  summariser                    wrote intel/summaries/2026-06-15.md
+[2026-06-15 09:00:51]  summariser                    done
+```
+
+`signal-analyst` never re-opens the question. It doesn't re-fetch the blog
+post, doesn't re-derive an opinion, doesn't burn a Monday's tokens rebuilding
+what Week 2's run and Maya's Monday-morning coffee already settled — it reads
+the projected world index, sees `servicetitan-ai-copilot-is-new` is `live`
+and `confirmed` under `claims-user.md`, and spends its budget on the *new*
+deltas instead. That's the payoff a hand-off can't give you: a hand-off note
+would have been cleared at the start of this run (per the manifest lifecycle,
+ARCHITECTURE.md's `SessionStart` section); the ledger, being committed and
+never cleared on dispatch, is still there three weeks later.

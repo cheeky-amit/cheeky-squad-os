@@ -652,6 +652,93 @@ The invariants every diagram above upholds (full text in
 | 9 | Propose what can't be contained — system/MCP/network/global needs go to the user, never auto-run. |
 | 10 | Synthesis summarizes, verification decides — `.squad/verification.md` is the only authority for "goal met". |
 | 11 | Plan before act — a role publishes `.squad/role-plan-<role>.md` before its first write elsewhere; the hook gates auto-approval on it, deferring, never denying. |
-| *(12, 13)* | *Reserved for a later PR — not shipped, not documented here. Numbering is append-only, so the gap is deliberate.* |
+| *(12)* | *Reserved for a later PR — not shipped, not documented here. Numbering is append-only, so the gap is deliberate.* |
+| 13 | A belief with no source is a rumor — a belief block missing `Claim`/`Source`/`Grade`/`Observed` is invalid and never reaches a prompt, enforced by `world.sh`'s parser. Two `live` blocks under one key from different owners are `disputed` (derived, never written); only the human adjudicates. |
 | 14 | Declared bounds — a fired `stop:` bound ends the run with `status: escalated`; an open escalation blocks `met`; only the human's ruling in `verification.md` closes one. |
 | 15 | The human meets the same evidence bar — a NEEDS-HUMAN row or escalation converts to PASS only against a verbatim, attributed, dated ruling — never blocked, always put on the record. |
+
+---
+
+## 10. The belief ledger (hard rule #13)
+
+The shared **domain** representation, alongside `goal.md`'s shared **task**
+representation. One file per owner — `.squad/world/claims-<owner>.md` — granted
+positionally, by filename, the same way an engagement record and a hand-off
+outbox are (§5.2, the `.squad/` reservation). Full walkthrough:
+`examples/weekly-competitive-intel.md`.
+
+### 10.1 Belief lifecycle
+
+A belief block moves through exactly these states. `contested` is not a state a
+role writes — it is what the diagram below derives when it finds two `live`
+blocks sharing a key.
+
+```mermaid
+flowchart TD
+    A0(["role writes<br/>## Belief: &lt;key&gt;<br/>Claim / Source / Grade / Observed"]) --> A1{"parser: all four<br/>required fields present?"}
+    A1 -->|no| INVALID(["invalid — counted,<br/>never reaches a prompt<br/>(hard rule #13)"])
+    A1 -->|yes| LIVE(["asserted → Status: live"])
+
+    LIVE --> B1{"another owner's file has<br/>a live block, same key?"}
+    B1 -->|no| INDEX["included in world.sh --index<br/>(recency-ordered, truncated)"]
+    B1 -->|yes| CONTESTED(["contested — derived from<br/>the collision, never a<br/>field any role writes"])
+
+    CONTESTED --> C1["world.sh --index surfaces the<br/>full block for up to 5<br/>disputed keys — script output,<br/>pasted verbatim into the prompt"]
+    C1 --> C2["human reads both claims"]
+    C2 --> ADJ(["adjudicated — never averaged,<br/>never latest-wins,<br/>never auto-resolved"])
+
+    ADJ --> D1["losing block:<br/>Status: superseded<br/>(never deleted — persists as history)"]
+    ADJ --> D2["claims-user.md gains a live<br/>block: Source: human ruling"]
+
+    LIVE -->|no longer true,<br/>no dispute involved| RETIRED(["Status: retired"])
+
+    classDef ok fill:#e6f4ea,stroke:#34a853,color:#111;
+    classDef warn fill:#fce8e6,stroke:#ea4335,color:#111;
+    classDef neu fill:#fef7e0,stroke:#fbbc04,color:#111;
+    class LIVE,INDEX ok;
+    class INVALID warn;
+    class CONTESTED,ADJ,D1,D2 neu;
+```
+
+> **Superseded is not deleted.** `D1` edits the losing block's `Status:`
+> field in place — the claim, its `Source`, and its original `Observed` date
+> stay on disk. That is what lets week 3 of the worked example read *why* a
+> belief changed, not just that it did.
+
+### 10.2 Where the projected index enters a spawn prompt
+
+`world.sh --index` performs the projection itself — capped, 80-byte-truncated,
+recency-ordered lines, full blocks for up to 5 disputed keys, an explicit
+`+N more on disk` / `+K more disputed` tail, and the invalid count on its own
+line. The prompt block is **script output pasted verbatim**, never
+LLM-assembled prose — the same token-budget discipline `verify.sh` already
+brings to Definition-of-done evidence (§5.4 shows `verify.sh` computing
+`escalations_open` the same read-only, jq-based way).
+
+```mermaid
+flowchart LR
+    W[".squad/world/claims-*.md<br/>(committed, never cleared<br/>on dispatch — hard rule #13)"] --> IDX["world.sh --index<br/>(read-only; capped + truncated<br/>+ disputed-key detail)"]
+    IDX --> BAKE["squad-spawn bakes the index<br/>alongside goal.md + role-goal.md<br/>into the spawn prompt<br/>(same channel as hard rule #4)"]
+    BAKE --> W2(["subagent / teammate sees<br/>settled + disputed beliefs<br/>before its first write"])
+
+    classDef ok fill:#e6f4ea,stroke:#34a853,color:#111;
+    class W2 ok;
+```
+
+> **Absence contract.** A squad with no `.squad/world/` behaves exactly as
+> it did before this rule existed: no world section is baked into any spawn
+> prompt, and nothing above fires. §5.2's `R3` reserved-artifact check already
+> lists `world/*` — a role with no ledger gets the same defer any other
+> reserved path gets, never a crash on a missing directory.
+
+### 10.3 Non-goals, restated as a diagram reading
+
+The lifecycle above is deliberately shallow. It does **not** attempt:
+
+- **Staleness decay** — nothing in §10.1 ages a `live` block on a timer; it
+  stays `live` until contested or explicitly `retired`.
+- **Semantic contradiction detection** — `B1` is a **key equality** check,
+  not a meaning check. Two owners contradicting each other under
+  differently-worded keys never reach `CONTESTED` at all.
+- **Auto-resolution** — nothing but a human, at `C2`/`ADJ`, can produce a
+  `superseded` block. No script sits between `CONTESTED` and `ADJ`.
