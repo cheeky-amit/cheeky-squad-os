@@ -460,7 +460,7 @@ sequenceDiagram
     CLA->>CLA: author the JS script (meta + body)
     CLA->>U: approval prompt (per §2.2 matrix)
     U-->>CLA: Yes / Yes-don't-ask-again
-    CLA->>RT: hand off script (+ args); returns immediately
+    CLA->>RT: hand off script (+ args) — returns immediately
     Note over CLA,U: session stays responsive — run is background
     RT->>A: agent(prompt, opts) → spawn subagent
     A-->>RT: final text  (or validated JSON if schema)  (or null if skipped)

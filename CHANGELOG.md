@@ -31,6 +31,14 @@ Work toward 1.0.0 — "the partnership release". Entries accumulate here and the
 
 - **A recorded human ruling was silently ignored when written in canonical YAML.** `verify.sh`'s `resolved_escalations` parser required the block-style dash at column 0, so the two-space-indented list that `templates/verification.md` and `examples/klaviyo-audit.md` both document never matched. The subtraction found nothing to subtract, `escalations_open` stayed above zero forever, and `met` became unreachable no matter what the human ruled. Indentation is now accepted; flow style still is too.
 
+- **Three mermaid diagrams had never rendered.** `ARCHITECTURE.md`'s dispatch sequence diagram and the end-to-end sequence diagrams in `LOGIC.md` and `LOGIC.local.md` failed to parse on GitHub, for two separate reasons — both found by actually rendering every block rather than reading them:
+  - a **`;` inside a sequence message** is a mermaid *statement separator*, so the message truncated mid-sentence and the remainder parsed as a bare statement;
+  - **`&lt;`/`&gt;` entities break the sequence parser.** This is the exact opposite of the flowchart rule — in a flowchart node label you *must* escape angle brackets, and this repo had correctly learned that, then applied it one block over where it is a bug.
+
+  `tests/mermaid-lint.sh` now guards both classes in CI. Structural rather than a real render: CI here is shellcheck + bats and finishes in ~25s, and pulling Chromium in would cost minutes for a class of bug this catches for free.
+
+- **`templates/squad-dispatch.workflow.js` was never syntax-checked.** It ships as JavaScript, so a syntax error would have surfaced only at dispatch time. CI now runs `node --check` on it, and shellcheck's glob covers `tests/*.sh` so the new linter lints itself.
+
 - **Worktree-isolated roles could lose auto-approval entirely.** The hook resolved both the roster and its containment root from `$CLAUDE_PROJECT_DIR`. For a role running under `isolation: worktree` (hard rule #7), that variable may point at the main checkout while the role's `.squad/` lives in the worktree — in which case the hook found no roster, deferred every write, and additionally rejected absolute worktree paths as outside the project. It now resolves to whichever of `$CLAUDE_PROJECT_DIR` or the hook input's `cwd` actually holds `.squad/roster.json`, and defers exactly as before when neither does.
 
 ### Changed

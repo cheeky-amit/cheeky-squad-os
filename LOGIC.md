@@ -110,7 +110,7 @@ sequenceDiagram
     participant SPAWN as squad-spawn
     participant W as Worker(s)
 
-    U->>ONB: I want to &lt;goal&gt;
+    U->>ONB: I want to <goal>
     ONB->>U: "Do you have a goal?"
     U-->>ONB: answer
     ONB->>ONB: reformulate → outcome · infer mode · decompose
@@ -119,7 +119,7 @@ sequenceDiagram
         ONB->>ROLE: generate role
         ROLE->>U: 6 interactive questions
         ROLE->>ROST: register role
-        ROLE->>ROLE: write .claude/agents/&lt;role&gt;.md + role-goal
+        ROLE->>ROLE: write .claude/agents/<role>.md + role-goal
     end
     ONB->>SPAWN: dispatch
     SPAWN->>GOAL: read goal (mode)

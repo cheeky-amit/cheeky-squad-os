@@ -576,7 +576,7 @@ sequenceDiagram
         Spawn->>Subagent: Task spawn with goal.md + role-goal.md baked into the Task prompt string (hard rule #4)
         Note right of Subagent: Subagent's context comes from the<br/>Task delegation message — there is<br/>no SessionStart hook to rely on.
     else mode = multi-use (Agent Teams teammates — SessionStart fires)
-        Spawn->>Teammate: lead spawns each teammate (Agent Team) referencing .claude/agents/<role>.md by name, with a prompt containing goal.md + role-goal.md; spawn.sh has optionally pre-created a worktree per role
+        Spawn->>Teammate: lead spawns each teammate (Agent Team) referencing .claude/agents/<role>.md by name, with a prompt containing goal.md + role-goal.md, with spawn.sh having optionally pre-created a worktree per role
         Teammate->>SessionHook: SessionStart fires (teammate is a full Claude session)
         SessionHook->>Teammate: inject .squad/goal.md via additionalContext (redundant with prompt-baking — belt and suspenders)
     end
