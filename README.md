@@ -10,7 +10,7 @@
 
 [![CI](https://github.com/cheeky-amit/cheeky-squad-os/actions/workflows/ci.yml/badge.svg)](https://github.com/cheeky-amit/cheeky-squad-os/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.4.0-blue.svg)](.claude-plugin/plugin.json)
+[![Version](https://img.shields.io/badge/version-0.4.1-blue.svg)](.claude-plugin/plugin.json)
 [![Claude Code plugin](https://img.shields.io/badge/Claude_Code-plugin-8A2BE2.svg)](https://code.claude.com/docs/en/plugins)
 [![Built with](https://img.shields.io/badge/built_with-Markdown_%2B_Bash-1f425f.svg)](CONTRIBUTING.md)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
@@ -136,6 +136,7 @@ sequenceDiagram
 - **`SessionStart`** — reads `.squad/goal.md` and injects it as additional context on every session start. If no goal is set, prints a one-line nudge to run `squad-onboard`.
 - **`UserPromptSubmit`** — appends `[squad goal in scope: <first 80 chars>]` to every turn so drift is visible. Observational only in v1 — does not block.
 - **`PermissionRequest`** — auto-approves two narrow surfaces for registered subagents: (a) Edit/Write inside the role's registered `file_scope`, and (b) in-sandbox scaffolding Bash — verbs `mkdir`/`touch`/`cp`/`ln` only, no shell metacharacters, every path operand inside the role's `environment.workspace`. Everything else — out of scope, any other Bash, any other tool, main session, unknown role — defers to the user. Fail-open on errors — never silently denies.
+- **`.squad/` is structurally reserved** (v0.4.1). Squad state never consults `file_scope`: a role is auto-approved only for the `.squad/` paths *derived from its own identity* — its own hand-off outbox and its own sandbox — and everything else there (the goal, the roster, `verification.md`, every other role's state) defers to you no matter how broad its scope. Before v0.4.1 a role scoped `**` could write all of them; see the [CHANGELOG](CHANGELOG.md) security note.
 
 ### How the permission hook decides
 
@@ -144,9 +145,13 @@ flowchart TD
   A["PermissionRequest fires"] --> B{"agent_type present?"}
   B -- "no / main session" --> D["↩️ defer to user"]
   B -- yes --> C{"tool?"}
-  C -- "Edit / Write" --> E{"file_path inside<br/>role file_scope?"}
+  C -- "Edit / Write" --> R{"path under .squad/ ?"}
+  R -- "yes" --> R2{"my own outbox<br/>or my own sandbox?"}
+  R2 -- "no — anyone else's<br/>state, at any scope" --> D
+  R2 -- yes --> F["✅ allow this single call"]
+  R -- "no" --> E{"file_path inside<br/>role file_scope?"}
   E -- "no / traversal / outside repo" --> D
-  E -- yes --> F["✅ allow this single call"]
+  E -- yes --> F
   C -- Bash --> G{"role has<br/>environment.workspace?"}
   G -- no --> D
   G -- yes --> H{"verb in mkdir·touch·cp·ln,<br/>no shell metacharacters?"}

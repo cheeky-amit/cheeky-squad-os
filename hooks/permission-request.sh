@@ -8,7 +8,8 @@
 # user (no decision emitted → normal permission flow → user prompted; never
 # silently denied):
 #
-#   1. Edit/Write to a file inside the role's file_scope.
+#   1. Edit/Write to a file inside the role's file_scope — EXCEPT under
+#      .squad/, which is structurally reserved (see below).
 #   2. Bash that does pure in-sandbox SCAFFOLDING (mkdir/touch/cp/ln) where
 #      EVERY path operand resolves inside the role's environment.workspace.
 #      This is the role working freely inside its own sandbox. Anything that
@@ -22,9 +23,40 @@
 # reject ".." traversal, fail-closed on doubt) — auto-approving Bash never
 # reopens the path-traversal hole hardened on the Edit/Write surface.
 #
+# THE .squad/ STRUCTURAL RESERVATION (v0.4.1)
+# -------------------------------------------
+# .squad/ holds squad STATE, not work product. Consulting file_scope there was a
+# forgery hole: a role whose scope is broad — "**", or ".squad/**" — matched, and
+# therefore auto-approved writes to another role's hand-off outbox, another
+# role's goal, the squad goal, the roster, and verification.md. That defeats the
+# v0.3.0 outbox guarantee (true only for narrowly-scoped roles) and hard rule #10
+# (a role could write its own verdict).
+#
+# So: a path under .squad/ NEVER consults file_scope. A role is granted exactly
+# the .squad/ paths derived from its OWN sanitized agent_type, and every other
+# .squad/ write defers to the user. Derived-not-declared is what makes the grant
+# unforgeable — a role cannot widen it, because the roster entry the grant reads
+# is selected by the agent_type Claude Code reports, and roster.json itself is
+# now deferred.
+#
+# Granted (v0.4.1):
+#   - .squad/role-comm-<agent>--*        its own hand-off outbox
+#   - <its own environment.workspace>/** its own sandbox (hard rule #8)
+# Deferred: every other .squad/ path, for every role, at every scope.
+#
+# Note this is a net WIDENING of two paths and a net NARROWING of everything
+# else: a role with a narrow scope that never registered its outbox now gets it
+# structurally, and a role with a broad scope loses the rest. Stated plainly
+# because "the hook only ever removes an auto-approval" is no longer true.
+#
 # Always exits 0. Fail-open on any error.
 
 set -u
+
+# Byte-order collation for every case/glob comparison below — locale-dependent
+# ranges must never change a containment decision.
+LC_ALL=C
+export LC_ALL
 
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$PWD}"
 ROSTER="$PROJECT_DIR/.squad/roster.json"
@@ -162,6 +194,66 @@ path_in_scope() {
   return 1
 }
 
+# rel_under_squad <rel> → returns 0 if <rel> is the .squad/ dir or nested in it.
+# Anything matching this takes the reservation path and never sees file_scope.
+rel_under_squad() {
+  case "$1" in
+    .squad|.squad/*) return 0 ;;
+  esac
+  return 1
+}
+
+# safe_agent_name <agent_type> → returns 0 if the name is safe to build a path
+# from: lowercase kebab, no dots, no slashes, no leading hyphen. A name failing
+# this is never used in a derived path (it could otherwise smuggle "../" or a
+# glob metacharacter into the grant) — the role simply gets no .squad/ grant.
+safe_agent_name() {
+  case "$1" in
+    ''|-*) return 1 ;;
+    *[!a-z0-9-]*) return 1 ;;
+  esac
+  return 0
+}
+
+# squad_grant <rel> <agent> <workspace> → returns 0 if this role may write this
+# .squad/ path. Order is load-bearing: the role's own outbox is granted BEFORE
+# the reserved-artifact check, because the outbox lives inside that namespace.
+#
+#   1. own outbox  .squad/role-comm-<agent>--*      → allow
+#   2. reserved squad artifact                      → defer (never grantable)
+#   3. inside the role's own declared workspace     → allow (hard rule #8)
+#   4. anything else under .squad/                  → defer
+#
+# Step 2 exists so a roster that declares a wide environment.workspace (say
+# ".squad/") cannot swallow another role's contract paths through step 3.
+squad_grant() {
+  local rel="$1" agent="$2" ws="$3"
+
+  if safe_agent_name "$agent"; then
+    case "$rel" in
+      ".squad/role-comm-$agent--"*) return 0 ;;
+    esac
+  fi
+
+  # Reserved: squad-wide state and any role's per-role artifacts. Structurally
+  # owned by the skills that write them; never reachable via a workspace grant.
+  case "$rel" in
+    .squad/goal.md|.squad/roster.json|.squad/roster.md|.squad/verification.md) return 1 ;;
+    .squad/partner.md) return 1 ;;
+    .squad/role-goal-*|.squad/role-comm-*|.squad/role-plan-*|.squad/role-esc-*) return 1 ;;
+    .squad/world/*) return 1 ;;
+    .squad/squads/*) return 1 ;;
+  esac
+
+  # The role's own sandbox. Empty workspace, or one that is .squad/ itself,
+  # grants nothing — a sandbox must be strictly nested to be containable.
+  if [ -n "$ws" ] && [ "$ws" != ".squad" ] && rel_under_dir "$rel" "$ws"; then
+    return 0
+  fi
+
+  return 1
+}
+
 # --- Branch on tool ----------------------------------------------------------
 
 case "$TOOL_NAME" in
@@ -171,16 +263,35 @@ case "$TOOL_NAME" in
       exit 0
     fi
 
-    SCOPES=$(printf '%s' "$(cat "$ROSTER")" \
-      | jq -r --arg name "$AGENT_TYPE" \
-          '.roles[] | select(.name == $name) | .file_scope[]?' 2>/dev/null)
-    if [ -z "$SCOPES" ]; then
-      exit 0  # unknown role, or no file_scope → defer
-    fi
-
     REL_PATH=$(normalize_rel "$FILE_PATH") || exit 0
     if has_traversal "$REL_PATH"; then
       exit 0  # never auto-approve traversal — defer to user
+    fi
+
+    # The role must be registered before any grant is considered — an
+    # unregistered agent_type gets nothing, on either surface below.
+    ROLE_JSON=$(printf '%s' "$(cat "$ROSTER")" \
+      | jq -c --arg name "$AGENT_TYPE" \
+          'first(.roles[] | select(.name == $name)) // empty' 2>/dev/null)
+    if [ -z "$ROLE_JSON" ]; then
+      exit 0  # unknown role → defer
+    fi
+
+    # ----- The .squad/ structural reservation --------------------------------
+    # Squad state never consults file_scope. See the header for why.
+    if rel_under_squad "$REL_PATH"; then
+      WS=$(printf '%s' "$ROLE_JSON" \
+        | jq -r '.environment.workspace // empty' 2>/dev/null)
+      WS="${WS%/}"
+      if squad_grant "$REL_PATH" "$AGENT_TYPE" "$WS"; then
+        emit_allow
+      fi
+      exit 0  # granted or not, .squad/ never falls through to file_scope
+    fi
+
+    SCOPES=$(printf '%s' "$ROLE_JSON" | jq -r '.file_scope[]?' 2>/dev/null)
+    if [ -z "$SCOPES" ]; then
+      exit 0  # no file_scope → defer
     fi
 
     MATCHED=0

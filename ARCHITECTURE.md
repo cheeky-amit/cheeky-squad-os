@@ -35,6 +35,7 @@ These are the load-bearing invariants the rest of the document references by num
 5. **Explicit file scope.** Each role declares a `file_scope`; the `PermissionRequest` hook auto-approves in-scope Edit/Write and defers everything else to the user.
 6. **Mode controls cadence, not size.** One-time / Multi-use / Evergreen set persistence and dispatch primitive; squad size is set by goal decomposition.
 7. **Per-role file isolation.** Roles are given disjoint `file_scope` so concurrent workers don't overwrite each other (agent-teams doc: "each teammate owns a different set of files"). One-time subagents may additionally set `isolation: worktree`; Multi-use can pre-create per-role worktrees via `skills/squad-spawn/scripts/spawn.sh` as working directories.
+   **`.squad/` is structurally reserved** (v0.4.1): a path under `.squad/` never consults `file_scope` at all. A role is auto-approved for exactly the `.squad/` paths *derived from its own `agent_type`* — its own hand-off outbox (`.squad/role-comm-<role>--*`) and its own declared `environment.workspace` — and every other `.squad/` write defers to the human, whatever the role's scope says. Derived-not-declared is the point: a role cannot widen the grant, because it cannot edit the roster the grant is read from. Isolation between roles therefore no longer depends on the human writing careful globs.
 8. **Sandbox-scoped autonomy.** A role's `environment` (optional) is materialized as a sandbox — a filesystem-and-PATH boundary (`.squad/workspaces/<role>/` + a role-local `bin/` + a sourced `env` file). Inside it, the role provisions and works freely: the `PermissionRequest` hook auto-approves in-sandbox scaffolding (`mkdir`/`touch`/`cp`/`ln` with every operand inside the workspace) exactly as it auto-approves in-`file_scope` Edit/Write. The boundary is enforced by the same hook, not by a confirmation prompt.
 9. **Propose what can't be contained.** Anything inherently global — a system CLI, an MCP server, a network fetch, an experimental/global flag — is never run by the provisioner. It is collected into `global_needs` and proposed to the user for approval. The escape hatch is not separate logic: "not in the sandbox vocabulary" is exactly what the hook already defers, and what `provision.sh` already refuses to execute.
 10. **Synthesis summarizes, verification decides** — `.squad/verification.md` is the only authority for declaring the goal met.
@@ -370,14 +371,24 @@ Both mechanisms produce the same end state — the worker sees the goal. They di
 
 **Trigger:** Permission dialog about to appear for `Bash`, `Edit`, `Write` ([hooks doc](https://code.claude.com/docs/en/hooks)). The hook *fires* for all three (the `plugin.json` matcher is `Bash|Edit|Write`) and auto-approves on **two narrow surfaces**, deferring everything else to the user:
 
-1. **`Edit`/`Write`** to a file inside the role's `file_scope`.
+1. **`Edit`/`Write`** to a file inside the role's `file_scope` — *except* under `.squad/`, which is structurally reserved (see below).
 2. **`Bash`** that is pure in-sandbox scaffolding — verb in `{mkdir, touch, cp, ln}`, every path operand resolving inside the role's `environment.workspace`, and no shell metacharacter (so containment is provable). This is hard rule #8 — the role working freely inside its sandbox.
 
 Both surfaces share the same containment primitives (normalize-to-relative, reject `..` traversal, fail-closed on doubt). Destructive verbs, installs, network, and any operand outside the workspace are **not** on the Bash list by design — they are the provisioner's "propose to the user" path (hard rule #9), not the running role's. A role with no `environment.workspace` gets no Bash auto-approval at all.
 
 **Script:** `hooks/permission-request.sh`
 
+**The `.squad/` structural reservation (v0.4.1).** `.squad/` holds squad *state*, not work product, and matching it against `file_scope` was a forgery hole: a role whose scope was broad — `**`, or `.squad/**` — matched, and so auto-approved writes to another role's hand-off outbox, another role's role goal, `goal.md`, `roster.json`, and `verification.md`. That silently defeated two guarantees this document makes: the v0.3.0 claim that forged hand-offs are "structurally impossible to auto-approve" (true only for narrowly-scoped roles) and hard rule #10 (a role could write its own verdict). Since v0.4.1 the hook resolves `.squad/` paths on their own track, in this order:
+
+1. the role's **own** outbox, `.squad/role-comm-<agent_type>--*` → allow;
+2. any **reserved artifact** — `goal.md`, `roster.json`, `roster.md`, `verification.md`, `partner.md`, `role-goal-*`, `role-comm-*`, `role-plan-*`, `world/*`, `squads/*` → defer, and never reachable through step 3;
+3. inside the role's **own** `environment.workspace` (hard rule #8) → allow;
+4. anything else under `.squad/` → defer.
+
+Every grant is derived from the sanitized `agent_type`, so it cannot be forged or widened; step 2 precedes step 3 so a roster that points a sandbox at `.squad/` itself cannot swallow another role's contract paths. Stated plainly, because the previous invariant was cleaner: this is a net *widening* of two derived paths (a role now gets its own outbox and sandbox structurally, whether or not the human registered them) and a net *narrowing* of everything else under `.squad/`. "The hook can only ever remove an auto-approval" is no longer true; "the hook can only ever grant a role its own state" is.
+
 **Behavior:**
+
 - Parse the request JSON from stdin. Common input fields available across all hook events (per hooks doc) include `session_id`, `transcript_path`, `cwd`, `hook_event_name`, `permission_mode`, plus the optional `agent_id` and `agent_type` (the latter is present "when inside subagent" per hooks doc). Tool-related events additionally include `tool_name`, `tool_input`, `tool_use_id`.
 - Read `.squad/roster.json`.
 - Determine the active role:

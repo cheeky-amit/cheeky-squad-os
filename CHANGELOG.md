@@ -3,6 +3,26 @@
 All notable changes to cheeky-squad-os are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [SemVer](https://semver.org/).
 
+## [0.4.1] - 2026-07-29
+
+Security release. One hook change, one guarantee restored, no new features.
+
+### Security
+
+- **Squad state was writable by any broadly-scoped role.** `hooks/permission-request.sh` matched every path against the role's `file_scope`, including paths under `.squad/`. A role whose scope was broad — `**`, or `.squad/**` — therefore had its writes to *other roles' state* auto-approved, with no permission prompt: another role's hand-off outbox, another role's `role-goal-*`, `goal.md`, `roster.json`, and `verification.md`.
+
+  Two of this project's stated guarantees were affected. The v0.3.0 note below claims the segment-aware matcher makes forged hand-offs "structurally impossible to auto-approve" — that held only for roles whose `file_scope` happened to be narrow, and is corrected here. And hard rule #10, "synthesis summarizes, verification decides," was defeasible: a broadly-scoped role could write its own `verification.md`.
+
+  **Fixed by the `.squad/` structural reservation.** A path under `.squad/` no longer consults `file_scope` at all. A role is auto-approved for exactly the paths *derived from its own `agent_type`* — its own outbox (`.squad/role-comm-<role>--*`) and its own declared `environment.workspace` — and every other `.squad/` write defers to the human, at any scope. Reserved artifacts (`goal.md`, `roster.json`, `roster.md`, `verification.md`, `role-goal-*`, `role-comm-*`, `role-plan-*`, `world/*`, `squads/*`) are checked *before* the sandbox grant, so a roster that declares a workspace of `.squad/` cannot swallow another role's contract paths either. 14 new bats cases, including a broad-scope (`**`) fixture role that must fail to reach any of it.
+
+  **Honest accounting:** this both widens and narrows. A role now gets its own outbox and sandbox structurally, whether or not they were registered in `file_scope` — two derived, unforgeable paths the hook did not previously grant on its own. Everything else under `.squad/` is narrowed. The old invariant "the hook can only ever remove an auto-approval" no longer holds; the new one is "the hook can only ever grant a role its own state."
+
+  No action is required on upgrade. Rosters that already register `.squad/role-comm-<role>--*` or a `.squad/workspaces/<role>/**` scope keep working unchanged — those grants are now structural rather than declared.
+
+### Fixed
+
+- Version drift: `.claude-plugin/marketplace.json` still advertised `0.1.0` while the plugin manifest was at `0.4.0`. Both now track the release.
+
 ## [0.4.0] - 2026-06-10
 
 The lifecycle release: hand-off channel completeness and multi-initiative projects.
@@ -24,6 +44,7 @@ The communication release. The last amber pillar of the tagline ("roles, respons
 
 - **Hand-off manifest channel** — when a role's deliverable is ready for a downstream role, it publishes `.squad/role-comm-<from>--<to>.md` (shape: new `templates/role-comm.md`): frontmatter (`from`/`to`/`created`/`status`), *What's ready* (artifact paths), *How to consume*, *Caveats*. Ephemeral, per-run, gitignored.
 - **Outbox scoping** — `squad-role` now always registers `.squad/role-comm-<name>--*` in each role's `file_scope`. Publishing to your own outbox auto-approves; writing another role's outbox defers — the segment-aware glob matcher (v0.2.0) makes forged hand-offs structurally impossible to auto-approve. 2 new bats cases prove it.
+  > **Corrected in v0.4.1:** this held only for roles whose `file_scope` was narrow. A role scoped `**` matched another role's outbox and was auto-approved. The guarantee is real as of the `.squad/` structural reservation — see the v0.4.1 security note above.
 - **Mode-appropriate delivery** — `squad-spawn` globs `.squad/role-comm-*--<role>.md` before dispatching a downstream role and bakes every `status: ready` manifest into its spawn prompt (subagents can't receive messages mid-run — manifests ride the hard-rule-#4 prompt-baking channel). Multi-use teammates message live via Agent Teams and keep the manifest as the durable record; generated roles get inbox/outbox instructions via `templates/role-definition.md`.
 
 ### Changed

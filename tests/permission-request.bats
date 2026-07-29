@@ -21,7 +21,11 @@ setup() {
     { "name": "rootdoc",  "file_scope": ["*.md"] },
     { "name": "datakeeper", "file_scope": ["data/*"] },
     { "name": "builder",  "file_scope": ["build/**", ".squad/workspaces/builder/**"],
-      "environment": { "workspace": ".squad/workspaces/builder/" } }
+      "environment": { "workspace": ".squad/workspaces/builder/" } },
+    { "name": "broadscope", "file_scope": ["**"],
+      "environment": { "workspace": ".squad/workspaces/broadscope/" } },
+    { "name": "greedy", "file_scope": ["**"],
+      "environment": { "workspace": ".squad/" } }
   ]
 }
 JSON
@@ -209,6 +213,105 @@ run_hook() {
   run env -i PATH="$bindir" CLAUDE_PROJECT_DIR="$PROJECT_DIR" \
     bash "$HOOK" <<< '{"agent_type":"reporter","tool_name":"Write","tool_input":{"file_path":"reports/audit.md"}}'
   rm -rf "$bindir"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+# --- the .squad/ structural reservation (v0.4.1) ------------------------------
+#
+# Regression suite for the forgery hole: before the reservation, .squad/ paths
+# were matched against file_scope like any other path, so a role scoped "**"
+# auto-approved writes to ANOTHER role's outbox, another role's goal, the squad
+# goal, the roster, and verification.md. The pre-existing "no forged hand-offs"
+# test above passes only because `reporter` happens to be narrowly scoped.
+#
+# The reservation: under .squad/, file_scope is never consulted. A role gets
+# exactly the paths derived from its own sanitized agent_type.
+
+@test "reservation: broad-scope role CANNOT forge another role's outbox" {
+  run_hook '{"agent_type":"broadscope","tool_name":"Write","tool_input":{"file_path":".squad/role-comm-reporter--broadscope.md"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "reservation: broad-scope role CANNOT write another role's role goal" {
+  run_hook '{"agent_type":"broadscope","tool_name":"Write","tool_input":{"file_path":".squad/role-goal-reporter.md"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "reservation: broad-scope role CANNOT overwrite the squad goal" {
+  run_hook '{"agent_type":"broadscope","tool_name":"Write","tool_input":{"file_path":".squad/goal.md"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "reservation: broad-scope role CANNOT rewrite the roster" {
+  run_hook '{"agent_type":"broadscope","tool_name":"Write","tool_input":{"file_path":".squad/roster.json"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "reservation: broad-scope role CANNOT write verification.md (hard rule #10)" {
+  run_hook '{"agent_type":"broadscope","tool_name":"Write","tool_input":{"file_path":".squad/verification.md"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "reservation: broad-scope role CANNOT write another role's sandbox" {
+  run_hook '{"agent_type":"broadscope","tool_name":"Write","tool_input":{"file_path":".squad/workspaces/builder/out.txt"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "reservation: broad-scope role CANNOT write a parked squad" {
+  run_hook '{"agent_type":"broadscope","tool_name":"Write","tool_input":{"file_path":".squad/squads/old-initiative/goal.md"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "reservation: a role's OWN outbox is granted structurally, without file_scope" {
+  # `greedy` never registers an outbox glob; the grant is derived, not declared.
+  run_hook '{"agent_type":"greedy","tool_name":"Write","tool_input":{"file_path":".squad/role-comm-greedy--reporter.md"}}'
+  [ "$status" -eq 0 ]
+  printf '%s' "$output" | jq -e '.hookSpecificOutput.decision.behavior == "allow"'
+}
+
+@test "reservation: a role's OWN sandbox still auto-approves (hard rule #8 intact)" {
+  run_hook '{"agent_type":"builder","tool_name":"Write","tool_input":{"file_path":".squad/workspaces/builder/inputs/x.csv"}}'
+  [ "$status" -eq 0 ]
+  printf '%s' "$output" | jq -e '.hookSpecificOutput.decision.behavior == "allow"'
+}
+
+@test "reservation: a workspace declared as '.squad/' grants nothing extra" {
+  # A roster that points a sandbox at .squad/ itself must not swallow the
+  # reserved contract paths through the workspace grant.
+  run_hook '{"agent_type":"greedy","tool_name":"Write","tool_input":{"file_path":".squad/role-comm-reporter--greedy.md"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "reservation: a workspace declared as '.squad/' cannot reach the goal" {
+  run_hook '{"agent_type":"greedy","tool_name":"Write","tool_input":{"file_path":".squad/goal.md"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "reservation: unregistered agent gets no .squad/ grant" {
+  run_hook '{"agent_type":"ghost","tool_name":"Write","tool_input":{"file_path":".squad/role-comm-ghost--reporter.md"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "reservation: does not disturb ordinary work product (broad scope still works)" {
+  run_hook '{"agent_type":"broadscope","tool_name":"Write","tool_input":{"file_path":"src/app.ts"}}'
+  [ "$status" -eq 0 ]
+  printf '%s' "$output" | jq -e '.hookSpecificOutput.decision.behavior == "allow"'
+}
+
+@test "reservation: an unreserved .squad/ path defers even for a broad scope" {
+  # Nothing owns .squad/scratch.md — under the reservation it is not grantable.
+  run_hook '{"agent_type":"broadscope","tool_name":"Write","tool_input":{"file_path":".squad/scratch.md"}}'
   [ "$status" -eq 0 ]
   [ -z "$output" ]
 }
