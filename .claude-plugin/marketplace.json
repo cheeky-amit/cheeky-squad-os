@@ -9,7 +9,7 @@
       "name": "cheeky-squad-os",
       "source": "./",
       "description": "Ship the discipline, not the team. Turn any Claude Code goal into a bespoke squad of roles generated from the goal itself.",
-      "version": "0.1.0",
+      "version": "0.4.1",
       "author": {
         "name": "cheeky-amit"
       },

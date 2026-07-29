@@ -332,16 +332,29 @@ flowchart LR
 
 Two narrow auto-approve surfaces; everything else defers. Surface 1 is in-scope
 Edit/Write (rule #5); Surface 2 is in-sandbox Bash scaffolding (rule #8).
+Ahead of both sits the **`.squad/` structural reservation** (rule #7, v0.4.1):
+squad *state* never consults `file_scope`, so a broad scope cannot reach another
+role's state.
 
 ```mermaid
 flowchart TD
     P0([PermissionRequest:<br/>Bash · Edit · Write]) --> P1{agent_type<br/>set?}
     P1 -->|no main session| DEFER[/no decision →<br/>user prompted/]
-    P1 -->|yes subagent| P2{tool?}
-    P2 -->|Edit / Write| P3[look up role's<br/>file_scope in roster]
+    P1 -->|yes subagent| P1a{role registered<br/>in roster?}
+    P1a -->|no| DEFER
+    P1a -->|yes| P2{tool?}
+    P2 -->|Edit / Write| R1{path under<br/>.squad/ ?}
+    R1 -->|yes| R2{"own outbox?<br/>.squad/role-comm-&lt;me&gt;--*"}
+    R2 -->|yes| ALLOW["decision: allow<br/>(behavior only)"]
+    R2 -->|no| R3{reserved artifact?<br/>goal · roster · verification<br/>role-goal · role-comm · squads}
+    R3 -->|yes| DEFER
+    R3 -->|no| R4{inside my own<br/>environment.workspace?}
+    R4 -->|no| DEFER
+    R4 -->|yes| ALLOW
+    R1 -->|no| P3[look up role's<br/>file_scope in roster]
     P3 --> P4{path matches<br/>a scope glob?}
     P4 -->|no| DEFER
-    P4 -->|yes| ALLOW["decision: allow<br/>(behavior only)"]
+    P4 -->|yes| ALLOW
     P2 -->|Bash| B1[look up role's<br/>environment.workspace]
     B1 --> B2{workspace set<br/>+ no shell<br/>metacharacter?}
     B2 -->|no| DEFER
@@ -362,6 +375,14 @@ Both surfaces share the same primitives: normalize-to-relative, reject `..`
 traversal, fail closed on doubt. Installs / network / global mutations are **not**
 on the Bash list — they are the provisioner's *propose* path (rule #9), not the
 running role's.
+
+**The `.squad/` reservation (v0.4.1).** Every grant under `.squad/` is *derived
+from the role's own `agent_type`*, never from what its `file_scope` declares —
+which is what makes it unforgeable. A role gets its own outbox and its own
+sandbox; the squad goal, the roster, `verification.md`, and every other role's
+goal, outbox, and sandbox all defer to the human, at any scope. Before v0.4.1
+these were matched against `file_scope`, so a role scoped `**` auto-approved all
+of them — see the CHANGELOG's v0.4.1 security note.
 
 **Glob matching (`path_in_scope`)** — fails *closed* to avoid over-approval:
 
