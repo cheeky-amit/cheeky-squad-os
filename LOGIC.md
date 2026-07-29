@@ -476,6 +476,50 @@ flowchart TD
 > The "no `/` → single segment only" branch is the fix that stops `*.md` from
 > matching `src/secrets.md` and silently auto-approving an out-of-scope write.
 
+### 5.4 Escalation lifecycle
+
+Hard rules #14–#15. Declared in the role goal, fired mid-run by the role
+itself, blocked mechanically, closed only by the human — never by a role.
+
+```mermaid
+flowchart TD
+    D0(["role-goal.md<br/>## Stop conditions declared<br/>(needs: / stop: bullets)"]) --> D1["role runs,<br/>self-polices its stop: bounds<br/>(no external monitor)"]
+    D1 --> D2{"a stop:<br/>bound fires?"}
+    D2 -->|no| D3(["role finishes normally<br/>status: active or amended"])
+    D2 -->|yes| E1["writes .squad/role-plan-&lt;role&gt;.md<br/>status: escalated<br/>fired: &lt;bullet, verbatim&gt;"]
+    E1 --> E2["## What happened<br/>## State of the work<br/>## What would unblock<br/>— the only hand-back"]
+    E2 --> E3(["run ends<br/>(Multi-use: also messages the lead;<br/>Workflow: also sets status:&quot;blocked&quot;)"])
+
+    E3 --> V1["verify.sh: one escalation line<br/>per status: escalated record<br/>(filename wins on role: mismatch)"]
+    V1 --> V2["escalations_open =<br/>|escalated records| −<br/>|roles in resolved_escalations|"]
+    V2 --> V3{"escalations_open<br/>== 0, and every<br/>signal PASS?"}
+    V3 -->|no| BLOCK(["verdict capped at partial<br/>— met is unreachable"])
+    V3 -->|yes| MET(["met"])
+
+    BLOCK --> H1["human reads<br/>.squad/verification.md<br/>## Escalations"]
+    H1 --> H2["squad-verify records the human's<br/>ruling verbatim, with attribution<br/>and date (hard rule #15)"]
+    H2 --> H3["adds role to resolved_escalations:<br/>writes the ruling into<br/>## Escalations<br/>— ONLY squad-verify can write this file"]
+    H3 -.re-verify.-> V1
+
+    classDef ok fill:#e6f4ea,stroke:#34a853,color:#111;
+    classDef warn fill:#fce8e6,stroke:#ea4335,color:#111;
+    classDef neu fill:#fef7e0,stroke:#fbbc04,color:#111;
+    class MET ok;
+    class BLOCK warn;
+    class E1,E2,V1,V2,H3 neu;
+```
+
+> **The load-bearing invariant.** `H3` is the only write that closes an
+> escalation, and no role can reach it — `.squad/verification.md` is
+> reserved (§5.2's `R3`), and the engagement record's own status enum stops
+> at `active | amended | escalated` (no `resolved`, no `resolution:`
+> anywhere a role writes). **Residual hole, stated honestly:** a role can
+> still flip its own `status: escalated` at `E1` back to `active` — nothing
+> in this diagram stops that, and it is behaviorally identical to `D2`
+> never having fired at all. That is the acknowledged aspirational half of
+> hard rule #14. What a role cannot do, under any status it writes, is
+> reach `H3` and mint the human's ruling.
+
 ---
 
 ## 6. Dynamic-Workflow dispatch (optional, One-time only)
@@ -608,3 +652,6 @@ The invariants every diagram above upholds (full text in
 | 9 | Propose what can't be contained — system/MCP/network/global needs go to the user, never auto-run. |
 | 10 | Synthesis summarizes, verification decides — `.squad/verification.md` is the only authority for "goal met". |
 | 11 | Plan before act — a role publishes `.squad/role-plan-<role>.md` before its first write elsewhere; the hook gates auto-approval on it, deferring, never denying. |
+| *(12, 13)* | *Reserved for a later PR — not shipped, not documented here. Numbering is append-only, so the gap is deliberate.* |
+| 14 | Declared bounds — a fired `stop:` bound ends the run with `status: escalated`; an open escalation blocks `met`; only the human's ruling in `verification.md` closes one. |
+| 15 | The human meets the same evidence bar — a NEEDS-HUMAN row or escalation converts to PASS only against a verbatim, attributed, dated ruling — never blocked, always put on the record. |

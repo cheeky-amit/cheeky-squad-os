@@ -51,6 +51,74 @@ $assumptions
 EOF
 }
 
+# write_role_plan_escalated <role> <fm-role> <fired> <what-happened> <state-of-work> <what-would-unblock>
+# — writes .squad/role-plan-<role>.md with status: escalated, the frontmatter
+# "fired:" value, and the three "escalated only" hand-back sections. Each of
+# the three body args may be empty to test a missing/blank section.
+write_role_plan_escalated() {
+  local role="$1" fm_role="$2" fired="$3" wh="$4" sw="$5" wu="$6"
+  cat > "$PROJECT_DIR/.squad/role-plan-$role.md" <<EOF
+---
+role: $fm_role
+created: 2026-06-09T00:00:00Z
+status: escalated
+fired: "$fired"
+---
+
+# Engagement record — $role
+
+## Task read
+
+Read the task.
+
+## Intended approach
+
+1. Do the thing.
+
+## Deliverables
+
+## Assumptions
+
+## Amendments
+
+## What happened
+
+$wh
+
+## State of the work
+
+$sw
+
+## What would unblock
+
+$wu
+EOF
+}
+
+# write_verification <resolved-escalations-body> — .squad/verification.md
+# with a normal frontmatter shape plus, when non-empty, a
+# "resolved_escalations:" YAML list built from the given body (one
+# "- <role>" line per arg line). Pass "" for no resolved_escalations key at
+# all (the missing-key case, distinct from "missing file" and "malformed").
+write_verification() {
+  local resolved="$1"
+  {
+    printf -- '---\n'
+    printf 'verdict: partial\n'
+    printf 'verified_at: 2026-06-10T00:00:00Z\n'
+    printf 'goal_mode: one-time\n'
+    printf 'signals_pass: 1\n'
+    printf 'signals_fail: 0\n'
+    printf 'signals_human: 0\n'
+    if [ -n "$resolved" ]; then
+      printf 'resolved_escalations:\n'
+      printf '%s\n' "$resolved"
+    fi
+    printf -- '---\n'
+    printf '\n# Squad verification\n'
+  } > "$PROJECT_DIR/.squad/verification.md"
+}
+
 # write_goal <dod-section-text> — goal.md with frontmatter + the given DoD body.
 write_goal() {
   cat > "$PROJECT_DIR/.squad/goal.md" <<EOF
@@ -82,6 +150,26 @@ default_roster() {
   "roles": [
     { "name": "auditor", "purpose": "audit", "agent_file": ".claude/agents/auditor.md",
       "role_goal": ".squad/role-goal-auditor.md", "file_scope": ["reports/**"],
+      "tools": ["Read"], "model": "sonnet", "active": true, "created": "2026-06-09T00:00:00Z" }
+  ]
+}
+JSON
+}
+
+# default_roster_two_roles — two active roles, "auditor" (reports/**) and
+# "scout" (findings/**), for escalation tests that need more than one role.
+default_roster_two_roles() {
+  cat > "$PROJECT_DIR/.squad/roster.json" <<'JSON'
+{
+  "squad_goal_ref": ".squad/goal.md",
+  "mode": "one-time",
+  "created": "2026-06-09T00:00:00Z",
+  "roles": [
+    { "name": "auditor", "purpose": "audit", "agent_file": ".claude/agents/auditor.md",
+      "role_goal": ".squad/role-goal-auditor.md", "file_scope": ["reports/**"],
+      "tools": ["Read"], "model": "sonnet", "active": true, "created": "2026-06-09T00:00:00Z" },
+    { "name": "scout", "purpose": "scout", "agent_file": ".claude/agents/scout.md",
+      "role_goal": ".squad/role-goal-scout.md", "file_scope": ["findings/**"],
       "tools": ["Read"], "model": "sonnet", "active": true, "created": "2026-06-09T00:00:00Z" }
   ]
 }
@@ -409,4 +497,184 @@ JSON
        | (.role_plan_assumption_grades | type) == "object"
          and (.role_plan_assumed_risks | type) == "array"
          and (.role_plan_deliverables_missing | type) == "number"'
+}
+
+# --- escalation & the evidence bar (hard rules #14-#15) --------------------------
+#
+# THE LOAD-BEARING INVARIANT: a role can never mint the human's ruling.
+# escalations_open = |records with status: escalated| minus |their roles
+# named in verification.md's resolved_escalations| — the human's ruling is
+# read only from .squad/verification.md, never from anything a role wrote.
+
+@test "escalated record is detected: status surfaces and it counts toward escalations_open" {
+  write_goal "$THREE_SIGNALS"
+  default_roster
+  write_role_plan_escalated "auditor" "auditor" "3 consecutive 500s from the API" \
+    "hit the rate limit on the 4th call" "partial: report skeleton only" \
+    "a working API token"
+  run_verify
+  [ "$status" -eq 0 ]
+  printf '%s\n' "$output" | jq -se \
+    '[.[] | select(.role == "auditor")][0].role_plan_status == "escalated"'
+  printf '%s\n' "$output" | tail -n 1 | jq -e '.escalations_open == 1'
+}
+
+@test "fired is extracted verbatim from frontmatter" {
+  write_goal "$THREE_SIGNALS"
+  default_roster
+  write_role_plan_escalated "auditor" "auditor" "budget exceeded after 3 retries" \
+    "x" "y" "z"
+  run_verify
+  printf '%s\n' "$output" | jq -se \
+    '[.[] | select(.role == "auditor")][0].role_plan_fired
+       == "budget exceeded after 3 retries"'
+}
+
+@test "resolved subtraction also works with flow-style resolved_escalations (the template's own placeholder shape)" {
+  write_goal "$THREE_SIGNALS"
+  default_roster_two_roles
+  write_role_plan_escalated "auditor" "auditor" "fired A" "wh" "sw" "wu"
+  write_role_plan_escalated "scout" "scout" "fired B" "wh" "sw" "wu"
+  cat > "$PROJECT_DIR/.squad/verification.md" <<'EOF'
+---
+verdict: partial
+verified_at: 2026-06-10T00:00:00Z
+goal_mode: one-time
+signals_pass: 1
+signals_fail: 0
+signals_human: 0
+resolved_escalations: [auditor]
+---
+
+# Squad verification
+EOF
+  run_verify
+  [ "$status" -eq 0 ]
+  printf '%s\n' "$output" | tail -n 1 | jq -e '.escalations_open == 1'
+}
+
+@test "resolved subtraction works with INDENTED block-style resolved_escalations (the canonical YAML spelling)" {
+  # Regression: the parser originally required the dash at column 0, so the
+  # two-space-indented list that templates/verification.md and
+  # examples/klaviyo-audit.md both document was silently ignored — a ruling a
+  # human had actually recorded never subtracted, and `met` stayed unreachable.
+  write_goal "$THREE_SIGNALS"
+  default_roster_two_roles
+  write_role_plan_escalated "auditor" "auditor" "fired A" "wh" "sw" "wu"
+  write_role_plan_escalated "scout" "scout" "fired B" "wh" "sw" "wu"
+  cat > "$PROJECT_DIR/.squad/verification.md" <<'EOF'
+---
+verdict: partial
+verified_at: 2026-06-10T00:00:00Z
+goal_mode: one-time
+escalations_open: 2
+resolved_escalations:
+  - auditor
+  - "scout"
+signals_pass: 1
+---
+
+# Squad verification
+EOF
+  run_verify
+  [ "$status" -eq 0 ]
+  printf '%s\n' "$output" | tail -n 1 | jq -e '.escalations_open == 0'
+}
+
+@test "resolved subtraction: a resolved escalation drops out, an unresolved one stays open" {
+  write_goal "$THREE_SIGNALS"
+  default_roster_two_roles
+  write_role_plan_escalated "auditor" "auditor" "fired A" "wh" "sw" "wu"
+  write_role_plan_escalated "scout" "scout" "fired B" "wh" "sw" "wu"
+  write_verification $'- auditor'
+  run_verify
+  [ "$status" -eq 0 ]
+  printf '%s\n' "$output" | tail -n 1 | jq -e '.escalations_open == 1'
+}
+
+@test "a resolved role that is no longer escalated does not go negative" {
+  write_goal "$THREE_SIGNALS"
+  default_roster
+  write_role_plan "auditor" "active" "auditor" '' ''
+  write_verification $'- auditor'
+  run_verify
+  [ "$status" -eq 0 ]
+  printf '%s\n' "$output" | tail -n 1 | jq -e '.escalations_open == 0'
+}
+
+@test "frontmatter role mismatch on an escalated record: filename wins for both the row and the open count" {
+  write_goal "$THREE_SIGNALS"
+  default_roster
+  write_role_plan_escalated "auditor" "some-other-role" "fired text" "wh" "sw" "wu"
+  run_verify
+  [ "$status" -eq 0 ]
+  printf '%s\n' "$output" | jq -se \
+    '[.[] | select(.role == "auditor")] | length == 1
+     and .[0].role_plan_frontmatter_role_match == false
+     and .[0].role_plan_status == "escalated"'
+  printf '%s\n' "$output" | tail -n 1 | jq -e '.errors == 1 and .escalations_open == 1'
+}
+
+@test "missing verification.md: escalations_open is the full escalated count, not zero" {
+  write_goal "$THREE_SIGNALS"
+  default_roster
+  write_role_plan_escalated "auditor" "auditor" "fired text" "wh" "sw" "wu"
+  run_verify
+  [ "$status" -eq 0 ]
+  [ ! -f "$PROJECT_DIR/.squad/verification.md" ]
+  printf '%s\n' "$output" | tail -n 1 | jq -e '.escalations_open == 1'
+}
+
+@test "malformed verification.md degrades to nothing-resolved without crashing" {
+  write_goal "$THREE_SIGNALS"
+  default_roster
+  write_role_plan_escalated "auditor" "auditor" "fired text" "wh" "sw" "wu"
+  printf 'this is not yaml at all\n{{{ broken \x00 junk\nno frontmatter fence here\n' \
+    > "$PROJECT_DIR/.squad/verification.md"
+  run_verify
+  [ "$status" -eq 0 ]
+  printf '%s\n' "$output" | tail -n 1 | jq -e '.escalations_open == 1'
+}
+
+@test "absence: no engagement record anywhere emits no escalation fields at all" {
+  write_goal "$THREE_SIGNALS"
+  default_roster
+  mkdir -p "$PROJECT_DIR/reports"
+  touch "$PROJECT_DIR/reports/report.md"
+  run_verify
+  [ "$status" -eq 0 ]
+  printf '%s\n' "$output" | tail -n 1 | jq -e '(has("escalations_open") | not)'
+  ROLE_LINE=$(printf '%s\n' "$output" | grep '"role":"auditor"')
+  [[ "$ROLE_LINE" != *role_plan_fired* ]]
+  [[ "$ROLE_LINE" != *role_plan_hand_back_sections_present* ]]
+}
+
+@test "escalated record missing its hand-back sections is flagged" {
+  write_goal "$THREE_SIGNALS"
+  default_roster
+  write_role_plan_escalated "auditor" "auditor" "fired text" "" "" ""
+  run_verify
+  [ "$status" -eq 0 ]
+  printf '%s\n' "$output" | jq -se \
+    '[.[] | select(.role == "auditor")][0].role_plan_hand_back_sections_present
+       == {what_happened: false, state_of_work: false, what_would_unblock: false}'
+}
+
+@test "escalation fields, including a populated resolved_escalations file, stay valid JSON" {
+  write_goal "$THREE_SIGNALS"
+  default_roster
+  write_role_plan_escalated "auditor" "auditor" "fired text" "wh text" "sw text" "wu text"
+  write_verification $'- someone-else'
+  run_verify
+  [ "$status" -eq 0 ]
+  while IFS= read -r line; do
+    [ -z "$line" ] && continue
+    printf '%s' "$line" | jq -e . >/dev/null
+  done <<< "$output"
+  printf '%s\n' "$output" | jq -se \
+    '[.[] | select(.role == "auditor")][0]
+       | (.role_plan_fired | type) == "string"
+         and (.role_plan_hand_back_sections_present | type) == "object"
+         and (.role_plan_hand_back_sections_present.what_happened | type) == "boolean"'
+  printf '%s\n' "$output" | tail -n 1 | jq -e '(.escalations_open | type) == "number" and .escalations_open == 1'
 }

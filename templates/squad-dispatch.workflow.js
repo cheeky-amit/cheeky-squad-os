@@ -87,7 +87,12 @@ const ROLE_RESULT_SCHEMA = {
 			items: { type: "string" },
 			description: "paths written, all inside this role file_scope",
 		},
-		status: { type: "string", enum: ["done", "partial", "blocked"] },
+		status: {
+			type: "string",
+			enum: ["done", "partial", "blocked"],
+			description:
+				'"blocked" means a stop: bound fired — pair it with an engagement record at status: escalated (hard rules #14-#15); squad-verify trusts the record, not this field',
+		},
 		follow_ups: {
 			type: "array",
 			items: { type: "string" },
@@ -100,7 +105,7 @@ const ROLE_RESULT_SCHEMA = {
 // parent->worker channel. Bake it into the prompt; also tell the agent to
 // re-read the files (belt and suspenders, since it has Read).
 function spawnPrompt(role) {
-	return `You are the ${role.name} teammate on a cheeky-squad-os squad, dispatched inside a dynamic workflow.
+	return `You are the ${role.name} role on a cheeky-squad-os squad, dispatched inside a dynamic workflow.
 
 # Squad goal (binding north-star)
 ${goal}
@@ -139,6 +144,25 @@ Step 0. Publish the record anyway. It is what squad-verify's Process table
 and this run's synthesis diff (declared-vs-produced) read; skipping it makes
 your run's reasoning invisible to the human afterward, even though your
 files still land.
+
+# If a stop: bound fires (hard rules #14-#15)
+Your role goal above may declare a "## Stop conditions" section. If one of
+its stop: bounds fires while you work, do not push through it and do not
+quietly stop: rewrite your engagement record's frontmatter to
+status: escalated and fired: <the bullet that fired, verbatim>, then fill
+three sections exactly as templates/role-plan.md describes for the
+direct-Agent dispatch path — ## What happened (which condition fired, on
+what evidence, at which step), ## State of the work (per declared
+deliverable: complete / partial: <gap> / untouched), ## What would unblock
+(the smallest grant, file, or ruling that resumes you). That record is your
+only hand-back. Also set status: "blocked" on the structured result you
+return below, so the two agree: this run's synthesis reads your result
+immediately, but squad-verify and any later re-verify trust only the
+record, not your prose. There is no "resolved" status and no "resolution:"
+field anywhere in that schema for you to write, on this path or any other —
+whether an escalation is resolved is the human's ruling, recorded only in
+.squad/verification.md by squad-verify. Do not return status: "done" or
+"partial" while a stop: bound is live and unrecorded.
 
 You are running with file edits auto-approved (acceptEdits) — the squad's
 PermissionRequest scope hook does NOT gate you here. Therefore you MUST police

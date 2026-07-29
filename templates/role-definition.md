@@ -29,6 +29,15 @@
 #                           is the bootstrap the PermissionRequest hook keys its
 #                           plan gate on (skills/../hooks/permission-request.sh),
 #                           so every generated role gets it, every time.
+#   {{stop_conditions_block}} — the "Your stop conditions" section (hard rules
+#                           #14-#15): renders this role's needs:/stop: bullets
+#                           (from {{role_goal_path}}'s ## Stop conditions,
+#                           derived by squad-role — 2-4 bullets, always
+#                           present) and the escalation instructions for when
+#                           a stop: bound fires. UNCONDITIONAL, same footing as
+#                           {{plan_block}} — squad-role derives stop conditions
+#                           for every role, never zero, so this is never
+#                           omitted.
 #   {{created}}           — ISO-8601 generation timestamp
 #
 # Frontmatter field naming note: Claude Code reads `tools` (not `allowed-tools`)
@@ -46,7 +55,7 @@ model: {{model}}
 
 {{purpose}}
 
-You are one teammate on a cheeky-squad-os squad. Your behavior is bound by two files — read them before every meaningful action:
+You are one role on a cheeky-squad-os squad. Your behavior is bound by two files — read them before every meaningful action:
 
 1. **`.squad/goal.md`** — the squad's north-star outcome. Everything you do must serve it.
 2. **`{{role_goal_path}}`** — your role's slice of the squad goal. What you specifically owe.
@@ -54,6 +63,7 @@ You are one teammate on a cheeky-squad-os squad. Your behavior is bound by two f
 If either file is missing, stop and report it. Do not proceed without context.
 
 {{plan_block}}
+{{stop_conditions_block}}
 ## Your file scope
 
 You own these paths. Inside scope, the `PermissionRequest` hook auto-approves your **Edit/Write** calls. If you have a provisioned sandbox (below), pure scaffolding Bash (mkdir/touch/cp/ln) fully inside it auto-approves too. Outside scope, and for every other tool call, the user is prompted. Respect their answer.

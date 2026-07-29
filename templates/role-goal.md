@@ -51,3 +51,44 @@ created: <ISO-8601>
 -->
 
 - <next role>: <what they need from you>
+
+## Stop conditions
+
+<!--
+  Hard rule #14 — declared bounds. 2-4 bullets, derived by squad-role from
+  this role's purpose, its tools, and the squad goal's Out of scope. Every
+  bullet has exactly one of two verbs:
+
+    needs: <precondition> — checked at spawn preflight (squad-spawn's
+           dispatch triage probes what it can) and again by the role
+           itself at the start of its run, before committing to the
+           approach in its engagement record.
+    stop:  <mid-run bound> — the role self-polices this while working;
+           there is no external monitor. Hitting it ends the run: the
+           role writes .squad/role-plan-<role>.md with status: escalated
+           and fired: set to this bullet verbatim (see templates/role-
+           plan.md), then stops. That file is the only hand-back.
+
+  A condition that cannot be checked is not a condition. Contrast:
+    needs: the Klaviyo MCP connector responds to a read      <- checkable:
+           call it, get pass or fail
+    needs: the data looks reasonable                         <- not a
+           condition: nothing to run, nothing that fails
+    stop:  any API returns 403 twice                         <- checkable:
+           count it, compare to two
+    stop:  if things get complicated                         <- a mood,
+           not a bound
+
+  These ride the already-prompt-baked role goal (hard rule #4) — the full
+  text of this file is injected into every spawn prompt, so a role reads
+  its own stop conditions without any new channel. Do not invent a second
+  place to declare them.
+
+  Escalation is evidence generation, never decision (hard rule #10): a
+  fired stop condition blocks a `met` verdict until the human rules on it
+  in .squad/verification.md. No bullet here, and nothing this role
+  writes, can clear that block itself.
+-->
+
+- `needs:` <precondition>
+- `stop:` <mid-run bound>

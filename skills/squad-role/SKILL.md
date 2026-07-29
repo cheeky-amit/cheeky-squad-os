@@ -98,6 +98,23 @@ If **yes**, hand off to `/cheeky-squad-os:squad-env` to derive the `environment`
 
 If **no**, omit `{{workspace_block}}` entirely and leave the `environment` field off the roster entry.
 
+## Derive stop conditions (hard rule #14 — not a question, the flow does not grow)
+
+Do not ask the user anything here. Once Q1–Q7 are answered, derive one thing from what you already have — it gets *written* to the role goal's `## Stop conditions` and *shown* in the Confirm block, never *asked*.
+
+**2–4 bullets, each prefixed with exactly one of two verbs — never a bare bullet:**
+
+- `needs:` — a **precondition**, checked before the role starts (mechanically: `squad-spawn`'s dispatch triage probes it at preflight, §3.4, and the role itself re-checks at the start of its own run). Must be mechanically checkable — file/path existence, a tool the role was given in Q4 being present, or one cheap read-only check. "The data looks reasonable" is not a `needs:` bullet; nothing runs against it, nothing fails it.
+- `stop:` — a **mid-run bound** the role self-polices while working; there is no external monitor for it. Hitting it ends the run — the role writes `status: escalated` and `fired: <this bullet, verbatim>` on its own engagement record (the contract every generated role gets — see `{{stop_conditions_block}}` below) and stops.
+
+Derive the mix from three sources, in this order, stopping once you have 2–4 total:
+
+1. **The goal's Out of scope.** Read `## Out of scope` from `.squad/goal.md`. For every bullet that plausibly overlaps this role's purpose (Q1) or `file_scope` (Q3), add a `stop:` bullet: *"stop: the task would require `<out-of-scope item>` — excluded by the squad goal."*
+2. **Purpose- and tool-specific edges.** From Q1's purpose and Q4's tools, name the one or two ways this specific role's work goes ambiguous or unsafe — a data-pulling role stops on empty/unauthorized results, a writing role stops on a contradiction between two sources it was handed, an MCP-heavy role gets a matching `needs:` (the MCP server is reachable) plus a `stop:` for that same tool returning an error or "not found" mid-run for something the task assumed existed. If Q7 gave this role a sandbox, add `needs: the provisioned workspace at <workspace> exists`.
+3. **Two floor bullets, always available if 1–2 didn't reach the minimum of 2:** `needs: a required input this role depends on (data, prior hand-off, file) exists and is non-empty` and `stop: making progress would require writing outside this role's file_scope`.
+
+Cap at 4 — pick the most concrete and likely, not every conceivable one. A condition that cannot be checked is not a condition ("if things get complicated" is a mood, not a bound); a condition that never fires in practice is noise the human has to read past.
+
 ## Compose the role's system prompt
 
 Build the system prompt body from these answers. The template lives at `templates/role-definition.md`. Substitute **every** placeholder it defines — leaving any `{{...}}` unsubstituted produces a broken role (e.g. a literal `description: {{description}}` in frontmatter disables auto-delegation). Use the exact placeholder names from the template:
@@ -131,6 +148,40 @@ Build the system prompt body from these answers. The template lives at `template
   the hook waits for you, it never denies you.
   ```
 
+- `{{stop_conditions_block}}` — the "Your stop conditions" section (hard rules #14–#15). **Not collected by a question, and never omitted** — squad-role derives 2–4 stop conditions for every role (previous section), never zero, so this is on the same unconditional footing as `{{plan_block}}`. Substitute the canonical text (same wording `squad-spawn` bakes into its per-dispatch spawn prompt — the standing role file and the per-dispatch prompt must not disagree, same discipline as `{{plan_block}}`):
+
+  ```markdown
+  ## Your stop conditions (hard rules #14–#15)
+
+  Your role goal (`{{role_goal_path}}`) declares this role's `## Stop
+  conditions` — 2–4 bullets, each prefixed `needs:` (a precondition,
+  checked before you start) or `stop:` (a mid-run bound you self-police;
+  nothing external monitors it). If a `stop:` bound becomes true at any
+  point during a run, do not guess forward and do not ask a question — a
+  subagent has no reliable mid-run channel back to a human; your engagement
+  record is the only hand-back there is. Instead:
+
+  1. Update your own engagement record (`.squad/role-plan-{{name}}.md`) in
+     place: set frontmatter `status: escalated` and `fired: <the bullet
+     that fired, verbatim from ## Stop conditions>`.
+  2. Fill three sections at the end of the record's body, exactly as
+     `templates/role-plan.md` describes: `## What happened` (which
+     condition fired, on what evidence, at which step of your `##
+     Intended approach`), `## State of the work` (per declared
+     deliverable: complete / partial: `<gap>` / untouched), and `## What
+     would unblock` (the smallest grant, file, or ruling that would let
+     you resume).
+  3. Stop. Leave in place whatever deliverables you already finished —
+     only the blocked one is left undone. Do not poll for a ruling, do
+     not retry, do not add a fourth section.
+
+  Never write `resolved`, `resolution:`, or anything that closes your own
+  escalation, anywhere, on this or any file — that ruling belongs to the
+  human alone, recorded later in `.squad/verification.md` by
+  `/cheeky-squad-os:squad-verify`, never by you (hard rule #10). A role
+  that could clear its own escalation could mint the verdict.
+  ```
+
 - `{{role_goal_path}}` — `.squad/role-goal-<name>.md`
 - `{{created}}` — current UTC time in ISO-8601 (the same timestamp written to the roster entry and the role-goal frontmatter)
 
@@ -141,6 +192,7 @@ The body must include:
 4. A reminder that the role is reusable as both subagent and Agent Teams teammate, with the propagation caveat (`skills` and `mcpServers` frontmatter do not propagate to teammates; `tools` and `model` do; body is appended).
 5. A comment that the file is generated — edit if the role's needs evolve.
 6. The engagement-record instruction (`{{plan_block}}`) — already unconditional per the substitution above; nothing further to add here.
+7. The stop-condition contract (`{{stop_conditions_block}}`) — likewise already unconditional; nothing further to add here.
 
 ## Write role goal
 
@@ -171,9 +223,25 @@ created: <ISO-8601>
 ## Hand-offs
 
 - <next role this role hands off to, if any>
+
+## Stop conditions
+
+<!-- Hard rule #14. 2-4 bullets, derived above from purpose + tools + the
+     goal's Out of scope. Every bullet is prefixed needs: (a precondition,
+     checked at squad-spawn's dispatch triage and again by the role at
+     start) or stop: (a mid-run bound the role self-polices — no external
+     monitor). When a stop: bound fires, the role writes status: escalated
+     and fired: <the bullet, verbatim> on its own engagement record and
+     hands back via templates/role-plan.md's three escalation sections — it
+     never marks itself resolved; only the human's ruling in
+     .squad/verification.md closes an escalation. Schema and full rationale:
+     templates/role-goal.md. -->
+
+- `needs:` <precondition>
+- `stop:` <mid-run bound>
 ```
 
-Write to `.squad/role-goal-<name>.md`.
+Write to `.squad/role-goal-<name>.md`. This mirrors `templates/role-goal.md`'s shape exactly — squad-role composes this schema directly rather than reading the template file at generation time, so if you ever touch this inlined copy, touch `templates/role-goal.md` to match (the two must not diverge).
 
 ## Write the role definition
 
@@ -198,10 +266,16 @@ Role `<name>` generated.
   Tools: <tools>
   Model: <model>
   Effort: <effort, if set>
+  Stop conditions (hard rule #14): <n> declared
+    - needs: <precondition 1>
+    - stop: <mid-run bound 1>
+    [...]
   Agent file: .claude/agents/<name>.md
   Role goal: .squad/role-goal-<name>.md
   Registered in: .squad/roster.json
 ```
+
+The stop conditions are never asked for — they're derived (previous section) and shown here so the user sees them without a new question in the flow.
 
 Then ask whether the user wants to generate another role (loop back to Q1 with a fresh name) or finish.
 

@@ -332,6 +332,146 @@ run_hook() {
   printf '%s' "$output" | jq -e '.hookSpecificOutput.decision.behavior == "allow"'
 }
 
+# --- the reservation on the BASH surface (hard rules #10, #14) -----------------
+#
+# The scaffolding-Bash surface used to test operands against the workspace
+# prefix alone, never against squad_grant. A roster declaring
+# environment.workspace: ".squad" therefore turned every reserved path into a
+# sandbox path on that surface: `cp forged.md .squad/verification.md` was
+# auto-approved even though the identical Edit/Write was correctly deferred.
+# `cp` and `ln` write real content, so that was a full forgery channel — and
+# the one file it reached is the file the human's ruling lives in. `greedy` in
+# the fixture roster is exactly that role.
+
+@test "reservation (Bash): a '.squad/' workspace CANNOT cp over verification.md" {
+  run_hook '{"agent_type":"greedy","tool_name":"Bash","tool_input":{"command":"cp .squad/scratch.md .squad/verification.md"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "reservation (Bash): a '.squad/' workspace CANNOT cp over the goal, roster, or a role goal" {
+  for c in "cp .squad/scratch.md .squad/goal.md" \
+           "cp .squad/scratch.md .squad/roster.json" \
+           "cp .squad/scratch.md .squad/roster.md" \
+           "cp .squad/scratch.md .squad/role-goal-reporter.md"; do
+    run_hook '{"agent_type":"greedy","tool_name":"Bash","tool_input":{"command":"'"$c"'"}}'
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+  done
+}
+
+@test "reservation (Bash): a '.squad/' workspace CANNOT touch or ln over verification.md" {
+  run_hook '{"agent_type":"greedy","tool_name":"Bash","tool_input":{"command":"touch .squad/verification.md"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  run_hook '{"agent_type":"greedy","tool_name":"Bash","tool_input":{"command":"ln -f .squad/scratch.md .squad/verification.md"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "reservation (Bash): a '.squad/' workspace CANNOT reach another role's engagement record or outbox" {
+  run_hook '{"agent_type":"greedy","tool_name":"Bash","tool_input":{"command":"cp .squad/scratch.md .squad/role-plan-reporter.md"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  run_hook '{"agent_type":"greedy","tool_name":"Bash","tool_input":{"command":"cp .squad/scratch.md .squad/role-comm-reporter--greedy.md"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "reservation (Bash): the role's OWN record and outbox are still reachable" {
+  run_hook '{"agent_type":"greedy","tool_name":"Bash","tool_input":{"command":"touch .squad/role-plan-greedy.md"}}'
+  [ "$status" -eq 0 ]
+  printf '%s' "$output" | jq -e '.hookSpecificOutput.decision.behavior == "allow"'
+  run_hook '{"agent_type":"greedy","tool_name":"Bash","tool_input":{"command":"touch .squad/role-comm-greedy--reporter.md"}}'
+  [ "$status" -eq 0 ]
+  printf '%s' "$output" | jq -e '.hookSpecificOutput.decision.behavior == "allow"'
+}
+
+@test "reservation (Bash): an ordinary nested sandbox is unaffected (hard rule #8 intact)" {
+  run_hook '{"agent_type":"builder","tool_name":"Bash","tool_input":{"command":"mkdir .squad/workspaces/builder/out"}}'
+  [ "$status" -eq 0 ]
+  printf '%s' "$output" | jq -e '.hookSpecificOutput.decision.behavior == "allow"'
+  run_hook '{"agent_type":"builder","tool_name":"Bash","tool_input":{"command":"cp .squad/workspaces/builder/a .squad/workspaces/builder/b"}}'
+  [ "$status" -eq 0 ]
+  printf '%s' "$output" | jq -e '.hookSpecificOutput.decision.behavior == "allow"'
+}
+
+@test "reservation (Bash): a nested sandbox still cannot reach verification.md or a sibling sandbox" {
+  run_hook '{"agent_type":"builder","tool_name":"Bash","tool_input":{"command":"cp .squad/workspaces/builder/a .squad/verification.md"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  run_hook '{"agent_type":"builder","tool_name":"Bash","tool_input":{"command":"mkdir .squad/workspaces/broadscope/out"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+# --- path-spelling regressions on the reservation (hard rules #10, #14) --------
+#
+# The reservation is a TEXTUAL prefix test, so it is only as strong as the set
+# of spellings it recognizes. "./.squad/verification.md", ".//.squad/…", and an
+# absolute path containing "/./" or "//" all name the same file as
+# ".squad/verification.md" — before normalize_rel collapsed them, they missed
+# rel_under_squad, fell through to file_scope, and a role scoped "**" was
+# auto-approved. That is the v0.4.1 forgery hole reopened by two characters,
+# and it is exactly the write that would let a role mint the human's ruling and
+# clear its own escalation. Each spelling gets its own case.
+
+@test "reservation: './' prefix cannot smuggle a write to verification.md" {
+  run_hook '{"agent_type":"broadscope","tool_name":"Write","tool_input":{"file_path":"./.squad/verification.md"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "reservation: './/' and '././' spellings cannot smuggle a write to verification.md" {
+  run_hook '{"agent_type":"broadscope","tool_name":"Write","tool_input":{"file_path":".//.squad/verification.md"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  run_hook '{"agent_type":"broadscope","tool_name":"Write","tool_input":{"file_path":"././.squad/verification.md"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "reservation: an absolute path with '/./' or '//' cannot smuggle a write to verification.md" {
+  run_hook '{"agent_type":"broadscope","tool_name":"Write","tool_input":{"file_path":"'"$PROJECT_DIR"'/./.squad/verification.md"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  run_hook '{"agent_type":"broadscope","tool_name":"Write","tool_input":{"file_path":"'"$PROJECT_DIR"'//.squad/verification.md"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "reservation: './' prefix cannot smuggle a write to the goal, roster, or another role's state" {
+  for p in "./.squad/goal.md" "./.squad/roster.json" "./.squad/role-goal-reporter.md" \
+           "./.squad/role-plan-reporter.md" "./.squad/role-comm-reporter--broadscope.md"; do
+    run_hook '{"agent_type":"broadscope","tool_name":"Write","tool_input":{"file_path":"'"$p"'"}}'
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+  done
+}
+
+@test "normalization: a './'-spelled in-scope path is still auto-approved" {
+  # Collapsing the noise must not cost a role its ordinary grant — the same
+  # file, spelled either way, gets the same decision.
+  run_hook '{"agent_type":"reporter","tool_name":"Write","tool_input":{"file_path":"./reports/audit.md"}}'
+  [ "$status" -eq 0 ]
+  printf '%s' "$output" | jq -e '.hookSpecificOutput.decision.behavior == "allow"'
+}
+
+@test "normalization: a './'-spelled own engagement record is still granted" {
+  run_hook '{"agent_type":"builder","tool_name":"Write","tool_input":{"file_path":".//.squad/role-plan-builder.md"}}'
+  [ "$status" -eq 0 ]
+  printf '%s' "$output" | jq -e '.hookSpecificOutput.decision.behavior == "allow"'
+}
+
+@test "normalization: '..' is still never resolved away — traversal defers at any spelling" {
+  run_hook '{"agent_type":"broadscope","tool_name":"Write","tool_input":{"file_path":"./.squad/../.squad/verification.md"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  run_hook '{"agent_type":"reporter","tool_name":"Write","tool_input":{"file_path":"./reports/../src/app.ts"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
 @test "reservation: an unreserved .squad/ path defers even for a broad scope" {
   # Nothing owns .squad/scratch.md — under the reservation it is not grantable.
   run_hook '{"agent_type":"broadscope","tool_name":"Write","tool_input":{"file_path":".squad/scratch.md"}}'
