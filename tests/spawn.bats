@@ -111,3 +111,88 @@ teardown() {
   [ "$status" -eq 1 ]
   [[ "$output" == *"git is required"* ]]
 }
+
+# --- collect -------------------------------------------------------------
+#
+# `spawn.sh collect` pulls each active role's engagement record
+# (.squad/role-plan-<role>.md, hard rule #11) out of its worktree — created
+# by real `git worktree add` via a prior `run "$SPAWN"`, per this file's
+# existing fixture pattern — and into the project root's .squad/.
+
+@test "collect: copies a newer worktree record to the project root" {
+  run "$SPAWN"; [ "$status" -eq 0 ]
+  mkdir -p .claude/worktrees/alpha/.squad
+  printf -- '---\nrole: alpha\ncreated: 2026-01-01T00:00:00Z\nstatus: active\n---\n# Engagement record\n' \
+    > .claude/worktrees/alpha/.squad/role-plan-alpha.md
+
+  run "$SPAWN" collect
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'{"role":"alpha","artifact":".squad/role-plan-alpha.md","status":"copied"}'* ]]
+  [[ "$output" == *'"collected":1'* ]]
+  [ -f .squad/role-plan-alpha.md ]
+  grep -q "role: alpha" .squad/role-plan-alpha.md
+}
+
+@test "collect: leaves a newer root record alone" {
+  run "$SPAWN"; [ "$status" -eq 0 ]
+  mkdir -p .claude/worktrees/alpha/.squad
+  printf 'stale worktree copy\n' > .claude/worktrees/alpha/.squad/role-plan-alpha.md
+  touch -t 202601010000 .claude/worktrees/alpha/.squad/role-plan-alpha.md
+
+  mkdir -p .squad
+  printf 'authoritative root copy\n' > .squad/role-plan-alpha.md
+  touch -t 202606010000 .squad/role-plan-alpha.md
+
+  run "$SPAWN" collect
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'{"role":"alpha","artifact":".squad/role-plan-alpha.md","status":"skipped-not-newer"}'* ]]
+  [ "$(cat .squad/role-plan-alpha.md)" = "authoritative root copy" ]
+}
+
+@test "collect: skips a role with no worktree" {
+  run "$SPAWN" collect
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'{"role":"alpha","artifact":".squad/role-plan-alpha.md","status":"skipped-no-worktree"}'* ]]
+  [[ "$output" == *'{"role":"beta","artifact":".squad/role-plan-beta.md","status":"skipped-no-worktree"}'* ]]
+  [ ! -f .squad/role-plan-alpha.md ]
+  [ ! -f .squad/role-plan-beta.md ]
+}
+
+@test "collect: copies only the engagement record, never other .squad/ paths" {
+  run "$SPAWN"; [ "$status" -eq 0 ]
+  mkdir -p .claude/worktrees/alpha/.squad
+  printf 'record\n' > .claude/worktrees/alpha/.squad/role-plan-alpha.md
+  printf 'decoy outbox\n' > .claude/worktrees/alpha/.squad/role-comm-alpha--beta.md
+  printf 'decoy claims\n' > .claude/worktrees/alpha/.squad/claims-alpha.md
+
+  run "$SPAWN" collect
+  [ "$status" -eq 0 ]
+  [ -f .squad/role-plan-alpha.md ]
+  [ ! -f .squad/role-comm-alpha--beta.md ]
+  [ ! -f .squad/claims-alpha.md ]
+}
+
+@test "collect: emits valid JSON on every line" {
+  run "$SPAWN"; [ "$status" -eq 0 ]
+  mkdir -p .claude/worktrees/alpha/.squad
+  printf 'record\n' > .claude/worktrees/alpha/.squad/role-plan-alpha.md
+
+  run "$SPAWN" collect
+  [ "$status" -eq 0 ]
+  while IFS= read -r line; do
+    [ -z "$line" ] && continue
+    echo "$line" | jq empty
+  done <<< "$output"
+}
+
+@test "collect: exits 0 when there is nothing to collect" {
+  cat > .squad/roster.json <<'JSON'
+{ "roles": [
+    { "name": "gamma", "active": false, "file_scope": ["g/**"] }
+] }
+JSON
+  run "$SPAWN" collect
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"collected":0'* ]]
+  [[ "$output" == *'"errors":0'* ]]
+}

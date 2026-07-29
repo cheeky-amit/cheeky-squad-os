@@ -340,7 +340,12 @@ Two narrow auto-approve surfaces; everything else defers. Surface 1 is in-scope
 Edit/Write (rule #5); Surface 2 is in-sandbox Bash scaffolding (rule #8).
 Ahead of both sits the **`.squad/` structural reservation** (rule #7, v0.4.1):
 squad *state* never consults `file_scope`, so a broad scope cannot reach another
-role's state.
+role's state. Both surfaces are further gated on the **plan gate** (rule #11,
+v1.0): a role's engagement record must exist at
+`.squad/role-plan-<agent_type>.md` before either auto-approves — and so must the
+role's own outbox grant, since publishing a hand-off is acting. Exactly two
+grants stay ungated: the record's own path (the bootstrap, `R1a` below) and the
+role's own sandbox (rule #8, `R4`). See §5.3 for the record's full lifecycle.
 
 ```mermaid
 flowchart TD
@@ -350,18 +355,26 @@ flowchart TD
     P1a -->|no| DEFER
     P1a -->|yes| P2{tool?}
     P2 -->|Edit / Write| R1{path under<br/>.squad/ ?}
-    R1 -->|yes| R2{"own outbox?<br/>.squad/role-comm-&lt;me&gt;--*"}
-    R2 -->|yes| ALLOW["decision: allow<br/>(behavior only)"]
-    R2 -->|no| R3{reserved artifact?<br/>goal · roster · verification<br/>role-goal · role-comm · squads}
+    R1 -->|yes| R1a{"own engagement record?<br/>.squad/role-plan-&lt;me&gt;.md"}
+    R1a -->|yes bootstrap| ALLOW["decision: allow<br/>(behavior only)"]
+    R1a -->|no| R2{"own outbox?<br/>.squad/role-comm-&lt;me&gt;--*"}
+    R2 -->|yes| PG0{"engagement record<br/>exists? (rule #11)"}
+    PG0 -->|no| DEFER
+    PG0 -->|yes| ALLOW
+    R2 -->|no| R3{reserved artifact?<br/>goal · roster · verification<br/>role-goal · role-comm · role-plan<br/>partner · world · squads}
     R3 -->|yes| DEFER
     R3 -->|no| R4{inside my own<br/>environment.workspace?}
     R4 -->|no| DEFER
     R4 -->|yes| ALLOW
-    R1 -->|no| P3[look up role's<br/>file_scope in roster]
+    R1 -->|no| PG1{"engagement record<br/>exists? .squad/role-plan-<br/>&lt;me&gt;.md (rule #11)"}
+    PG1 -->|no| DEFER
+    PG1 -->|yes| P3[look up role's<br/>file_scope in roster]
     P3 --> P4{path matches<br/>a scope glob?}
     P4 -->|no| DEFER
     P4 -->|yes| ALLOW
-    P2 -->|Bash| B1[look up role's<br/>environment.workspace]
+    P2 -->|Bash| PG2{"engagement record<br/>exists? .squad/role-plan-<br/>&lt;me&gt;.md (rule #11)"}
+    PG2 -->|no| DEFER
+    PG2 -->|yes| B1[look up role's<br/>environment.workspace]
     B1 --> B2{workspace set<br/>+ no shell<br/>metacharacter?}
     B2 -->|no| DEFER
     B2 -->|yes| B3{verb in<br/>mkdir·touch·cp·ln?}
@@ -389,6 +402,55 @@ sandbox; the squad goal, the roster, `verification.md`, and every other role's
 goal, outbox, and sandbox all defer to the human, at any scope. Before v0.4.1
 these were matched against `file_scope`, so a role scoped `**` auto-approved all
 of them — see the CHANGELOG's v0.4.1 security note.
+
+**The plan gate (rule #11, v1.0).** `PG0`/`PG1`/`PG2` above are the same bare
+file-existence check on `.squad/role-plan-<agent_type>.md` — no schema
+validation, because a hook that could fail closed on a malformed record would be
+deny-shaped. `PG1`/`PG2` run *after* the `.squad/` reservation branch has had
+first refusal (`R1`), so the gate never overrides a reservation decision; it
+only adds a precondition to what falls through to `P3` (file-scope matching)
+and to the entire `Bash` surface. `PG0` is the third instance, inside the
+reservation: the role's own outbox is granted only once its record exists,
+because publishing a hand-off is acting. `R1a` is the one grant that precedes
+everything — **unconditional**, because a role cannot publish its plan if
+publishing the plan required a plan.
+
+Ordering inside the reservation is load-bearing and matches `squad_grant`'s
+case order: record (`R1a`) → outbox (`R2`) → reserved artifact (`R3`) →
+sandbox (`R4`). `R3` sits before `R4` so a roster that declares
+`environment.workspace` as `.squad/` itself cannot swallow another role's
+contract paths through the sandbox grant.
+
+### 5.3 Engagement-record lifecycle
+
+The record that `PG1`/`PG2` check for — from Step 0's write to the point
+`squad-verify` reads it as process evidence.
+
+```mermaid
+flowchart TD
+    S0([role invoked<br/>— Step 0]) --> W1["write .squad/role-plan-&lt;role&gt;.md<br/>(bootstrap grant — unconditional)"]
+    W1 --> UNLOCK["in-scope Edit/Write + in-sandbox<br/>Bash now auto-approve (rule #11)"]
+    UNLOCK --> WORK[role does its work]
+    WORK --> CHG{understanding<br/>changed mid-run?}
+    CHG -->|yes| AMEND["append ## Amendments,<br/>set status: amended<br/>(earlier sections never rewritten)"]
+    AMEND --> WORK
+    CHG -->|no| DONE([role finishes])
+
+    DONE --> RD1[human reads it — audit]
+    DONE --> RD2["squad-spawn synthesis —<br/>declared vs. produced"]
+    DONE --> RD3["squad-verify — process<br/>evidence, quoted into<br/>verification.md ## Process"]
+
+    CLEAR["dispatcher clears the records of<br/>the roles it's about to (re)dispatch,<br/>and only those"] -.before next dispatch.-> W1
+
+    classDef ok fill:#e6f4ea,stroke:#34a853,color:#111;
+    classDef neu fill:#fef7e0,stroke:#fbbc04,color:#111;
+    class UNLOCK ok;
+    class AMEND neu;
+```
+
+> Gitignored throughout — nothing above is committed. `squad-verify` is what
+> makes any of it outlive the engagement: whatever must survive gets quoted,
+> verbatim, into the committed `.squad/verification.md`.
 
 **Glob matching (`path_in_scope`)** — fails *closed* to avoid over-approval:
 
@@ -545,3 +607,4 @@ The invariants every diagram above upholds (full text in
 | 8 | Sandbox-scoped autonomy — hook auto-approves in-sandbox scaffolding inside `environment.workspace`. |
 | 9 | Propose what can't be contained — system/MCP/network/global needs go to the user, never auto-run. |
 | 10 | Synthesis summarizes, verification decides — `.squad/verification.md` is the only authority for "goal met". |
+| 11 | Plan before act — a role publishes `.squad/role-plan-<role>.md` before its first write elsewhere; the hook gates auto-approval on it, deferring, never denying. |

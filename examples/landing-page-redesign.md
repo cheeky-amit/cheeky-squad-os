@@ -322,7 +322,7 @@ After the four runs, `.squad/` holds the goal plus four role-goal files — `rol
 }
 ```
 
-The four `file_scope` arrays are disjoint by construction — no path matches two roles — which is what lets the four worktree branches merge clean in §7.
+The four `file_scope` arrays are disjoint by construction — no path matches two roles — which is what lets the four worktree branches merge clean in §8.
 
 ## 6. Spawn (Multi-use path)
 
@@ -409,7 +409,85 @@ You are in worktree .claude/worktrees/brand-voice-editor (branch
 squad-brand-voice-editor). You may only write files under your file_scope.
 ```
 
-## 7. Parallel work + merge
+## 7. Step 0 — the engagement record (hard rule #11)
+
+Before `frontend-builder` touches anything in `src/pages/homepage/**`, it
+publishes its engagement record. This is Step 0 of every invocation — the
+`PermissionRequest` hook defers every in-scope Edit/Write and in-sandbox Bash
+call for this role until `.squad/role-plan-frontend-builder.md` exists; the
+record's own path is the one grant that needs no record.
+
+`.squad/role-plan-frontend-builder.md`:
+
+```markdown
+---
+role: frontend-builder
+created: 2026-05-28T09:03:00Z
+status: active
+---
+
+# Engagement record — frontend-builder
+
+## Task read
+
+Build the homepage's React component tree — hero, social proof, pricing
+teaser, page shell — from brand-voice-editor's approved copy and
+conversion-ux-designer's spec, hit the Lighthouse and axe-core budgets
+locally, and tag `homepage-redesign-rc1` so qa-runner can take over. This
+matches the role goal as written; no divergence to flag this invocation.
+
+## Intended approach
+
+1. Block on the mailbox until both `copy/homepage/final/HANDOFF.md`
+   (brand-voice-editor) and `design/homepage/specs.md`
+   (conversion-ux-designer) are present.
+2. Read both artifacts plus `docs/brand-voice.md` for tone-sensitive copy
+   rendering (button labels, empty states).
+3. Build `src/components/homepage/{Hero,SocialProof,PricingTeaser}.tsx` and
+   `src/pages/homepage/index.tsx` to the spec's layout and CTA hierarchy.
+4. Ship hero art via `public/homepage/og-image.png` through Next.js's
+   built-in image pipeline — no separate manual compression pass.
+5. Run `pnpm lint && pnpm typecheck && pnpm lighthouse:local`; fix findings
+   until both budgets are met locally.
+6. Tag `homepage-redesign-rc1` and mail qa-runner.
+
+## Deliverables
+
+- `src/pages/homepage/index.tsx`
+- `src/components/homepage/Hero.tsx`
+- `src/components/homepage/SocialProof.tsx`
+- `src/components/homepage/PricingTeaser.tsx`
+- `public/homepage/og-image.png`
+
+## Assumptions
+
+- [confirmed] `copy/homepage/final/HANDOFF.md` and `design/homepage/specs.md`
+  are both present and non-empty in this worktree — evidence: `ls
+  copy/homepage/final/ design/homepage/specs.md`, both listed, run at 09:02
+  today.
+- [reported] The performance budget is Mobile Lighthouse Performance >= 90 /
+  Desktop >= 95, with zero serious or critical axe-core violations — source:
+  `.squad/goal.md`, Definition of done.
+- [inferred] The hero needs one crop, not a responsive srcset — reasoning:
+  `design/homepage/specs.md` specifies a single hero layout with no
+  breakpoint-specific art direction called out.
+- [assumed] Next.js's built-in image optimization, with no separate manual
+  compression pass, is sufficient to hit the Mobile Lighthouse Performance
+  >= 90 budget — if wrong → Mobile Lighthouse Performance >= 90 (Definition
+  of done).
+
+## Amendments
+
+<!-- none — status: active -->
+```
+
+Four grades, one bullet each, each owing exactly what `ARCHITECTURE.md`'s
+evidence-grade glossary says it owes. The `[assumed]` bullet is the one to
+watch — its `if wrong →` clause names a literal Definition-of-done bullet
+from `.squad/goal.md`, not a vague "something might break." §10 shows why
+that specificity matters.
+
+## 8. Parallel work + merge
 
 Inside their worktrees:
 
@@ -457,10 +535,77 @@ Fast-forward
 
 Zero conflicts. Each teammate's `file_scope` was non-overlapping by construction, so the four branches touched disjoint paths and merged clean.
 
-## 8. What just happened
+## 9. What just happened
 
 - Four bespoke roles for one specific build. No generic `frontend-dev` or `designer` — the names match the workstreams the goal actually decomposed into.
 - Disjoint `file_scope` per role enforced file isolation. Each role declared its `file_scope` at generation time; `skills/squad-spawn/scripts/spawn.sh` pre-created a worktree per role as the working directory; the four branches merged without a conflict.
 - Agent Teams was enabled with explicit consent. `squad-spawn` checked the env var, explained what Agent Teams adds, proposed the settings change, and only wrote `~/.claude/settings.json` after the user said yes.
 - The goal traveled with the work. The SessionStart hook injected `.squad/goal.md` into the lead's session on restart, and `squad-spawn` baked the goal + per-role file into each teammate's spawn prompt — no teammate ever drifted off-mission.
 - The lead did not manually relay handoffs. Teammates messaged each other directly through the Agent Teams mailbox; the lead only stepped in to merge at the end.
+- Every teammate planned before it acted (§7). `frontend-builder`'s record is what let `squad-verify` catch a gap the merge alone would have hidden — §10.
+
+## 10. Hard rule #11 in practice — the forcing rule
+
+`frontend-builder`'s `[assumed]` bullet (§7) named a real Definition-of-done
+signal: *Mobile Lighthouse Performance >= 90*. What happens when
+`squad-verify` actually reaches that signal depends on whose evidence it
+finds — and the sequence below is why the grade, not just the outcome,
+matters.
+
+**2026-06-04 — mid-sprint check, before qa-runner's report exists.** The lead
+runs `squad-spawn`'s synthesis and then `squad-verify` to see where the sprint
+stands. Synthesis first is not optional here: these four roles work in
+worktrees, so each record sits in *its own* `.claude/worktrees/<role>/.squad/`,
+gitignored, invisible to the main checkout — the merges in §8 never carried one
+back. `spawn.sh collect` is what copies them to the project root, and
+`squad-verify` reads only what is there. At this point
+`frontend-builder` has already tagged `homepage-redesign-rc1` — its own local
+`pnpm lighthouse:local` run came back at 91, above budget. But the *only*
+evidence trail for the Mobile Lighthouse Performance signal is
+`frontend-builder`'s own output, and that output traces straight back to its
+own `[assumed]` bullet ("if wrong → Mobile Lighthouse Performance >= 90").
+Per `templates/verification.md`'s forcing rule — "a Definition-of-done
+signal named in one of these clauses cannot PASS on that role's own output
+alone" — `squad-verify` does not PASS it, passing local number or not:
+
+```markdown
+## Signal: Mobile Lighthouse Performance >= 90
+
+- **Status:** NEEDS-HUMAN
+- **Evidence:** frontend-builder's local `pnpm lighthouse:local` run (91) is
+  the only measurement on record. That role's own engagement record
+  (`.squad/role-plan-frontend-builder.md`) flags this exact signal as
+  `[assumed]` — Next.js's default image pipeline hitting budget without a
+  manual compression pass is untested by any other role. A same-role number
+  cannot confirm a same-role assumption.
+- **Notes:** Needs an independent measurement — qa-runner's Lighthouse pass
+  is the next role scheduled to touch this signal.
+```
+
+Nothing here contradicts `frontend-builder` — the 91 may well be real. The
+point of the forcing rule is narrower and stricter than "did it fail": an
+assumption is not evidence of its own truth, however good the number looks,
+and `squad-verify` will not launder one into a PASS just because it happens
+to agree with itself.
+
+**2026-06-08 — final check, after qa-runner's report lands.** `qa-runner` —
+a different role, running its own Lighthouse pass as part of §8's parallel
+work — writes `reports/homepage/qa-report.md` recording all six
+Definition-of-done checks, including Mobile Lighthouse Performance. That
+measurement is `[confirmed]`-grade evidence from a role that never made the
+assumption in the first place, so the same signal now clears:
+
+```markdown
+## Signal: Mobile Lighthouse Performance >= 90
+
+- **Status:** PASS
+- **Evidence:** reports/homepage/qa-report.md — Lighthouse mobile: 92.
+- **Notes:** Independently measured by qa-runner; frontend-builder's
+  `[assumed]` bullet (role-plan, 2026-05-28) is resolved, not merely repeated.
+```
+
+Same signal, same underlying number range, two different verdicts — because
+what changed was who supplied the evidence, not what the evidence said. That
+is the entire point of grading assumptions instead of leaving them
+unstated: an unlabeled guess reads identically to a confirmed fact until
+something goes looking for who actually checked it.

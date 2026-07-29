@@ -112,6 +112,25 @@ Build the system prompt body from these answers. The template lives at `template
 - `{{file_scope_lines}}` — Q3 answer rendered as **one markdown bullet per glob** (not a comma-separated string — the template places it under a bullet list)
 - `{{isolation_block}}` — the literal `isolation: worktree` line (Q6), or omitted entirely
 - `{{workspace_block}}` — the "Your workspace (sandbox)" section (Q7), or omitted entirely if the role has no `environment` (canonical text in `squad-env`'s SKILL body)
+- `{{plan_block}}` — the "Step 0 — publish your engagement record" section (hard rule #11). **Not collected by a question, and never omitted** — every generated role gets it, every time, regardless of mode or scope; it is a role-behavior contract, not a generation choice. Substitute the canonical text (same heading `templates/role-definition.md`'s placeholder legend names, and the same wording `squad-spawn` bakes into its spawn prompt — the standing role file and the per-dispatch prompt must not disagree):
+
+  ```markdown
+  ## Step 0 — publish your engagement record (hard rule #11)
+
+  Before your first write to anything else, on every invocation, publish
+  your engagement record to `.squad/role-plan-{{name}}.md`, using the
+  schema in `templates/role-plan.md`: frontmatter `role: {{name}}`,
+  `created: <ISO-8601>`, `status: active`; body sections in order —
+  `## Task read`, `## Intended approach`, `## Deliverables`,
+  `## Assumptions`, `## Amendments`. Grade every assumption `[confirmed]`,
+  `[reported]`, `[inferred]`, or `[assumed]` — never a number — and for
+  every `[assumed]` bullet, name what breaks: `if wrong → <deliverable or
+  DoD signal>`. This path is granted unconditionally, before anything else —
+  it is the bootstrap. Every other in-scope Edit/Write, your in-sandbox
+  scaffolding Bash, and your own hand-off outbox all DEFER until it exists —
+  the hook waits for you, it never denies you.
+  ```
+
 - `{{role_goal_path}}` — `.squad/role-goal-<name>.md`
 - `{{created}}` — current UTC time in ISO-8601 (the same timestamp written to the roster entry and the role-goal frontmatter)
 
@@ -121,6 +140,7 @@ The body must include:
 3. A clear file-scope statement (the role knows what it owns).
 4. A reminder that the role is reusable as both subagent and Agent Teams teammate, with the propagation caveat (`skills` and `mcpServers` frontmatter do not propagate to teammates; `tools` and `model` do; body is appended).
 5. A comment that the file is generated — edit if the role's needs evolve.
+6. The engagement-record instruction (`{{plan_block}}`) — already unconditional per the substitution above; nothing further to add here.
 
 ## Write role goal
 
@@ -163,7 +183,9 @@ Write the composed system prompt to `.claude/agents/<name>.md`. Use the YAML fro
 
 Call into `squad-roster` to add an entry for this role. The entry includes name, purpose, agent_file path, role_goal path, file_scope, tools, model, active flag (true), created timestamp, and — if the role got a sandbox in Q7 — the `environment` block. If the Q5 follow-up set a non-default effort tier, include `effort` too; if the user left it at inherit, omit the field entirely.
 
-**Always append the role's hand-off outbox to `file_scope`:** `.squad/role-comm-<name>--*`. This is the structured worker↔worker channel (`templates/role-comm.md`) — the glob lets the role publish hand-off manifests to downstream roles without a permission prompt, while writes to any *other* role's outbox still defer. Don't ask the user about this one; it's part of the contract, like the workspace mirror in Q7.
+**Do not register `.squad/` contract paths in `file_scope`.** Since v0.4.1's `.squad/` structural reservation, the `PermissionRequest` hook grants a role two of its `.squad/` contract paths structurally, derived from its own `agent_type`, checked *before* `file_scope` is ever consulted for a `.squad/` path: its own engagement record, `.squad/role-plan-<name>.md` (hard rule #11, always granted — it's the bootstrap), and its own hand-off outbox, `.squad/role-comm-<name>--*` (`templates/role-comm.md`, granted once the record exists). Registering either yourself in `file_scope` was the forgery hole v0.4.1 closed: a broad scope (`**`, `.squad/**`) would otherwise have matched them and auto-approved writes to another role's record or outbox. So leave both paths out of the `file_scope` you write to the roster entry — don't ask the user about them either; it's not a generation choice, it's how the hook derives the grant.
+
+A roster generated before v0.4.1 that still lists one or both is harmless: the reservation is checked first, so `file_scope` never gets consulted for a `.squad/` path regardless of what it contains. No migration is needed, and there's nothing to "clean up" in an existing roster's `file_scope` unless the user asks.
 
 ## Confirm
 

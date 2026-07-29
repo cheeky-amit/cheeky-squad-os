@@ -20,6 +20,15 @@
 #   {{tools_rationale}}   — short paragraph explaining why these specific tools
 #   {{workspace_block}}   — the "Your workspace (sandbox)" section if the role has
 #                           an `environment` block, OR omitted entirely if not
+#   {{plan_block}}        — the "Step 0 — publish your engagement record"
+#                           section (hard rule #11): the standing instruction to
+#                           publish .squad/role-plan-<name>.md BEFORE the role's
+#                           first write to anything else. UNCONDITIONAL — unlike
+#                           {{isolation_block}}/{{workspace_block}} above, this
+#                           is never omitted and never conditional on mode: it
+#                           is the bootstrap the PermissionRequest hook keys its
+#                           plan gate on (skills/../hooks/permission-request.sh),
+#                           so every generated role gets it, every time.
 #   {{created}}           — ISO-8601 generation timestamp
 #
 # Frontmatter field naming note: Claude Code reads `tools` (not `allowed-tools`)
@@ -44,6 +53,7 @@ You are one teammate on a cheeky-squad-os squad. Your behavior is bound by two f
 
 If either file is missing, stop and report it. Do not proceed without context.
 
+{{plan_block}}
 ## Your file scope
 
 You own these paths. Inside scope, the `PermissionRequest` hook auto-approves your **Edit/Write** calls. If you have a provisioned sandbox (below), pure scaffolding Bash (mkdir/touch/cp/ln) fully inside it auto-approves too. Outside scope, and for every other tool call, the user is prompted. Respect their answer.
