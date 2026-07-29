@@ -1,6 +1,6 @@
 # Worked Example: Klaviyo Lifecycle Audit
 
-A walkthrough of using **cheeky-squad-os** to spin up a bespoke three-role squad for a one-week Klaviyo audit. This is agentic business infrastructure work — not engineering — and the squad is generated specifically for this goal. No generic team applied.
+A walkthrough of using **cheeky-squad-os** to spin up a bespoke three-role squad for a one-week Klaviyo audit. This is agentic business infrastructure work — not engineering — and the squad is generated specifically for this goal. No generic team applied. Section 2 also walks guided domain research end to end: both human gates, one question the human cuts and one they add, one finding that comes back unanswered, a grade the human downgrades and a finding they drop, and the delta line that changes the decomposition before a single role is proposed.
 
 ---
 
@@ -36,12 +36,113 @@ Why: bounded deliverable (a ranked report), single deadline
 the squad's work is done. If you later want a monthly recurring
 audit, that would be Evergreen — different dispatch path.
 
+Want me to check the domain before I decompose?
+
+  1. What's Klaviyo's current bulk-sender compliance threshold
+     for bounce/complaint rate? (source: web search+fetch)
+  2. Has list growth or list health changed materially in the
+     last 90 days? (source: this codebase and project files)
+  3. Is the welcome-flow open/click benchmark you've quoted
+     before (~45%) still current? (source: web search+fetch)
+  4. Anything already on record about known list-health issues?
+     (source: a document you hand me)
+
+Roughly 5-10 attended minutes, up to 4 source classes per
+question. Say `skip` to decompose from what I already know, or
+`go` to run this as written — or tell me what to cut or add
+first.
+
+User: Drop #4 — nothing written down. But add one: has anyone
+already turned on Klaviyo's own deliverability monitoring for
+this account? I don't want us proposing to build something that
+already exists.
+
+squad-onboard: Updated plan:
+
+  1. What's Klaviyo's current bulk-sender compliance threshold
+     for bounce/complaint rate? (source: web search+fetch)
+  2. Has list growth or list health changed materially in the
+     last 90 days? (source: this codebase and project files)
+  3. Is the welcome-flow open/click benchmark you've quoted
+     before (~45%) still current? (source: web search+fetch)
+  4. Is Klaviyo's own deliverability monitoring already turned on
+     for this account? (source: connected MCP tools — Klaviyo
+     connector)
+
+go?
+
+User: go
+
+squad-onboard: Running research — 4 questions, up to 4 sources
+concurrently.
+
+  1. [reported, web] Gmail/Yahoo's Feb-2024 bulk-sender rules cap
+     complaint rate at 0.3%. Source: Google's bulk-sender
+     guidelines page.
+  2. [confirmed, codebase] reports/klaviyo/2026-02-audit-notes.md
+     (a prior ad hoc check already in this repo) records list
+     growth stalled at ~180K subscribers as of Feb 2026. Source:
+     that file, read directly.
+  3. Unanswered — no web source cites a benchmark specific enough
+     to confirm or refute a ~45% figure for this SKU bracket;
+     general email benchmarks range too widely to settle it.
+  4. [confirmed, MCP] Account-level deliverability monitoring is
+     currently off. Source: Klaviyo account-details tool read,
+     2026-05-27.
+
+Approve these — or tell me what to drop, correct, or downgrade.
+
+User: Question 2's note — that was a contractor's guess, not a
+verified pull. Downgrade it to reported. And drop #4; I turned
+that monitor off on purpose months ago. It's not a finding, it's
+a choice I made.
+
+squad-onboard: Updated:
+
+  1. [reported] Gmail/Yahoo Feb-2024 rule — 0.3% complaint cap.
+  2. [reported] List growth stalled ~180K, per a contractor note
+     (downgraded from confirmed at your request).
+  3. Unanswered — welcome-flow benchmark; no source could confirm
+     or refute it. Carried forward as a `needs:` for whichever
+     role ends up quoting a benchmark number.
+
+approve?
+
+User: approve
+
+squad-onboard: Written to .squad/world/claims-research.md.
+Research changed the decomposition: +list-health workstream
+(new), compliance re-anchored on the Feb-2024 0.3% Gmail rule.
+
 Proposed workstreams:
   1. Extract — pull flow performance, list health, deliverability
      signals from Klaviyo (and cross-reference Shopify orders).
+  2. List health — diagnose the stalled-growth signal before
+     ranking anything downstream of it. (citing:
+     klaviyo-list-growth-stalled-q1-2026)
+  3. Analyze + rank — identify gaps, estimate revenue impact,
+     surface compliance risks. Re-anchored on the confirmed
+     complaint ceiling. (citing:
+     gmail-bulk-sender-complaint-ceiling-0.3pct)
+  4. Synthesize — write the final ranked report. (from priors)
+
+Does this decomposition cover the goal? Any to merge, split, or
+drop?
+
+User: Merge list health into Extract — the data-puller already
+pulls list-health metrics, it just needs to flag when they've
+stalled. No need for a fourth role over one flag.
+
+squad-onboard: Merged. Final workstreams:
+  1. Extract — pull flow performance, list health (now flagging
+     the stalled-growth signal from research), deliverability
+     signals, and cross-reference Shopify orders. (citing:
+     klaviyo-list-growth-stalled-q1-2026)
   2. Analyze + rank — identify gaps, estimate revenue impact,
-     surface compliance risks.
-  3. Synthesize — write the final ranked report.
+     surface compliance risks, re-anchored on the confirmed
+     complaint ceiling. (citing:
+     gmail-bulk-sender-complaint-ceiling-0.3pct)
+  3. Synthesize — write the final ranked report. (from priors)
 
 Proposed roles (one per workstream):
   - klaviyo-data-puller    — pulls Klaviyo + Shopify data via MCP
@@ -145,6 +246,8 @@ Generated `.squad/role-goal-klaviyo-data-puller.md` (outcome paragraph + hand-of
 > **Stop conditions** (hard rule #14, derived by `squad-role` from this role's purpose, tools, and the goal's Out of scope):
 > - `needs:` the Klaviyo MCP connector responds to a read call
 > - `stop:` any API returns 403 twice
+
+No belief-derived `stop:` bullet here, and that is the correct outcome rather than an omission: only a `confirmed` finding earns one, and the human downgraded both survivors to `reported` at Gate 2. A `reported` finding is context the role reads in the baked world index — it is not a bound the role self-polices. This is the ledger's discipline landing where it should: research that was downgraded binds nothing.
 
 ---
 
@@ -254,6 +357,12 @@ effort: xhigh
 > Read `data/klaviyo/*.json`, `reports/klaviyo/raw/summary.md`, and `reports/klaviyo/compliance/flags.md`. Produce `reports/klaviyo/final-report.md`: a ranked list of >= 5 lifecycle fixes ordered by estimated monthly revenue impact. Each fix includes the impact estimate, a confidence score with rationale, the evidence (which data point or compliance flag triggered it), and a one-paragraph recommendation. Compliance issues marked high severity must appear in the top 3 regardless of revenue impact.
 >
 > **Hand-offs:** user — this is the last role in the chain; `reports/klaviyo/final-report.md` is the squad deliverable. Dispatch this role only after both upstream roles' artifacts land.
+>
+> **Stop conditions** (hard rule #14):
+> - `needs:` "is the ~45% welcome-flow open/click benchmark still current?" is answered before this role commits — unanswered by research
+> - `stop:` a fix's revenue estimate would rest on a benchmark number no source in `data/klaviyo/` supports
+
+This is the third composition-loop mechanism landing. Research question 3 came back **unanswered** at Gate 2 — no source could confirm or refute the benchmark — and `squad-role` routed it to the one role whose work would quote a benchmark number. It is not backfilled with a guess, it is not silently dropped, and it does not gate dispatch. It surfaces at triage as a question only the human can close.
 
 ---
 
@@ -321,7 +430,9 @@ Dispatch triage (checkable `needs:` bullets only — the user may always
 dispatch anyway):
   klaviyo-data-puller   starts: machine   (Klaviyo MCP connector responded to a read)
   compliance-checker    starts: machine   (no needs: declared)
-  report-writer         starts: machine   (no needs: declared)
+  report-writer         starts: YOU       ("is the ~45% welcome-flow
+                        open/click benchmark still current?" — unanswered
+                        by research)
 
 The role goals' Hand-offs sections imply a sequence — the data-puller's
 artifacts feed the compliance-checker, and the report-writer reads both:

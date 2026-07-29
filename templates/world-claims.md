@@ -14,11 +14,26 @@ Who writes it: the owner named IN THE FILENAME, and only that owner —
   NOT roles a squad ever dispatches:
     - claims-user.md      the human's own beliefs, and the rulings that
                            settle a dispute between two roles' claims.
-    - claims-research.md  reserved for a later release. Do not write to
-                           it and do not build anything that expects it
-                           to exist yet.
+    - claims-research.md  findings from the world, written ONLY by the
+                           squad-world skill's `research` verb and only
+                           through its two human gates. Absent on any
+                           squad that has never run research. It uses
+                           this exact schema — there is no second one —
+                           under one extra restriction, below.
   The hook refuses BOTH names to any role, on purpose — a role merely
   NAMED "user" or "research" must never be able to forge either file.
+
+THE RESEARCH GRADE CEILING — a per-owner restriction, in claims-research.md
+and ONLY there. A block in that file graded `inferred` or `assumed` is
+INVALID (reason: research_grade_ceiling), on top of the four required
+fields below. Research may assert only `confirmed` or `reported`: a
+finding is something a source said, and a synthesis of findings is not a
+finding. world.sh enforces this in the parser — the grade is
+on-vocabulary, it is simply too weak a grade for this one owner, so the
+reason code is deliberately distinct from bad_grade. Nothing else is
+affected: claims-user.md has NO ceiling (the human may assert an
+inference — it is their prerogative and their name is on it), and a
+role's own claims-<role>.md has none either.
 
 Who reads it: skills/squad-world/scripts/world.sh, read-only, on behalf of
   the squad-world skill — it parses every claims-*.md, validates each

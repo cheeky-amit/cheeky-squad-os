@@ -108,13 +108,24 @@ sequenceDiagram
     participant ROLE as squad-role
     participant ROST as squad-roster
     participant SPAWN as squad-spawn
+    participant WLD as squad-world
     participant W as Worker(s)
 
     U->>ONB: I want to <goal>
     ONB->>U: "Do you have a goal?"
     U-->>ONB: answer
-    ONB->>ONB: reformulate → outcome · infer mode · decompose
-    ONB->>GOAL: write .squad/goal.md
+    ONB->>ONB: reformulate → outcome · infer mode
+    ONB->>GOAL: write .squad/goal.md (before research — rule #4 bakes it, R2 quotes it)
+    ONB->>U: offer domain research (gate 1) — skippable in one word
+    U-->>ONB: skip, or go / edited plan
+    opt plan approved
+        ONB->>WLD: research verb — 4 source classes, at most 4 concurrent
+        WLD-->>ONB: candidate belief blocks
+        ONB->>U: findings, as full belief blocks (gate 2)
+        U-->>ONB: approve / drop / downgrade / rewrite
+        WLD->>WLD: write .squad/world/claims-research.md (survivors only)
+    end
+    ONB->>ONB: decompose (rewritten by the findings, or from priors)
     loop per workstream
         ONB->>ROLE: generate role
         ROLE->>U: 6 interactive questions
@@ -742,3 +753,30 @@ The lifecycle above is deliberately shallow. It does **not** attempt:
   differently-worded keys never reach `CONTESTED` at all.
 - **Auto-resolution** — nothing but a human, at `C2`/`ADJ`, can produce a
   `superseded` block. No script sits between `CONTESTED` and `ADJ`.
+
+### 10.4 The ledger's producer — the `research` verb, and its grade ceiling
+
+§10.1's `A0` says "role writes." One owner is not a role: `claims-research.md`
+is written by `squad-world`'s **research** verb, invoked once by
+`squad-onboard` after the goal is confirmed and written to disk (§1's flow),
+behind two human gates — the plan, then the findings. It is the only automatic
+producer of beliefs in the plugin, and it is optional: `skip` at gate 1 leaves
+`.squad/world/` untouched and §10.1 never fires.
+
+`A1` is therefore not the same test for every owner. The parser carries **one
+per-owner grade ceiling**, matched on the literal owner string `research`
+derived from the filename exactly as every other owner is: a block in
+`claims-research.md` graded `inferred` or `assumed` is INVALID, reason
+`research_grade_ceiling` — distinct from `bad_grade` because the grade is
+on-vocabulary, it is simply too weak for this one owner. Research may assert
+only `confirmed` or `reported`. Nothing else is affected: `claims-user.md` has
+no ceiling, and neither does any role's own file.
+
+This is the one deliberate research fingerprint in shipped script code. It is
+there because `claims-research.md` is the single most tempting place in this
+plugin to write an ungrounded claim, and guarding that path with a sentence in
+a skill body is exactly what §10's rule says it does not do. Everything else
+about the verb — the two gates, the contradiction stop, the four source
+classes and their degradations — is skill-body discipline with no mechanism
+behind it, and `ARCHITECTURE.md`'s enforced-versus-asked table says so row by
+row.

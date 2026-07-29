@@ -54,7 +54,7 @@ If the user asks "what's our goal", "show the goal", or similar:
 
 ### Write (first time)
 
-This path is normally invoked by `squad-onboard` at the end of its flow, with a pre-confirmed outcome from the user.
+This path is normally invoked by `squad-onboard` at its **Step 3**, with a pre-confirmed outcome from the user and the just-inferred mode — before the research offer, not at the end of the flow. Everything after that point reads the goal from disk rather than from the transcript: rule #4's prompt-baking, the research verb's contradiction stop (which must quote a line from the file), and `squad-role`'s preflight.
 
 1. Confirm `.squad/goal.md` does not exist. If it does, route to **replace** instead.
 2. Create `.squad/` if needed (`mkdir -p`).

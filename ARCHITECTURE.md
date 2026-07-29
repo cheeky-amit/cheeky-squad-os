@@ -12,7 +12,7 @@ This means the plugin contains **zero opinionated role files**. No `frontend-dev
 
 | Component | Ships in plugin | Generated per goal | Notes |
 | --- | --- | --- | --- |
-| Skills (7) | Yes | — | `squad-onboard`, `squad-goal`, `squad-role`, `squad-spawn`, `squad-roster`, `squad-env`, `squad-verify` |
+| Skills (8) | Yes | — | `squad-onboard`, `squad-goal`, `squad-role`, `squad-spawn`, `squad-roster`, `squad-env`, `squad-verify`, `squad-world` |
 | Hooks (3) | Yes | — | `SessionStart`, `UserPromptSubmit`, `PermissionRequest` |
 | Templates (7) | Yes | — | `goal.md`, `role-goal.md`, `role-definition.md`, `roster.json`, `squad-dispatch.workflow.js`, `verification.md`, `role-comm.md` |
 | Role files | **No — zero** | Yes, by `squad-role` | Written to `.claude/agents/<role-name>.md` in the user's project |
@@ -94,9 +94,9 @@ Two owners on the roster are not roles:
 | Owner | File | Holds |
 | --- | --- | --- |
 | The human | `.squad/world/claims-user.md` | The human's own beliefs, and the rulings that settle disputes. |
-| Research (reserved) | `.squad/world/claims-research.md` | Reserved for a later release — not built in this PR. The hook already refuses the name so nothing collides with it later. |
+| Research | `.squad/world/claims-research.md` | Findings from the world, not the human's own say-so — written only by `squad-world`'s **research** verb, and only through its two human gates (see "Guided domain research" below). Absent or empty on any squad that has never run research. |
 
-**Reserved owner names.** `user` and `research` are refused unconditionally by the hook's grant logic — a role in the roster merely *named* `user` would otherwise be derived a grant to `.squad/world/claims-user.md` by the exact same mechanism that gives every other role its own file, and could then write the ruling that settles a contested belief under its own name. Nothing else in the system stops that: role names come from `roster.json`, which a human hand-edits, and the hook has no way to distinguish an innocent name collision from a deliberate one. The refusal lives in the hook itself (`squad_grant`), not in a convention roles are asked to respect.
+**Reserved owner names.** `user` and `research` are refused unconditionally by the hook's grant logic — a role in the roster merely *named* `user` or `research` would otherwise be derived a grant to `.squad/world/claims-user.md` or `.squad/world/claims-research.md` by the exact same mechanism that gives every other role its own file, and could then write the ruling that settles a contested belief, or a "finding," under its own name. Nothing else in the system stops that: role names come from `roster.json`, which a human hand-edits, and the hook has no way to distinguish an innocent name collision from a deliberate one. The refusal lives in the hook itself (`squad_grant`), not in a convention roles are asked to respect — and it is what makes `claims-research.md` safe to treat as `squad-world`'s own artifact: no role can ever contribute a block under that owner name, gated or not.
 
 **The belief block:**
 
@@ -131,6 +131,44 @@ Stated explicitly, because they are what keep this feature honest:
 | No cross-squad merge | A parked squad's ledger travels with it under `.squad/squads/<slug>/world/`; nothing merges two squads' beliefs into one on switch or restore. |
 | Grades are self-reported | Nothing verifies a `Source:` line is truthful — a role can write `Source: reports/pricing.json` for a file it never opened, and the parser has no way to tell. The same honesty gap hard rule #11's evidence grades already carry, now shared by a second artifact. |
 
+### Guided domain research — the research verb
+
+`squad-onboard` today went goal → decompose into workstreams → propose roles, and the middle step ran entirely on model priors: for an unfamiliar tool, a specific brand, a niche regulation, a bespoke codebase, or anything post-training-cutoff, the decomposition was a guess wearing a decomposition's costume, and nothing downstream caught it — `squad-verify` checks the goal's Definition of done, never whether the *workstreams* were the right ones. **Research is a verb on `squad-world`, not a ninth skill.** The criterion is *the same one CONTRIBUTING.md already states*: a new skill only when the human authors the artifact. A finding's content originates in the **world** — a URL, a tool read, a file — and the human *gates* it; gating is not authorship. Keeping it on `squad-world` also means one writer for `.squad/world/`, and re-running research for free via that skill's existing trigger. Skill count stays eight.
+
+**Two gates, both the human's.** Research never runs, and a finding never reaches composition, without an explicit human decision at each of two points:
+
+1. **Gate 1 — the plan.** `squad-onboard` derives 3–6 questions from the goal it just confirmed, one per checkable noun-phrase in the outcome or a Definition-of-done signal whose baseline could be stale, cut down to whichever would actually change a workstream or a role. Each question is shown with its proposed source class, cost (attended minutes, source-class count) printed up front. The human accepts wholesale (`go`), skips wholesale (`skip`) — the decomposition proceeds from priors exactly as it does today, nothing runs, nothing is written — or edits: rewords, drops, or adds a question, in the same reply.
+2. **Gate 2 — the findings.** Every survivor is shown as a full belief block — Claim, Source, Grade, Observed — the human is ratifying exact text, not a compressed summary. One reply may rewrite a Claim, downgrade a Grade (never upgrade one — `confirmed` is refused unless the human supplies the proving locator, the glossary binds the human too), drop a finding, answer an unanswered question, or discard everything. `approve` writes the survivors to `claims-research.md`; whatever is dropped never reaches it.
+
+Neither gate is a yes/no rubber stamp — "adjusted" means a real edit beat. Both gates complete in one word on the happy path; every further compression is already spent (Gate 1 rides the existing mode-inference message instead of opening a new one, Gate 2's approval lands directly in the decomposition instead of asking a second time) — `squad-onboard` says so explicitly and refuses to add a further beat.
+
+**Four source classes, each degrading independently and honestly** — never silently, never guessed, never inferred:
+
+| Class | Grade ceiling | If unavailable |
+| --- | --- | --- |
+| Web search/fetch | `reported` — a page attests; it does not prove | **skipped** — no network, stated at Gate 2 |
+| Local codebase / project files | `confirmed` — Source names the file | always available |
+| Connected MCP tools | `confirmed` — Source names the tool call + object + date | **unresearchable** — no connector, annotated at Gate 1 or Gate 2 |
+| User-supplied documents | `reported` — Source names the doc | class unused if none supplied |
+
+Independent web/codebase questions may fan out as anonymous subagents, grouped per class, bounded at **≤4 concurrent** — a squad-composing pass, not a standing research agent. MCP and user-document questions run inline in the main session, which holds the connectors. A question no available source can answer is **unanswered** — never guessed, never backfilled with an `inferred` claim wearing a finding's clothes. It gets exactly three homes, none of them the ledger: the human answers it at Gate 2 (→ `claims-user.md`); it becomes a workstream (answering it is the work); or it becomes a `needs:` bullet on whichever role's slice it points at, for `squad-spawn`'s dispatch triage to route to the human.
+
+**The grade ceiling is absolute, and it is mechanical, not a request.** Research may write only `confirmed` or `reported` — never `inferred`, never `assumed`. `world.sh` enforces this as a per-owner ceiling: a `claims-research.md` block field-valid but graded `inferred`/`assumed` is invalid, reason `research_grade_ceiling`, distinct from `bad_grade` on purpose (the grade is on-vocabulary, it is simply too weak a grade for this one owner) — checked in the same pass as the vocabulary check, matched on the literal string `"research"` derived positionally from the filename, the same derivation every other owner check in the script uses. **This is the one deliberate research fingerprint in shipped script code** — the owner approved it explicitly over the alternative (a sentence in a skill body asking nicely), because guarding the plugin's single most tempting rumor path with an instruction alone is exactly what this repo says it does not do. If the human wants a synthesis on the ledger with more confidence than research earned, they assert it themselves, via `squad-world`'s **seed** operation, into `claims-user.md` — a different artifact, a different author, no ceiling.
+
+**The contradiction stop (R2).** Before Gate 2, every `confirmed`/`reported` finding is checked against text quoted from `.squad/goal.md`. It fires when a finding makes a Definition-of-done signal already-true, impossible, or unmeasurable as written; falsifies a factual premise in the outcome; shows the outcome or a signal requires an act the goal lists as Out of scope; or shows the deadline or quality bar is unachievable as written. It does **not** fire on merely-harder, on a better-approach finding, or on a finding that contradicts another finding (that's an ordinary dispute — **adjudicate** handles it). No quoted goal line, no stop. When it fires it is the only thing on screen and Gate 2 is unreachable until ruled: amend the goal (hands to `squad-goal`, never auto-amended — hard rule #1 makes the goal binding, only the human changes it), reject the finding with the ruling recorded, proceed on the record, or stop outright. **Label this honestly as an instruction, not a mechanism** — nothing enforces R2 but `squad-world`'s own skill body; the quote requirement narrows judgment, it does not mechanize "unachievable."
+
+**The composition loop — the feature's entire justification.** Citations alone are not enough: a model can decompose from priors and *decorate* with belief keys afterward. Three mechanisms close it, owned by `squad-onboard` and `squad-role`:
+
+1. **Rewrite rules.** A finding that says a workstream's target *already exists* **removes** that workstream. A finding that says something *changed or broke* — or, same shape, was never set up — **inserts a precursor** workstream ahead of whatever depended on the old assumption. A *weight* finding — one area carries materially more risk or revenue impact than assumed — **reorders** the list around it.
+2. **Citations.** Every workstream that survives the rewrite gets the belief key(s) that justify it, e.g. `Compliance (citing: gmail-bulk-sender-complaint-ceiling-0.3pct)`. A workstream with none is marked **`(from priors)`**, visibly — the mark is what makes an uncited workstream honest instead of silently indistinguishable from a grounded one.
+3. **The delta line**, printed at the same decomposition-confirm the human already gave, always: *"Research changed the decomposition: +list-health workstream (new), compliance re-anchored on the Feb-2024 0.3% Gmail rule."* If research changed nothing, `squad-onboard` says that too, in the same spot — it is real information, not a null result to bury.
+
+`squad-role` closes the loop a second way, at generation time: a `confirmed` finding that constrains a role's purpose or scope becomes a binding `stop:` bullet in that role's goal (hard rule #14) — not an ignorable index line — citing the belief key so the bound is traceable. A `reported` finding earns no `stop:` bullet this way; the human downgraded it to `reported` at Gate 2 precisely because it wasn't strong enough to bind, and it remains available context the role can read. An unanswered question that touches a role's purpose or scope becomes a `needs:` bullet, routed to the human at `squad-spawn`'s dispatch triage the same way any other non-checkable `needs:` is. No new interactive question is added anywhere in `squad-role`'s flow to make this happen — both derivations are silent, shown only in the existing confirm block.
+
+**This feature adds no hard rule.** An optional verb is not an invariant; it is an application of rules already on the books. #1 (one north-star) — research grounds the decomposition in the same goal, it never supplies a second one. #4 (prompt-baking) — findings ride the goal-confirmed channel already baked into every spawn prompt; no new context path. #13 (a belief needs a source) — literally the same ledger, the same four-field schema, a *tighter* ceiling, not a new artifact. #15's spirit (the human meets the same evidence bar) — Gate 2 is exactly that discipline, applied to research instead of to verification. Minting a #16 for "an optional pass the human can skip in one word" would say the invariant list grows every time a skill gets a new verb, which is false for every other verb in the plugin and should be false for this one too.
+
+**What this does not do — stated plainly, so no one goes looking for it.** Not a general-purpose research agent. It researches **to compose a squad, once, at onboarding, then stops**: no standing monitoring, no research without an approved goal, no autonomous re-run, no crawling beyond the approved plan, no budget knobs, no per-domain question banks. Re-running it later for a fresh decision is the same verb invoked fresh, with a fresh plan and its own two gates — never a background process.
+
 ### What the ledger enforces, and what it merely asks
 
 | Surface | What's enforced | What's merely asked |
@@ -139,6 +177,10 @@ Stated explicitly, because they are what keep this feature honest:
 | Ownership | The `PermissionRequest` hook derives exactly one grant per role — its own `claims-<agent_type>.md`, gated on its engagement record existing — structurally impossible to forge another owner's file. | Nothing on this surface — it is mechanical, the same as the hook's other `.squad/` grants. |
 | `disputed` | Derived by `world.sh` from live-block key collisions across owners' files; no field a role can set or clear to fake or hide a dispute. | Whether a role *should* have noticed its claim conflicted with another owner's before asserting it — nothing polls for that; the collision surfaces only once both blocks exist. |
 | Resolution | The human's ruling is the only path to `Status: superseded` — recorded in `claims-user.md`, dated, sourced. | Nothing prevents the human from ruling badly, or from never getting to a disputed key at all — an unresolved dispute simply stays surfaced, indefinitely. |
+| The research grade ceiling | `world.sh`'s parser: a `claims-research.md` block graded `inferred`/`assumed` is invalid, reason `research_grade_ceiling` — the one deliberate research fingerprint in shipped script code. | Whether a `confirmed`/`reported` grade in that file is itself honest — Source truthfulness is unverifiable, the same limit every other owner's grade carries; nothing here checks the world either. |
+| The R2 contradiction stop | Nothing. `world.sh` has no R2 check of any kind — the stop lives entirely in `squad-world`'s skill body, applied in the main session before Gate 2. | Whether the check actually ran, and whether it caught every genuine contradiction — "label it honestly as an instruction, not a mechanism" is `squad-world`'s own wording, not a hedge added here. |
+| The composition loop | Nothing. There is no artifact of the priors-only decomposition to diff against, so no check anywhere — script, hook, or test — can confirm a rewrite rule fired, that a citation belongs to the workstream it is stapled to, or that the delta line is true. | Whether the decomposition was actually *rewritten* rather than generated from priors and then decorated with belief keys. This is the feature's entire justification and it is carried by `squad-onboard`'s skill body alone. Two things make it reviewable rather than merely hoped-for, and neither is enforcement: the delta line and the `(from priors)` marks are printed in the same message as the workstreams, next to findings the human read at Gate 2 one beat earlier — so a fabricated delta is a claim the human can check against what they just approved. A decomposition that comes back all `(from priors)` after research ran is itself a visible verdict on the questions. |
+| Question coverage | Nothing. | Whether research asked the right questions at all. A plan derives from the goal as read; a domain question nobody thought to ask never becomes a finding, an `unanswered` line, or anything else visible — it simply isn't there. Unlike `unanswered` (asked, no source could answer), an unasked question leaves no trace to notice it's missing. |
 
 ## The three modes
 
@@ -152,7 +194,7 @@ Mode is inferred from goal language by `squad-onboard`. User can override. Agent
 
 Mode controls **cadence and persistence**. Agent count is set by the goal decomposition (how many parallel workstreams) and the domain expertise required (how many specializations).
 
-## The seven skills
+## The eight skills
 
 Every skill ships as `skills/<name>/SKILL.md` with YAML frontmatter conforming to the agentskills.io open spec. Claude-Code-specific behaviors live in companion scripts (e.g. `skills/squad-spawn/scripts/spawn.sh`, `skills/squad-env/scripts/provision.sh`, `skills/squad-verify/scripts/verify.sh`) or are gracefully degraded.
 
@@ -413,6 +455,19 @@ Write .squad/verification.md (from templates/verification.md — frontmatter:
 
 **Writes:** `.squad/verification.md` **only** — it never modifies `goal.md` or `roster.json`. The verification report is the only authority for declaring the goal met; a squad's synthesized report is a summary, not a verdict.
 
+### 8. `squad-world`
+
+**Trigger:** "the squad should know X", "note that X is true", "what does the squad believe about X", "show the world model", "settle the disagreement about X", "research the domain first", "research whether X changed" — plus, for the **research** verb only, offered once automatically by `squad-onboard` right after the goal is confirmed, before decomposition. `seed`/`inspect`/`adjudicate`/`retire` are never onboarding steps; `research` is the one exception.
+
+**Contract:** Five verbs over one shared ledger (`.squad/world/claims-<owner>.md`, hard rule #13):
+- **seed** — the human states a belief; written straight to `claims-user.md`, no gate, the only file this skill writes freely.
+- **inspect** — renders `world.sh`'s output as a table for the human: live beliefs by owner, disputed keys shown in full, invalid blocks with what they're missing, one summary line.
+- **adjudicate** — the load-bearing verb for a dispute: shows both sides in full with provenance, the human rules, the ruling lands in `claims-user.md`, and every losing block is marked `superseded` with per-edit consent — never batched, never silent.
+- **retire** — marks a belief `Status: retired`; nothing is ever deleted.
+- **research** — the ledger's primary producer: findings from the world, not the human's own say-so. The only verb that writes `claims-research.md`, and only through its two human gates. See "Guided domain research — the research verb" above for the two gates, the four source classes, the grade ceiling, and the composition loop it feeds into `squad-onboard`/`squad-role`.
+
+**Writes:** `.squad/world/claims-user.md` (seed, adjudicate rulings) · `.squad/world/claims-research.md` (research, gated, never freely) · a single-field `Status` edit inside another owner's `claims-<role>.md` during adjudicate, per-edit consent only. Never writes any role's `claims-<role>.md` beyond that one field, never writes `goal.md` or `roster.json`.
+
 ## The role-definition template (no shipped roles — why)
 
 Shipping default roles (`frontend-dev`, `backend-dev`, `qa-engineer`, etc.) is the trap. Defaults bias every goal toward the shape the defaults assume. A Klaviyo lifecycle audit doesn't need a `backend-dev` — it needs an `audit-researcher`, a `compliance-checker`, and a `report-writer`. A weekly competitive intel loop doesn't need any of those — it needs a `scraper`, an `analyst`, and a `summariser`.
@@ -549,7 +604,8 @@ All squad state lives under `.squad/` in the user's project. Generated role defi
 │   ├── role-plan-<role-name>.md         # the role itself writes it before its first act (rule #11)
 │   ├── world/                           # the belief ledger (rule #13)
 │   │   ├── claims-<role-name>.md        #   one per role — positional grant, own beliefs only
-│   │   └── claims-user.md               #   the human's beliefs + dispute rulings
+│   │   ├── claims-user.md               #   the human's beliefs + dispute rulings
+│   │   └── claims-research.md           #   squad-world's research verb only, gated (absent until research runs)
 │   ├── roster.json                      # squad-roster owns (source of truth)
 │   ├── roster.md                        # squad-roster auto-generates (human view)
 │   └── workspaces/                      # provision.sh materializes one sandbox per role

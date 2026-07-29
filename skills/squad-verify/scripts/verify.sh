@@ -70,9 +70,12 @@
 # skills/squad-world/scripts/world.sh (a different skill's script; this
 # script stays self-contained, per its own header). A block missing
 # Claim/Source/Grade/Observed, carrying an off-vocabulary Grade or Status,
-# or duplicated as `live` twice within one owner's OWN file, is invalid and
-# excluded here exactly as hard rule #13 requires it be excluded from every
-# prompt. A trailing HTML comment is stripped from every field value before
+# duplicated as `live` twice within one owner's OWN file, or — for owner
+# `research` alone — carrying the on-vocabulary but too-weak Grade
+# `inferred`/`assumed` (world.sh's per-owner research grade ceiling), is
+# invalid and excluded here exactly as hard rule #13 requires it be excluded
+# from every prompt. Validity is therefore NOT owner-independent, which is
+# why parse_claims_file takes the owner as its second argument. A trailing HTML comment is stripped from every field value before
 # any of that is judged — templates/world-claims.md's own annotations make
 # that the difference between a belief and a silent no-op. Any drift between
 # this and world.sh's own notion of "valid" is a defect to fix in both
@@ -587,12 +590,24 @@ fi
 WORLD_DIR=".squad/world"
 WORLD_CONFLICTS=""   # unset string = omit the field entirely (dir absent)
 
-# parse_claims_file <file> → one TSV line per "## Belief: <key>" block found:
+# parse_claims_file <file> <owner> → one TSV line per "## Belief: <key>" block:
 #   valid|invalid<TAB>key<TAB>status
 # status defaults to "live" when the block has no Status: line (the belief
 # block schema's stated default — templates/world-claims.md).
+#
+# <owner> is REQUIRED and is the positional owner from the filename, because
+# validity is not owner-independent: world.sh applies a per-owner grade
+# ceiling to claims-research.md (a block there graded `inferred` or `assumed`
+# is INVALID — research may assert only confirmed or reported). This function
+# must apply the SAME rule, for the same reason the duplicate-key ORDER below
+# is matched deliberately: these are two independent re-derivations of the
+# same number, and they are only worth having if they agree. When they did
+# not, world.sh reported conflicts:0 on a ledger where verify.sh reported
+# world_conflicts:1 — squad-verify sent the human to adjudicate a dispute
+# squad-world would not show them, because one of its two claimants was a
+# block the ceiling had already excluded from existence.
 parse_claims_file() {
-  awk '
+  awk -v owner="$2" '
     # fieldval(<line>, <label>) → the field value with the label, any
     # trailing HTML comment, and surrounding whitespace removed. The comment
     # strip is load-bearing and matches world.sh exactly: templates/
@@ -633,9 +648,16 @@ parse_claims_file() {
     /^Claim:/    { has_claim    = (fieldval($0, "Claim")    != "") }
     /^Source:/   { has_source   = (fieldval($0, "Source")   != "") }
     /^Observed:/ { has_observed = (fieldval($0, "Observed") != "") }
+    # THE RESEARCH GRADE CEILING, matched to world.sh exactly. The grade must
+    # be on-vocabulary for every owner; for owner "research" it must ALSO be
+    # one of the two strong grades. world.sh reports the two failures under
+    # different reason codes (bad_grade vs research_grade_ceiling) because it
+    # is the inspection surface a human reads; here only validity is needed,
+    # so both collapse to grade_ok = 0.
     /^Grade:/ {
       g = fieldval($0, "Grade")
       grade_ok = (g == "confirmed" || g == "reported" || g == "inferred" || g == "assumed")
+      if (owner == "research" && (g == "inferred" || g == "assumed")) grade_ok = 0
     }
     # An off-vocabulary Status is INVALID, not silently non-live — same rule
     # world.sh applies, for the same reason: a block that is neither
@@ -664,7 +686,7 @@ parse_claims_file() {
 # this whole section exists to compute.
 claims_live_keys() {
   local file="$1" owner="$2" parsed dup_keys
-  parsed=$(parse_claims_file "$file")
+  parsed=$(parse_claims_file "$file" "$owner")
   [ -z "$parsed" ] && return 0
 
   dup_keys=$(printf '%s\n' "$parsed" \

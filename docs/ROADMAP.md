@@ -19,6 +19,7 @@ covers the full lifecycle with nothing missing that a second plugin would have t
 | **Supervision** | Definition-of-done verification with an artifact of record | ✅ v0.2.0 (`squad-verify`, hard rule #10) |
 | **All three cadences** | One-time / Multi-use / Evergreen, each with a real dispatch path | ✅ v0.1.0; Evergreen depends on external schedulers — see gap 4 |
 | **Trustworthy by inspection** | Docs match shipped behavior; examples conform to real schemas; CI proves it | ✅ v0.2.0 (truth sync + example-roster lint) |
+| **Domain grounding** | Optional guided research grounds workstream decomposition in checked facts instead of priors alone: two human gates, four independently-degrading source classes, a per-owner grade ceiling `world.sh` enforces mechanically, and a composition loop (rewrite rules, citations, a delta line) that a model can't fake by decorating priors with belief keys | ✅ Unreleased, toward v1.0.0 (`squad-world`'s **research** verb; `squad-onboard`/`squad-role` composition loop) |
 
 ## Ranked gaps (what a 0.3.0+ should close)
 
@@ -46,6 +47,19 @@ covers the full lifecycle with nothing missing that a second plugin would have t
 7. **Roster sync.** All state is local under `.squad/`. Optional remote sync for squads
    shared across machines/teammates (already noted as a non-goal in ARCHITECTURE — it
    graduates to a goal here).
+8. **Plan-gated two-stage dispatch.** Deferred from the v1.0 design, not from this
+   feature specifically — the keep/kill review cut it because it doubles dispatch cost
+   for the gated role and recurs as a decline-by-default offer every engagement; the
+   engagement record, hook gate, and verify integration already stand without it. What
+   it would add: a role writes its plan (`status: proposed`), the human reviews and
+   approves it, and only then does stage two dispatch and execute — the one true pre-act
+   review the subagent execution model can support, versus the declared-intent-and-audit
+   trail this plugin ships today. v1.1, on demand; the `proposed` status returns with it.
+9. **The §5.2 self-report signal.** A role self-attesting something at `squad-verify`
+   time — distinct from the engagement record it already publishes before acting —
+   considered during the v1.0 design and deferred: one more question at the flow's
+   already-named abandonment point (verification), consumed by nothing yet. v1.1
+   candidate.
 
 Closed outside the ranked list (v0.4.0): workflow-path manifest parity (`/squad-workflow`
 bakes `args.handoffs`), manifest staleness semantics (dispatchers clear per-engagement
