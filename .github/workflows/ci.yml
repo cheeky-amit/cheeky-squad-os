@@ -29,12 +29,24 @@ jobs:
         shell: bash
         run: |
           shopt -s globstar nullglob
-          shellcheck hooks/*.sh skills/**/scripts/*.sh
+          shellcheck hooks/*.sh skills/**/scripts/*.sh tests/*.sh
 
       - name: Run bats suites
         # Glob, not an explicit list: a new tests/*.bats suite must never be
         # silently unwired from CI by someone forgetting to add it here.
         run: bats tests/*.bats
+
+      - name: Lint mermaid sequence diagrams
+        # Three diagrams in this repo had never rendered. Structural check, not
+        # a real render: CI here is shellcheck + bats and finishes in ~25s;
+        # pulling Chromium in to render diagrams would cost minutes for a class
+        # of bug this catches for free.
+        run: bash tests/mermaid-lint.sh
+
+      - name: Syntax-check the workflow dispatch template
+        # templates/squad-dispatch.workflow.js is shipped JavaScript that CI
+        # never parsed. A syntax error would only surface at dispatch time.
+        run: node --check templates/squad-dispatch.workflow.js
 
       - name: Lint example rosters against the canonical schema
         shell: bash
