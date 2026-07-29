@@ -22,14 +22,24 @@ You orchestrate dispatch. The squad has been onboarded (`.squad/goal.md` exists)
 6. **Provision environments.** If any active role has an `environment` block, run `/cheeky-squad-os:squad-env` (or directly `${CLAUDE_PLUGIN_ROOT}/skills/squad-env/scripts/provision.sh .squad/roster.json .squad/goal.md`) **before** dispatching. This builds each role's sandbox and surfaces any `global_needs` for the user to approve. Do not dispatch a role whose sandbox could not be provisioned (the summary's `errors` > 0) — fix the `environment` first. Roles with no `environment` block skip this.
 7. **Clear the hand-off channel (staleness).** Manifests under `.squad/role-comm-*.md` are per-engagement working state. If any exist from a prior run, delete them before dispatching — baking them would feed roles stale hand-offs (the deliverables they referenced live on in committed `file_scope` paths; only the routing note is discarded). **Exception:** keep them when this dispatch is an explicit follow-on stage consuming a previous run's hand-offs (the user says so, or the previous run's synthesis planned this stage). In Evergreen mode, every iteration is a fresh engagement — clear at the start of each.
 8. **Clear engagement records — dispatched roles only.** Delete `.squad/role-plan-<role.name>.md` for each role you are about to dispatch **in this invocation**, and only those, before dispatching. This is narrower than step 7's blanket clear: a parallel dispatch — say, `squad-role` just registered one new teammate and you're dispatching only that role — must never delete a currently-running role's record just because it shares the roster. **Exception, same as step 7:** keep a role's record when this dispatch is an explicit follow-on stage for that role (the `--chain` case at the `/cheeky-squad-os:squad-workflow` command, or the equivalent explicit continuation on this path) — the record still describes the still-current engagement. In Evergreen mode, clear at the start of each iteration, for the role(s) that iteration dispatches.
-9. **Dispatch triage (§3.4 — "who starts?").** For each role you are about to dispatch this invocation, read its `## Stop conditions` from `.squad/role-goal-<role.name>.md` (hard rule #14) and filter to the `needs:`-prefixed bullets only — `stop:` bullets are mid-run bounds the role self-polices, not something a preflight check can evaluate before the role has started. Probe each `needs:` bullet that's actually checkable from here: a file/path existing on disk, a declared tool being present in the role's `tools` list, or one cheap read-only MCP call if the bullet names one explicitly and a matching tool is available. A bullet phrased as a judgment call isn't checkable — skip it silently, it neither passes nor fails triage. Print one line per role:
+9. **Compute the shared world model index once (hard rule #13).** Run:
+
+   ```bash
+   bash "${CLAUDE_PLUGIN_ROOT}/skills/squad-world/scripts/world.sh" --index
+   ```
+
+   from the project root. This is the same claims-file family `spawn.sh collect` brings back from a worktree — here you're reading whatever already lives at the root. The script performs the projection itself: capped, 80-byte-truncated, recency-ordered index lines, full blocks for a handful of disputed keys, and explicit `+N more` tails — it is **script output pasted verbatim into the prompt, not something you reformat, summarize, or re-derive.** Capture stdout once, before building any per-role prompt below — the world model is squad-wide, so the same text (or its absence) goes into every role's prompt this dispatch, not a per-role slice. Cheap and safe to run even when `.squad/world/` doesn't exist yet.
+
+   **If stdout is non-empty, live beliefs exist** — bake it into every role's prompt at the position in the template below. **If stdout is empty** (no `.squad/world/` at all, or every claims file's blocks are invalid/superseded/retired with nothing currently `live`), **omit the `# Shared world model` section entirely from every role's prompt this dispatch** — never an empty heading, never "no beliefs recorded yet" filler. This is the same absence contract every other `.squad/world/`-touching surface in this plugin honors.
+
+10. **Dispatch triage (§3.4 — "who starts?").** For each role you are about to dispatch this invocation, read its `## Stop conditions` from `.squad/role-goal-<role.name>.md` (hard rule #14) and filter to the `needs:`-prefixed bullets only — `stop:` bullets are mid-run bounds the role self-polices, not something a preflight check can evaluate before the role has started. Probe each `needs:` bullet that's actually checkable from here: a file/path existing on disk, a declared tool being present in the role's `tools` list, or one cheap read-only MCP call if the bullet names one explicitly and a matching tool is available. A bullet phrased as a judgment call isn't checkable — skip it silently, it neither passes nor fails triage. Print one line per role:
    - `starts: machine — <role.name>` — every checkable `needs:` bullet passed (or none were checkable).
    - `starts: YOU — <role.name>: <failing precondition, verbatim from the bullet>` — at least one checkable bullet failed.
    This **informs, it never gates** — dispatch every role the user asked for regardless of what triage printed. Its only job is to surface a knowable-in-advance blocker before the run starts instead of thirty seconds in.
 
 ## Build the spawn prompt (per role)
 
-Every spawn — subagent, teammate, scheduled — follows the same canonical prompt order, regardless of mode: **goal → role-goal → hand-offs → file scope → Step 0 → stop-condition contract → task.**
+Every spawn — subagent, teammate, scheduled — follows the same canonical prompt order, regardless of mode: **goal → role-goal → world index → hand-offs → file scope → Step 0 → stop-condition contract → task.**
 
 ```
 You are the <role.name> role on a cheeky-squad-os squad.
@@ -39,6 +49,30 @@ You are the <role.name> role on a cheeky-squad-os squad.
 
 # Your role's goal
 <full contents of .squad/role-goal-<role.name>.md>
+
+# Shared world model — only if `world.sh --index` produced output this dispatch (step 9)
+<the script's stdout, pasted VERBATIM — do not reformat, summarize, or truncate
+it further; it already did that itself>
+
+Standing instructions for using it:
+- Reuse an existing key rather than minting a near-duplicate — check the
+  index above before writing a new `## Belief:` heading to your own claims
+  file.
+- Never edit another owner's claims file. `.squad/world/claims-<owner>.md`
+  is yours to write only when `<owner>` is your own role name — the
+  `PermissionRequest` hook enforces this structurally regardless of what
+  this prompt says, so there is nothing to gain by trying.
+- Contest a belief by writing your own counter-block under the same key, in
+  your own claims file — never by editing the block you disagree with. Two
+  `live` blocks under one key from different owners *are* the dispute;
+  nobody writes the word "disputed", including you.
+- A key the index shows as DISPUTED may not be silently picked. If your
+  work depends on one, say in your engagement record's `## Assumptions`
+  which side you used and why.
+- This file is never cleared between dispatches — unlike your engagement
+  record and the hand-off channel below, what's written here accumulates
+  for the life of the squad. Nothing you read above went stale just because
+  a new dispatch started.
 
 # Incoming hand-offs — only if any .squad/role-comm-*--<role.name>.md (or --any.md) with status: ready exist
 <full contents of each ready manifest addressed to this role>
@@ -113,7 +147,7 @@ record is not optional even though you also returned a status.
 Read .squad/goal.md and .squad/role-goal-<role.name>.md at any time during your work. Stay inside your file scope. Hand off deliverables by writing to your scope. When a deliverable is ready for another role, publish a hand-off manifest at .squad/role-comm-<role.name>--<consumer>.md (shape: templates/role-comm.md — what's ready, how to consume, caveats).
 ```
 
-Include the workspace block only for roles that have an `environment`; omit it otherwise. Include the Step 0 block and the "Your stop conditions" block always — both are baked unconditionally, in every mode, with no opt-out. A role with an empty `## Stop conditions` section (shouldn't happen post-`squad-role`, but don't assume) still gets the contract block — it just has nothing to fire on.
+Include the workspace block only for roles that have an `environment`; omit it otherwise. Include the Step 0 block and the "Your stop conditions" block always — both are baked unconditionally, in every mode, with no opt-out. A role with an empty `## Stop conditions` section (shouldn't happen post-`squad-role`, but don't assume) still gets the contract block — it just has nothing to fire on. The "Shared world model" block is the one section in this template that IS conditional, per step 9 above — every role in a given dispatch gets the same yes/no, since it reflects squad-wide state, not anything role-specific.
 
 **Hard rule #4:** the full text of `.squad/goal.md` and the role's `.squad/role-goal-<role.name>.md` is the only reliable channel from parent to subagent. The SessionStart hook does not fire for subagents. Bake the goal text in; don't rely on hook injection for the One-time path.
 
@@ -208,7 +242,7 @@ After the user picks an option, confirm: *"Squad is set up for Evergreen mode vi
 
 For One-time and Multi-use modes, after the squad finishes (or per-iteration in Evergreen):
 
-1. **Collect worktree-isolated records first.** Run `bash "${CLAUDE_PLUGIN_ROOT}/skills/squad-spawn/scripts/spawn.sh" collect .squad/roster.json`. A role dispatched under `isolation: worktree` (hard rule #7) wrote its engagement record inside its worktree — invisible at the project root until this copies it in. Cheap and always safe to run even when no role used worktree isolation (it reports `skipped-no-worktree` per role and moves on); skipping this step means step 3 below silently sees "no record" for a worktree role that actually declared one.
+1. **Collect worktree-isolated records first.** Run `bash "${CLAUDE_PLUGIN_ROOT}/skills/squad-spawn/scripts/spawn.sh" collect .squad/roster.json`. A role dispatched under `isolation: worktree` (hard rule #7) wrote its engagement record — and, if it asserted anything, its belief-ledger claims file (hard rule #13) — inside its worktree, invisible at the project root until this copies both in. Cheap and always safe to run even when no role used worktree isolation (it reports `skipped-no-worktree` per artifact and moves on); skipping this step means step 3 below silently sees "no record" for a worktree role that actually declared one, and means the world model a next dispatch's step 9 reads is missing whatever that role asserted.
 2. Read each role's outputs from their `file_scope`.
 3. **Declared-vs-produced diff.** For each dispatched role, read its engagement record at `.squad/role-plan-<role.name>.md`, if it published one. Diff the record's `## Deliverables` list against what actually landed in `file_scope`: name every path the role declared but never produced, and every path it produced but never declared. A role with no record has nothing to diff against — say so plainly in that role's row rather than skipping it silently.
 4. **Quote every `[assumed]` bullet, verbatim.** Pull every `## Assumptions` bullet graded `[assumed]` out of each record into the summary, unedited — the claim and its `if wrong → …` clause together. These are the guesses the human should see even when nothing failed; do not paraphrase, summarize, or drop the `if wrong →` clause.
@@ -225,7 +259,9 @@ For One-time and Multi-use modes, after the squad finishes (or per-iteration in 
 
    Emit it only when **at least one** of the counted lines is non-zero — a fully quiet run (nothing assumed, nothing capped, nothing escalated) gets no receipt at all. A line that prints "0 and 0 and 0" every time is the exact ritual hard rule #15 warns against; earn the sentence or skip it.
 
-   Two more counters — a partner-model tally and a world-model tally — arrive in later PRs. Leave the sentence's `·`-separated shape room to grow, but do not print a number for either now; those systems don't exist yet in this codebase, and a count for a system that doesn't exist is the unearned-confidence failure mode this plugin argues against.
+   One more counter — a partner-model tally — arrives in a later PR. Leave the sentence's `·`-separated shape room to grow, but do not print a number for it now; that system doesn't exist yet in this codebase, and a count for a system that doesn't exist is the unearned-confidence failure mode this plugin argues against.
+
+   **The world model (hard rule #13) gets no counter here on purpose.** It exists as of this release, but its count belongs to `squad-verify` — `verify.sh` computes `world_conflicts` itself and the verdict report routes on it. Printing a second, independently-derived dispute count in the dispatch receipt would give the human two numbers for one fact, and the receipt's would be the staler of the two (it is read at synthesis time, before verification runs). Say nothing about beliefs here; `/cheeky-squad-os:squad-verify` and `/cheeky-squad-os:squad-world` both report them properly.
 
 ## Refusals
 

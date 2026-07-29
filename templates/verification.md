@@ -9,6 +9,7 @@ escalations_open: <count>
 resolved_escalations:
   - <role>
   - <role>
+world_conflicts: <count>
 ---
 
 # Squad verification
@@ -86,6 +87,30 @@ resolved_escalations:
     one role name per dashed line, indented two spaces. ## Escalations itself
     follows ## Process's rule: render it only when at least one record has
     status: escalated; otherwise omit the heading entirely.
+
+  CRITICAL ABSENCE RULE (hard rule #13) — read before setting world_conflicts:
+    world_conflicts is copied straight from verify.sh's own summary line —
+    OMITTED FROM THE FRONTMATTER ENTIRELY, not present as `0`, whenever
+    verify.sh's JSON omitted the key. verify.sh omits it under exactly one
+    condition: `.squad/world/` does not exist at all — a squad that has never
+    written a belief. Once `.squad/world/` exists, the field is ALWAYS
+    present, including `0` — a squad with a world model and zero live
+    disputes is a meaningfully different state from a squad with no world
+    model at all, and collapsing them would erase that distinction (same
+    present-and-empty-vs-omitted discipline as resolved_escalations above).
+
+    There is no `resolved_conflicts` list to maintain, unlike escalations: a
+    belief dispute isn't closed by a name added to a list here, it's closed
+    by the human's ruling in `.squad/world/claims-user.md` (via
+    `/cheeky-squad-os:squad-world`) — editing the losing block's `Status:` to
+    `superseded`. The NEXT verify run's fresh count reflects that on its own;
+    nothing in this file needs to remember it happened.
+
+    world_conflicts does NOT gate the verdict. Unlike escalations_open (hard
+    rule #14), an open belief conflict never blocks `met` — see the ##
+    Verdict guidance below for the one place it surfaces instead. Hard rule
+    #13 is a shared domain representation, not a stop condition; routing the
+    human to look is the whole job here.
 -->
 
 ## Signal: <signal text, verbatim from the goal's Definition of done>
@@ -175,4 +200,15 @@ resolved_escalations:
 <one plain-language paragraph: the verdict, why, and the single suggested
 next step — declare done / re-dispatch named roles via squad-spawn /
 resolve the NEEDS-HUMAN items and re-verify / rule on the open escalation(s)
-in ## Escalations above and re-verify>
+in ## Escalations above and re-verify.
+
+If world_conflicts > 0, say so here even when the verdict is `met` —
+conflicts never gate the verdict (only escalations_open does, hard rule
+#14), but a `met` squad can still be carrying disputed shared knowledge, and
+that must not go unreported just because nothing failed. Exact wording for
+a `met` verdict with conflicts open: "All signals pass, but N shared beliefs
+are disputed — resolve via squad-world, then re-verify." For `partial` or
+`unmet` verdicts with conflicts open, fold the same fact into whichever
+next-step sentence already applies rather than adding a second, competing
+instruction — the human already has one thing to do next; don't hand them
+two.>

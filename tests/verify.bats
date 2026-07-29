@@ -678,3 +678,175 @@ EOF
          and (.role_plan_hand_back_sections_present.what_happened | type) == "boolean"'
   printf '%s\n' "$output" | tail -n 1 | jq -e '(.escalations_open | type) == "number" and .escalations_open == 1'
 }
+
+# --- The belief ledger (hard rule #13) — world_conflicts ------------------------
+#
+# verify.sh re-derives this count itself, from every .squad/world/claims-*.md,
+# rather than shelling out to skills/squad-world/scripts/world.sh. That keeps
+# the script self-contained but makes DRIFT the risk, so these tests assert the
+# exact validity rule hard rule #13 states — and the absence contract, which is
+# independent of escalations_open's.
+
+# write_claims <owner> <body> — .squad/world/claims-<owner>.md
+write_claims() {
+  mkdir -p "$PROJECT_DIR/.squad/world"
+  printf '%s\n' "$2" > "$PROJECT_DIR/.squad/world/claims-$1.md"
+}
+
+# live_belief <key> [claim] [observed] — one well-formed live belief block
+live_belief() {
+  printf '## Belief: %s\n\nClaim: %s\nSource: x\nGrade: confirmed\nObserved: %s\nStatus: live\n' \
+    "$1" "${2:-A claim.}" "${3:-2026-07-01}"
+}
+
+@test "no .squad/world/ at all: world_conflicts is OMITTED, not 0" {
+  write_goal "$THREE_SIGNALS"
+  default_roster
+  run_verify
+  [ "$status" -eq 0 ]
+  printf '%s\n' "$output" | tail -n 1 | jq -e '(has("world_conflicts") | not)'
+}
+
+@test "empty .squad/world/ directory: world_conflicts is present as 0" {
+  write_goal "$THREE_SIGNALS"
+  default_roster
+  mkdir -p "$PROJECT_DIR/.squad/world"
+  run_verify
+  [ "$status" -eq 0 ]
+  printf '%s\n' "$output" | tail -n 1 | jq -e '.world_conflicts == 0'
+}
+
+@test "world_conflicts is independent of escalations_open's absence condition" {
+  write_goal "$THREE_SIGNALS"
+  default_roster
+  write_claims "auditor" "$(live_belief shared)"
+  write_claims "scout" "$(live_belief shared)"
+  run_verify
+  [ "$status" -eq 0 ]
+  # No engagement record anywhere -> escalations_open omitted; world/ exists
+  # -> world_conflicts present. One feature without the other.
+  printf '%s\n' "$output" | tail -n 1 | jq -e \
+    '(has("escalations_open") | not) and .world_conflicts == 1'
+}
+
+@test "two live blocks under one key from different owners count as one conflict" {
+  write_goal "$THREE_SIGNALS"
+  default_roster
+  write_claims "auditor" "$(live_belief k1)
+$(live_belief k2)"
+  write_claims "scout" "$(live_belief k1)
+$(live_belief k3)"
+  run_verify
+  [ "$status" -eq 0 ]
+  printf '%s\n' "$output" | tail -n 1 | jq -e '.world_conflicts == 1'
+}
+
+@test "one owner's two live blocks under one key are not a conflict with themselves" {
+  write_goal "$THREE_SIGNALS"
+  default_roster
+  write_claims "auditor" "$(live_belief dup 'first.')
+$(live_belief dup 'second.')"
+  run_verify
+  [ "$status" -eq 0 ]
+  printf '%s\n' "$output" | tail -n 1 | jq -e '.world_conflicts == 0'
+}
+
+@test "a block missing a required field never counts toward world_conflicts" {
+  write_goal "$THREE_SIGNALS"
+  default_roster
+  write_claims "auditor" "$(live_belief shared)"
+  write_claims "scout" "$(printf '## Belief: shared\n\nClaim: no source here.\nGrade: confirmed\nObserved: 2026-07-02\nStatus: live\n')"
+  run_verify
+  [ "$status" -eq 0 ]
+  printf '%s\n' "$output" | tail -n 1 | jq -e '.world_conflicts == 0'
+}
+
+@test "an off-vocabulary grade never counts toward world_conflicts" {
+  write_goal "$THREE_SIGNALS"
+  default_roster
+  write_claims "auditor" "$(live_belief shared)"
+  write_claims "scout" "$(printf '## Belief: shared\n\nClaim: c.\nSource: y\nGrade: 0.73\nObserved: 2026-07-02\nStatus: live\n')"
+  run_verify
+  [ "$status" -eq 0 ]
+  printf '%s\n' "$output" | tail -n 1 | jq -e '.world_conflicts == 0'
+}
+
+@test "superseded and retired blocks never count toward world_conflicts" {
+  write_goal "$THREE_SIGNALS"
+  default_roster
+  write_claims "auditor" "$(live_belief shared)"
+  write_claims "scout" "$(printf '## Belief: shared\n\nClaim: c.\nSource: y\nGrade: confirmed\nObserved: 2026-07-02\nStatus: superseded\n')"
+  run_verify
+  [ "$status" -eq 0 ]
+  printf '%s\n' "$output" | tail -n 1 | jq -e '.world_conflicts == 0'
+}
+
+# Order is load-bearing, and must match world.sh's: the duplicate-live-key
+# filter runs over blocks that ALREADY passed field validation. Run the other
+# way round, a malformed sibling suppressed its well-formed neighbour and the
+# real cross-owner dispute went unreported.
+@test "a malformed sibling block never hides a real cross-owner conflict" {
+  write_goal "$THREE_SIGNALS"
+  default_roster
+  write_claims "auditor" "$(live_belief contested 'A says X.')
+$(printf '## Belief: contested\n\nClaim: a botched second write.\nGrade: confirmed\nObserved: 2026-07-02\nStatus: live\n')"
+  write_claims "scout" "$(live_belief contested 'B says Y.' 2026-07-03)"
+  run_verify
+  [ "$status" -eq 0 ]
+  printf '%s\n' "$output" | tail -n 1 | jq -e '.world_conflicts == 1'
+}
+
+@test "a required field under a later unrelated heading does not complete a block" {
+  write_goal "$THREE_SIGNALS"
+  default_roster
+  write_claims "auditor" "$(live_belief shared)"
+  write_claims "scout" "$(printf '## Belief: shared\n\nClaim: c.\nSource: y\nGrade: confirmed\n\n## Notes\n\nObserved: 2026-07-02\n')"
+  run_verify
+  [ "$status" -eq 0 ]
+  printf '%s\n' "$output" | tail -n 1 | jq -e '.world_conflicts == 0'
+}
+
+@test "a stray non-claims file under world/ is ignored, not parsed" {
+  write_goal "$THREE_SIGNALS"
+  default_roster
+  write_claims "auditor" "$(live_belief shared)"
+  mkdir -p "$PROJECT_DIR/.squad/world"
+  printf '%s\n' "$(live_belief shared)" > "$PROJECT_DIR/.squad/world/README.md"
+  run_verify
+  [ "$status" -eq 0 ]
+  printf '%s\n' "$output" | tail -n 1 | jq -e '.world_conflicts == 0'
+}
+
+@test "claims files never inflate files_found for a role scoped **" {
+  write_goal "$THREE_SIGNALS"
+  cat > "$PROJECT_DIR/.squad/roster.json" <<'EOF'
+{"squad_goal_ref": ".squad/goal.md", "mode": "one-time",
+ "roles": [{"name": "auditor", "purpose": "p", "agent_file": ".claude/agents/auditor.md",
+            "role_goal": ".squad/role-goal-auditor.md", "file_scope": ["**"],
+            "tools": ["Read"], "model": "sonnet", "active": true}]}
+EOF
+  write_claims "auditor" "$(live_belief shared)"
+  run_verify
+  [ "$status" -eq 0 ]
+  printf '%s\n' "$output" | grep '"role":"auditor"' | jq -e '.files_found == 0'
+}
+
+@test "world_conflicts: a template-annotated Status line does not hide a conflict" {
+  write_goal "$THREE_SIGNALS"
+  default_roster
+  write_claims "auditor" "$(printf '## Belief: shared\n\nClaim: A says X.\nSource: x\nGrade: confirmed\nObserved: 2026-07-01\nStatus: live   <!-- live | superseded | retired -->\n')"
+  write_claims "scout" "$(live_belief shared)"
+  run_verify
+  [ "$status" -eq 0 ]
+  printf '%s\n' "$output" | tail -n 1 | jq -e '.world_conflicts == 1'
+}
+
+@test "world_conflicts: an off-vocabulary Status is excluded like any invalid block" {
+  write_goal "$THREE_SIGNALS"
+  default_roster
+  write_claims "auditor" "$(live_belief shared)"
+  write_claims "scout" "$(printf '## Belief: shared\n\nClaim: c.\nSource: y\nGrade: confirmed\nObserved: 2026-07-02\nStatus: activ\n')"
+  run_verify
+  [ "$status" -eq 0 ]
+  printf '%s\n' "$output" | tail -n 1 | jq -e '.world_conflicts == 0'
+}

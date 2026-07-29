@@ -21,7 +21,21 @@ Work toward 1.0.0 — "the partnership release". Entries accumulate here and the
 
   **The load-bearing invariant: a role can never mint the human's ruling.** The engagement record's status enum stops at `active | amended | escalated` — there is no `resolved` status and no `resolution:` field anywhere a role writes, on any dispatch path. Stated honestly and not papered over: a role *can* flip its own `escalated` back to `active`, which is behaviorally identical to never having stopped — the acknowledged aspirational half of #14. What it cannot do is manufacture the ruling.
 
-  Numbering is append-only: **#12 and #13 are deliberately unused**, reserved for a later release, and are documented nowhere as existing.
+  Numbering is append-only: **#12 is deliberately unused**, reserved for a later release, and documented nowhere as existing.
+
+- **Hard rule #13 — a belief with no source is a rumor. The shared world model.** `goal.md` is a shared *task* representation; there was no shared *domain* representation. Roles rediscovered the same facts and — worse — could hold silently contradictory beliefs with nothing in the system able to notice. Now every role has a belief ledger at `.squad/world/claims-<role>.md`, granted **positionally** from its own `agent_type` exactly as its engagement record and hand-off outbox are. Each belief carries `Claim`, `Source`, `Grade`, `Observed` — `Grade` reusing hard rule #11's four evidence classes, one vocabulary across the plugin, never a number.
+
+  **The guarantee is a parser, not a request.** A block missing any required field, or carrying an off-vocabulary `Grade`, is invalid: it is counted, named with what it is missing, and **excluded from every projection — it never reaches a prompt**. `skills/squad-world/scripts/world.sh` is that parser (read-only, jq/awk, JSON lines — `verify.sh`'s established pattern). Asking roles in prose to source their claims would have been the aspirational half only; this rule has no aspirational half.
+
+  **`disputed` is derived, never writable.** Two `live` blocks under one key from *different* owners **are** the dispute — no one writes the word, and nothing resolves it. Not averaged, not latest-wins, not by owner priority. The human adjudicates by hand in `claims-user.md`, and the losing block is edited to `Status: superseded` **in place, never deleted**, so the ledger records who thought what and when they found out otherwise.
+
+  **Ownership cannot be forged, including by a role named `user`.** The `PermissionRequest` hook derives the grant and refuses the reserved owner names `user` and `research` unconditionally — otherwise a role merely *named* `user` would be handed the file the human's rulings live in and could mint the adjudication that settles a contested belief. Role names come from a hand-edited roster; nothing else would have caught it.
+
+  **The projection is bounded by the script, not by hope.** `world.sh --index` performs the projection itself — capped (default 50), 80-**byte**-truncated recency-ordered lines (a byte cap so it is identical at every locale, and the cut never splits a UTF-8 character), full untruncated blocks for up to 5 disputed keys, explicit `+N more on disk` / `+K more disputed` tails, and the invalid count on its own line. `squad-spawn` and the workflow dispatch template bake that stdout **verbatim**; neither reformats it. A disagreement is never summarized to one line, because a one-line summary is how a disagreement gets missed.
+
+  **Conflicts route, they do not gate.** `verify.sh` re-derives `world_conflicts` itself and `squad-verify` reports it — but unlike `escalations_open` (#14) it never blocks a `met` verdict. #13 is a shared domain representation, not a declared bound.
+
+  Committed and **never cleared on dispatch** — accumulating is the point — and parked/restored wholesale with the squad by `squad-goal`, which never merges two squads' ledgers. `spawn.sh collect` brings a worktree-isolated role's claims file back alongside its engagement record. Stated as non-goals, not omissions: **no TTL**, **no semantic contradiction detection** (only identically keyed live blocks are ever compared — two roles can contradict each other in different words and nothing notices), **no auto-resolution ever**, **no cross-squad merge**, and grades that are **self-reported** — nothing can verify a `Source:` line tells the truth.
 
 ### Fixed
 

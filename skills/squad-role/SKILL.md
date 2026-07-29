@@ -182,6 +182,56 @@ Build the system prompt body from these answers. The template lives at `template
   that could clear its own escalation could mint the verdict.
   ```
 
+- **The belief-writing duty (hard rule #13).** **Not a `templates/role-definition.md` placeholder** — that template isn't touched by this feature, so there is no `{{...}}` token for it. Instead, insert the canonical text below directly into the composed body, immediately after `{{stop_conditions_block}}`'s substituted content and before the template's static `## Your file scope` heading. **Never omitted, never asked about** — same unconditional footing as `{{plan_block}}` and `{{stop_conditions_block}}`: every role can learn something durable about the domain regardless of purpose, and unlike those two, this duty is exercised mid-run rather than at dispatch, so it is never baked a second time into `squad-spawn`'s per-dispatch prompt — it lives here, in the standing role file, only. Substitute `{{name}}` with the role's own name, same as everywhere else in this composition. (Fenced with four backticks below because its own body contains a nested three-backtick example — don't collapse that to three or the inner fence breaks out early.)
+
+  ````markdown
+  ## Sharing what you learn (hard rule #13)
+
+  When you learn something durable about the domain — not the task,
+  `.squad/goal.md` already owns that — that another role, or a future run of
+  this squad, would benefit from knowing, write it to your own claims file:
+  `.squad/world/claims-{{name}}.md`. It's granted to you the same way your
+  engagement record and outbox are — once your engagement record exists
+  (hard rule #11); asserting a belief is acting.
+
+  Use this belief block, one per fact:
+
+  ```markdown
+  ## Belief: <kebab-key>
+
+  Claim: <one sentence, falsifiable>
+  Source: <file, command, URL, tool read, or person>
+  Grade: confirmed | reported | inferred | assumed
+  Observed: <ISO-8601 date>
+  Status: live
+  Notes: <optional>
+  ```
+
+  `Claim`, `Source`, `Grade`, and `Observed` are all required — a block
+  missing any of them never reaches a future prompt; `world.sh`'s parser
+  drops it, not a request asking you nicely. Grade it with the exact same
+  four evidence classes your engagement record uses (never a number) — one
+  vocabulary across the plugin.
+
+  Before writing a new key, check `.squad/world/claims-*.md` (or the world
+  index baked into your spawn prompt, if one was) for an existing belief
+  that already says what you're about to say — reuse it rather than minting
+  a near-duplicate. Never edit another owner's claims file — the
+  `PermissionRequest` hook grants you only `claims-{{name}}.md`, so a write
+  to anyone else's defers to the user regardless of what you intend. If you
+  believe something that contradicts an existing `live` belief, do not edit
+  it: write your own counter-block under the same key, in your own file —
+  two `live` blocks under one key from different owners *are* the dispute;
+  you never write the word `disputed` yourself, and you never decide which
+  side is right. If your work depends on a key the index shows as disputed,
+  say in your engagement record's `## Assumptions` which side you used and
+  why.
+
+  This file is never cleared between dispatches — unlike your engagement
+  record and the hand-off channel, what you write here accumulates for the
+  life of the squad.
+  ````
+
 - `{{role_goal_path}}` — `.squad/role-goal-<name>.md`
 - `{{created}}` — current UTC time in ISO-8601 (the same timestamp written to the roster entry and the role-goal frontmatter)
 
@@ -193,6 +243,7 @@ The body must include:
 5. A comment that the file is generated — edit if the role's needs evolve.
 6. The engagement-record instruction (`{{plan_block}}`) — already unconditional per the substitution above; nothing further to add here.
 7. The stop-condition contract (`{{stop_conditions_block}}`) — likewise already unconditional; nothing further to add here.
+8. The belief-writing duty (the "Sharing what you learn" block above) — likewise already unconditional; nothing further to add here.
 
 ## Write role goal
 
@@ -251,9 +302,9 @@ Write the composed system prompt to `.claude/agents/<name>.md`. Use the YAML fro
 
 Call into `squad-roster` to add an entry for this role. The entry includes name, purpose, agent_file path, role_goal path, file_scope, tools, model, active flag (true), created timestamp, and — if the role got a sandbox in Q7 — the `environment` block. If the Q5 follow-up set a non-default effort tier, include `effort` too; if the user left it at inherit, omit the field entirely.
 
-**Do not register `.squad/` contract paths in `file_scope`.** Since v0.4.1's `.squad/` structural reservation, the `PermissionRequest` hook grants a role two of its `.squad/` contract paths structurally, derived from its own `agent_type`, checked *before* `file_scope` is ever consulted for a `.squad/` path: its own engagement record, `.squad/role-plan-<name>.md` (hard rule #11, always granted — it's the bootstrap), and its own hand-off outbox, `.squad/role-comm-<name>--*` (`templates/role-comm.md`, granted once the record exists). Registering either yourself in `file_scope` was the forgery hole v0.4.1 closed: a broad scope (`**`, `.squad/**`) would otherwise have matched them and auto-approved writes to another role's record or outbox. So leave both paths out of the `file_scope` you write to the roster entry — don't ask the user about them either; it's not a generation choice, it's how the hook derives the grant.
+**Do not register `.squad/` contract paths in `file_scope`.** Since v0.4.1's `.squad/` structural reservation, the `PermissionRequest` hook grants a role three of its `.squad/` contract paths structurally, derived from its own `agent_type`, checked *before* `file_scope` is ever consulted for a `.squad/` path: its own engagement record, `.squad/role-plan-<name>.md` (hard rule #11, always granted — it's the bootstrap); its own hand-off outbox, `.squad/role-comm-<name>--*` (`templates/role-comm.md`, granted once the record exists); and its own belief-ledger claims file, `.squad/world/claims-<name>.md` (hard rule #13, granted the same way, once the record exists — asserting a belief is acting too). Registering any of these yourself in `file_scope` was the forgery hole v0.4.1 closed: a broad scope (`**`, `.squad/**`) would otherwise have matched them and auto-approved writes to another role's record, outbox, or claims file. So leave all three paths out of the `file_scope` you write to the roster entry — don't ask the user about them either; it's not a generation choice, it's how the hook derives the grant.
 
-A roster generated before v0.4.1 that still lists one or both is harmless: the reservation is checked first, so `file_scope` never gets consulted for a `.squad/` path regardless of what it contains. No migration is needed, and there's nothing to "clean up" in an existing roster's `file_scope` unless the user asks.
+A roster generated before v0.4.1 that still lists one or more of these is harmless: the reservation is checked first, so `file_scope` never gets consulted for a `.squad/` path regardless of what it contains. No migration is needed, and there's nothing to "clean up" in an existing roster's `file_scope` unless the user asks.
 
 ## Confirm
 

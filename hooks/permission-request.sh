@@ -327,6 +327,23 @@ squad_grant() {
         has_engagement_record "$agent" && return 0
         return 1
         ;;
+      # The role's own belief-ledger file (hard rule #13), same gate as the
+      # outbox: asserting a belief is acting.
+      #
+      # RESERVED OWNER NAMES. `user` and `research` are ledger owners that are
+      # NOT roles — claims-user.md holds the human's own beliefs and the
+      # rulings that settle disputes, and claims-research.md holds gated
+      # findings. Without this guard a role merely NAMED `user` would be
+      # granted the human's file by the ordinary derivation and could forge
+      # the adjudication that settles a contested belief. Nothing else stops
+      # it: role names come from the roster, which a human hand-edits.
+      ".squad/world/claims-$agent.md")
+        case "$agent" in
+          user|research) return 1 ;;
+        esac
+        has_engagement_record "$agent" && return 0
+        return 1
+        ;;
     esac
   fi
 

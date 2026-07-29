@@ -54,6 +54,29 @@
 #     record exists anywhere in this run (the absence contract again: a
 #     squad that never used #11/#14 produces this exact summary shape with
 #     no escalation key at all, not 0, not null).
+#     PLUS "world_conflicts":C — but ONLY when .squad/world/ exists at all
+#     (the belief ledger, hard rule #13; independent absence condition from
+#     escalations_open above — a squad can have one feature and not the
+#     other). Omitted entirely, not 0, not null, when .squad/world/ is
+#     absent; present as a real count, including 0, the moment the directory
+#     exists — see "World-model conflicts" below.
+#
+# World-model conflicts (hard rule #13) — a SEPARATE, independent absence
+# condition from escalations_open above:
+#   world_conflicts = |belief keys with >=2 valid, live blocks from
+#                       DIFFERENT owners' .squad/world/claims-*.md files|
+# computed by re-parsing every claims file directly, read-only, the same
+# jq/awk pattern this script already uses — NOT by shelling out to
+# skills/squad-world/scripts/world.sh (a different skill's script; this
+# script stays self-contained, per its own header). A block missing
+# Claim/Source/Grade/Observed, carrying an off-vocabulary Grade or Status,
+# or duplicated as `live` twice within one owner's OWN file, is invalid and
+# excluded here exactly as hard rule #13 requires it be excluded from every
+# prompt. A trailing HTML comment is stripped from every field value before
+# any of that is judged — templates/world-claims.md's own annotations make
+# that the difference between a belief and a silent no-op. Any drift between
+# this and world.sh's own notion of "valid" is a defect to fix in both
+# scripts, not a reason to couple them.
 #
 # THE LOAD-BEARING COMPUTATION (hard rule #14/#15, FIX-1) — a role can never
 # mint the human's ruling. escalations_open is computed from two inputs
@@ -551,21 +574,172 @@ if [ "$ROLE_PLAN_COUNT" -gt 0 ]; then
   fi
 fi
 
+# --- World-model conflicts (hard rule #13) --------------------------------
+#
+# Independent absence condition from escalations_open: gated only on
+# .squad/world/ existing, nothing to do with engagement records. A block
+# invalid by the SAME four-field rule hard rule #13 states (missing
+# Claim/Source/Grade/Observed, or an off-vocabulary Grade) is excluded, as
+# is a key duplicated `live` twice within one owner's own file (a
+# self-contradiction, not a cross-owner dispute). Only a key with >=2
+# valid `live` blocks from DIFFERENT owner files counts as a conflict.
+
+WORLD_DIR=".squad/world"
+WORLD_CONFLICTS=""   # unset string = omit the field entirely (dir absent)
+
+# parse_claims_file <file> → one TSV line per "## Belief: <key>" block found:
+#   valid|invalid<TAB>key<TAB>status
+# status defaults to "live" when the block has no Status: line (the belief
+# block schema's stated default — templates/world-claims.md).
+parse_claims_file() {
+  awk '
+    # fieldval(<line>, <label>) → the field value with the label, any
+    # trailing HTML comment, and surrounding whitespace removed. The comment
+    # strip is load-bearing and matches world.sh exactly: templates/
+    # world-claims.md annotates its own Status: line inline, so a block
+    # copied from the template read as status "live <!-- … -->" — not
+    # "live", so it silently never projected and never showed as invalid
+    # either, since no field was actually missing.
+    function fieldval(line, label,   v) {
+      v = line
+      sub("^" label ":[[:space:]]*", "", v)
+      sub(/[[:space:]]*<!--.*$/, "", v)
+      sub(/[[:space:]]+$/, "", v)
+      return v
+    }
+    function flush() {
+      if (key != "") {
+        ok = (has_claim && has_source && has_observed && grade_ok && status_ok)
+        print (ok ? "valid" : "invalid") "\t" key "\t" status
+      }
+    }
+    BEGIN { key = ""; has_claim = 0; has_source = 0; has_observed = 0
+            grade_ok = 0; status = "live"; status_ok = 1 }
+    /^##[[:space:]]+Belief:[[:space:]]*/ {
+      flush()
+      key = $0
+      sub(/^##[[:space:]]+Belief:[[:space:]]*/, "", key)
+      sub(/[[:space:]]*<!--.*$/, "", key)
+      sub(/[[:space:]]+$/, "", key)
+      has_claim = 0; has_source = 0; has_observed = 0
+      grade_ok = 0; status = "live"; status_ok = 1
+      next
+    }
+    # A block ends at the next markdown heading of ANY level, not only the
+    # next "## Belief:" — a field line under an unrelated heading is outside
+    # the block and must not complete it. world.sh applies the same rule.
+    /^#+[[:space:]]/ { flush(); key = ""; next }
+    key == "" { next }
+    /^Claim:/    { has_claim    = (fieldval($0, "Claim")    != "") }
+    /^Source:/   { has_source   = (fieldval($0, "Source")   != "") }
+    /^Observed:/ { has_observed = (fieldval($0, "Observed") != "") }
+    /^Grade:/ {
+      g = fieldval($0, "Grade")
+      grade_ok = (g == "confirmed" || g == "reported" || g == "inferred" || g == "assumed")
+    }
+    # An off-vocabulary Status is INVALID, not silently non-live — same rule
+    # world.sh applies, for the same reason: a block that is neither
+    # projected nor reported has quietly stopped existing, taking any
+    # dispute it was party to with it.
+    /^Status:/ {
+      s = fieldval($0, "Status")
+      if (s != "") status = s
+      status_ok = (status == "live" || status == "superseded" || status == "retired")
+    }
+    END { flush() }
+  ' "$1" 2>/dev/null
+}
+
+# claims_live_keys <file> <owner> → one "key<TAB>owner" line per valid,
+# live belief in <file>, EXCLUDING any key that appears as valid+live more
+# than once within this SAME file (duplicate live key within one owner's
+# own file → invalid, per hard rule #13 — self-contradiction, not a
+# cross-owner dispute; neither instance counts).
+#
+# ORDER IS LOAD-BEARING and matches world.sh's: the duplicate filter runs
+# over blocks that ALREADY passed field validation ($1 == "valid"), never
+# over raw parse output. A malformed sibling under the same key must not
+# drag a well-formed belief down with it — doing so would also hide the
+# cross-owner conflict that belief is party to, which is the one number
+# this whole section exists to compute.
+claims_live_keys() {
+  local file="$1" owner="$2" parsed dup_keys
+  parsed=$(parse_claims_file "$file")
+  [ -z "$parsed" ] && return 0
+
+  dup_keys=$(printf '%s\n' "$parsed" \
+    | awk -F'\t' '$1 == "valid" && $3 == "live" { print $2 }' \
+    | sort | uniq -d)
+
+  local valid key status
+  while IFS=$'\t' read -r valid key status; do
+    [ -z "$key" ] && continue
+    # Only valid, live beliefs can participate in a conflict — an invalid block
+    # never reaches a projection (hard rule #13), and a superseded or retired
+    # one is history, not a live claim.
+    if [ "$valid" != "valid" ] || [ "$status" != "live" ]; then
+      continue
+    fi
+    if [ -n "$dup_keys" ] && printf '%s\n' "$dup_keys" | grep -Fxq "$key"; then
+      continue
+    fi
+    printf '%s\t%s\n' "$key" "$owner"
+  done <<< "$parsed"
+}
+
+if [ -d "$WORLD_DIR" ]; then
+  ALL_LIVE=""
+  while IFS= read -r CFILE; do
+    [ -z "$CFILE" ] && continue
+    CBASE=$(basename "$CFILE")
+    case "$CBASE" in
+      claims-*.md)
+        COWNER="${CBASE#claims-}"
+        COWNER="${COWNER%.md}"
+        ;;
+      *) continue ;;  # not a claims file — ignore any stray file under world/
+    esac
+    ENTRY=$(claims_live_keys "$CFILE" "$COWNER")
+    if [ -n "$ENTRY" ]; then
+      if [ -n "$ALL_LIVE" ]; then
+        ALL_LIVE="$ALL_LIVE
+$ENTRY"
+      else
+        ALL_LIVE="$ENTRY"
+      fi
+    fi
+  done < <(find "$WORLD_DIR" -maxdepth 1 -type f -name 'claims-*.md' 2>/dev/null)
+
+  if [ -n "$ALL_LIVE" ]; then
+    WORLD_CONFLICTS=$(printf '%s\n' "$ALL_LIVE" \
+      | sort -u \
+      | awk -F'\t' '{print $1}' \
+      | sort | uniq -c \
+      | awk '$1 >= 2' | wc -l | tr -d '[:space:]')
+  else
+    WORLD_CONFLICTS=0
+  fi
+fi
+
 # --- Summary -------------------------------------------------------------------
 
+JQ_ARGS=(--argjson roles "$ROLE_COUNT" --argjson signals "$SIGNAL_COUNT" --argjson errs "$ERRORS")
+# shellcheck disable=SC2016 # jq filter syntax ($roles etc. are jq --argjson
+# names, resolved by jq itself — not shell variables, must stay single-quoted
+JQ_FILTER='{summary: true, roles: $roles, signals: $signals, errors: $errs}'
+
 if [ "$ROLE_PLAN_COUNT" -gt 0 ]; then
-  jq -nc \
-    --argjson roles "$ROLE_COUNT" \
-    --argjson signals "$SIGNAL_COUNT" \
-    --argjson errs "$ERRORS" \
-    --argjson open "$ESCALATIONS_OPEN" \
-    '{summary: true, roles: $roles, signals: $signals, errors: $errs, escalations_open: $open}'
-else
-  jq -nc \
-    --argjson roles "$ROLE_COUNT" \
-    --argjson signals "$SIGNAL_COUNT" \
-    --argjson errs "$ERRORS" \
-    '{summary: true, roles: $roles, signals: $signals, errors: $errs}'
+  JQ_ARGS+=(--argjson open "$ESCALATIONS_OPEN")
+  # shellcheck disable=SC2016 # jq filter syntax, see above
+  JQ_FILTER="$JQ_FILTER"' + {escalations_open: $open}'
 fi
+
+if [ -n "$WORLD_CONFLICTS" ]; then
+  JQ_ARGS+=(--argjson wc "$WORLD_CONFLICTS")
+  # shellcheck disable=SC2016 # jq filter syntax, see above
+  JQ_FILTER="$JQ_FILTER"' + {world_conflicts: $wc}'
+fi
+
+jq -nc "${JQ_ARGS[@]}" "$JQ_FILTER"
 
 exit 0

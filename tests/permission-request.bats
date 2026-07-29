@@ -605,3 +605,140 @@ JSON
   [ "$status" -eq 0 ]
   [ -z "$output" ]
 }
+
+# --- The belief ledger (hard rule #13) — ownership cannot be forged ------------
+#
+# .squad/world/claims-<owner>.md is granted POSITIONALLY, from the role's own
+# agent_type, exactly like the engagement record and the outbox — never from
+# file_scope, and never from environment.workspace. Two owner names are
+# reserved for non-roles (`user` holds the human's beliefs and the rulings
+# that settle disputes; `research` is reserved), so a role merely NAMED `user`
+# must be refused its own derived path — otherwise it could forge the
+# adjudication that settles a contested belief.
+#
+# The hook is finished; these tests exist so a later edit cannot silently
+# reopen any of it. Every roster role below is scoped "**" and one of them
+# declares .squad/ itself as its workspace — the two shapes that made every
+# previous .squad/ hole exploitable.
+
+# roster_world → a roster whose roles are named for this section, including
+# the two reserved names, each with a published engagement record.
+roster_world() {
+  cat > "$PROJECT_DIR/.squad/roster.json" <<'JSON'
+{
+  "roles": [
+    { "name": "scout", "file_scope": ["**"] },
+    { "name": "other", "file_scope": ["**"] },
+    { "name": "user", "file_scope": ["**"] },
+    { "name": "research", "file_scope": ["**"] },
+    { "name": "wideboy", "file_scope": ["**"],
+      "environment": { "workspace": ".squad/world" } }
+  ]
+}
+JSON
+  for r in scout other user research wideboy; do publish_record "$r"; done
+}
+
+@test "world: a role is granted its OWN claims file" {
+  roster_world
+  run_hook '{"agent_type":"scout","tool_name":"Write","tool_input":{"file_path":".squad/world/claims-scout.md"}}'
+  [ "$status" -eq 0 ]
+  printf '%s' "$output" | jq -e '.hookSpecificOutput.decision.behavior == "allow"'
+}
+
+@test "world: a role scoped ** cannot write another role's claims file" {
+  roster_world
+  run_hook '{"agent_type":"scout","tool_name":"Write","tool_input":{"file_path":".squad/world/claims-other.md"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "world: a role scoped ** cannot write the human's claims file" {
+  roster_world
+  run_hook '{"agent_type":"scout","tool_name":"Write","tool_input":{"file_path":".squad/world/claims-user.md"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "world: a role NAMED user is refused claims-user.md (reserved owner)" {
+  roster_world
+  run_hook '{"agent_type":"user","tool_name":"Write","tool_input":{"file_path":".squad/world/claims-user.md"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "world: a role NAMED research is refused claims-research.md (reserved owner)" {
+  roster_world
+  run_hook '{"agent_type":"research","tool_name":"Write","tool_input":{"file_path":".squad/world/claims-research.md"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "world: the ./ spelling does not reopen the reserved-owner refusal" {
+  roster_world
+  run_hook '{"agent_type":"user","tool_name":"Write","tool_input":{"file_path":"./.squad/world/claims-user.md"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "world: the ./ spelling does not reopen another owner's file" {
+  roster_world
+  run_hook '{"agent_type":"scout","tool_name":"Write","tool_input":{"file_path":"./.squad/world/claims-other.md"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "world: // and /./ spellings of another owner's file defer" {
+  roster_world
+  run_hook '{"agent_type":"scout","tool_name":"Write","tool_input":{"file_path":".squad/./world/claims-user.md"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  run_hook '{"agent_type":"scout","tool_name":"Write","tool_input":{"file_path":"'"$PROJECT_DIR"'/.squad//world/claims-user.md"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "world: a .. traversal into the ledger defers" {
+  roster_world
+  run_hook '{"agent_type":"scout","tool_name":"Write","tool_input":{"file_path":".squad/world/../world/claims-user.md"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "world: a workspace declared AS the ledger dir cannot swallow another owner's file" {
+  roster_world
+  run_hook '{"agent_type":"wideboy","tool_name":"Write","tool_input":{"file_path":".squad/world/claims-user.md"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "world: a non-claims path under world/ is never granted" {
+  roster_world
+  run_hook '{"agent_type":"scout","tool_name":"Write","tool_input":{"file_path":".squad/world/index.md"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  run_hook '{"agent_type":"scout","tool_name":"Write","tool_input":{"file_path":".squad/world/claims-scout.md.bak"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "world: the claims grant is plan-gated (defers before the record exists)" {
+  roster_world
+  withdraw_record "scout"
+  run_hook '{"agent_type":"scout","tool_name":"Write","tool_input":{"file_path":".squad/world/claims-scout.md"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "world: the scaffolding-Bash surface takes the same decision as Edit/Write" {
+  roster_world
+  run_hook '{"agent_type":"wideboy","tool_name":"Bash","tool_input":{"command":"cp forged.md .squad/world/claims-user.md"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  run_hook '{"agent_type":"wideboy","tool_name":"Bash","tool_input":{"command":"touch .squad/world/claims-other.md"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  run_hook '{"agent_type":"user","tool_name":"Bash","tool_input":{"command":"touch .squad/world/claims-user.md"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
