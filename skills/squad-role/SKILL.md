@@ -70,9 +70,11 @@ If the user requests `Bash` alongside a broad `file_scope` (from Q3), note in on
 
 ### Q5 — What model?
 
-Ask: *"What model? `sonnet` (default — balanced), `haiku` (fast, cheap, for high-volume mechanical work), `opus` (deep reasoning, expensive), or `inherit` (match the parent session)."*
+Ask: *"What model? `sonnet` (default — balanced), `haiku` (fast, cheap, for high-volume mechanical work), `opus` (deep reasoning, expensive), `fable` (the most capable model, for a role whose work is larger than a single sitting — it sustains long autonomous sessions, investigates before acting, and self-verifies; good for a long-running research or audit role), or `inherit` (match the parent session). A full model ID (e.g. `claude-opus-5`) also works if you want to pin a specific version."*
 
 Default to `sonnet` if the user is unsure.
+
+Only if this role's work is genuinely long-running or high-stakes — a research or audit role, a `fable` pick, or anything where reasoning depth changes the outcome — ask one follow-up: *"Reasoning effort for this role? Leave it inheriting the session's effort (default), or pin one of `low`, `medium`, `high`, `xhigh`, `max` — which tiers are available depends on the model (Fable 5, Opus 5, and Sonnet 5 support all five)."* Skip this follow-up otherwise — squad-role asks one question at a time and most roles don't need a second one here.
 
 ### Q6 — Worktree isolation? (skip in One-time mode if not relevant)
 
@@ -106,6 +108,7 @@ Build the system prompt body from these answers. The template lives at `template
 - `{{tools}}` — Q4 answer
 - `{{tools_rationale}}` — **derive** a one-line justification from the Q4 tools answer (why these tools, e.g. *"Read/Write/Bash to land JSON dumps; the Klaviyo MCP for the data pull"*).
 - `{{model}}` — Q5 answer
+- `{{effort_block}}` — the literal `effort: <tier>` line (Q5 follow-up), or omitted entirely if the user left it at the inherit-from-session default
 - `{{file_scope_lines}}` — Q3 answer rendered as **one markdown bullet per glob** (not a comma-separated string — the template places it under a bullet list)
 - `{{isolation_block}}` — the literal `isolation: worktree` line (Q6), or omitted entirely
 - `{{workspace_block}}` — the "Your workspace (sandbox)" section (Q7), or omitted entirely if the role has no `environment` (canonical text in `squad-env`'s SKILL body)
@@ -158,7 +161,7 @@ Write the composed system prompt to `.claude/agents/<name>.md`. Use the YAML fro
 
 ## Register in roster
 
-Call into `squad-roster` to add an entry for this role. The entry includes name, purpose, agent_file path, role_goal path, file_scope, tools, model, active flag (true), created timestamp, and — if the role got a sandbox in Q7 — the `environment` block.
+Call into `squad-roster` to add an entry for this role. The entry includes name, purpose, agent_file path, role_goal path, file_scope, tools, model, active flag (true), created timestamp, and — if the role got a sandbox in Q7 — the `environment` block. If the Q5 follow-up set a non-default effort tier, include `effort` too; if the user left it at inherit, omit the field entirely.
 
 **Always append the role's hand-off outbox to `file_scope`:** `.squad/role-comm-<name>--*`. This is the structured worker↔worker channel (`templates/role-comm.md`) — the glob lets the role publish hand-off manifests to downstream roles without a permission prompt, while writes to any *other* role's outbox still defer. Don't ask the user about this one; it's part of the contract, like the workspace mirror in Q7.
 
@@ -172,6 +175,7 @@ Role `<name>` generated.
   Owns: <file_scope>
   Tools: <tools>
   Model: <model>
+  Effort: <effort, if set>
   Agent file: .claude/agents/<name>.md
   Role goal: .squad/role-goal-<name>.md
   Registered in: .squad/roster.json

@@ -4,10 +4,12 @@
 # this plugin on your own project, add the same .squad/ ephemeral patterns
 # to that project's .gitignore.
 
-# Ephemeral squad state — reserved namespaces for v2 features
+# Ephemeral squad state — per-engagement working files, overwritten each
+# dispatch. The deliverables they point at live in committed file_scope paths.
+# (`.squad/features/*` was reserved in v0.1.0 and never defined; retired
+# rather than carried forward undefined.)
 .squad/role-comm-*
 .squad/role-plan-*
-.squad/features/*
 
 # Generated worktrees from Multi-use mode (per Claude Code worktrees doc tip)
 .claude/worktrees/

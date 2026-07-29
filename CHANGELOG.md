@@ -3,6 +3,31 @@
 All notable changes to cheeky-squad-os are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+Work toward 1.0.0 — "the partnership release". Entries accumulate here and the version bumps once, when the release lands.
+
+### Changed
+
+- **Runtime truth sync.** v0.4.0's docs were written 2026-06-10 and several claims had gone stale. Re-verified against live documentation on 2026-07-29 and corrected across `ARCHITECTURE.md`, `LOGIC.md`, `README.md`, `CONTRIBUTING.md`, `docs/workflows-runtime-reference.md`, `commands/squad-workflow.md`, the skills, the templates, and the examples:
+  - **Role `model` values** — the documented set is now `sonnet | opus | haiku | fable | inherit`, or a full model ID (e.g. `claude-opus-5`). The repo's `sonnet | opus | haiku | inherit` was wrong twice: it omitted the `fable` alias and it omitted full IDs.
+  - **Role `effort`** — subagent frontmatter now supports a per-role reasoning-effort tier (`low`/`medium`/`high`/`xhigh`/`max`, availability gated by model). `squad-role` asks for it only when it would change something, `templates/role-definition.md` renders it, and `roster.json` records it. **Optional everywhere** — a role with no `effort` is valid and behaves exactly as before.
+  - **Dynamic Workflows** are no longer a research preview: v2.1.154+, on all paid plans, with Anthropic API access, and on Amazon Bedrock, Google Cloud's Agent Platform and Microsoft Foundry (on Pro, enabled from `/config`). Still org-disablable; the graceful fallback is unchanged. The runtime reference gains the current `agent()` option surface, the concurrency and total-agent limits, corrected resume semantics, and confirmation that workflow nesting exists at exactly one level.
+  - **`isolation: worktree`** — noted that the platform now *enforces* worktree containment (v2.1.203/2.1.216) rather than relying on the subagent's cooperation, which is hard rule #7 getting a real backstop.
+  - **Agent Teams remains experimental and env-gated** — unchanged, and deliberately not "modernized". What is new is a documented trap: a role's own `hooks:` frontmatter does **not** fire when that role runs as a teammate, so enforcement must live in the plugin's project-level hooks (which do fire, because a teammate is a full session). A teammate also inherits the lead's `effort`, not the role file's.
+
+- **`acceptEdits` on the workflow path — honesty fix.** `commands/squad-workflow.md` and `skills/squad-spawn/SKILL.md` asserted that workflow subagents "bypass the `PermissionRequest` file-scope hook". Whether the hook never fires there, or fires and is overridden by `acceptEdits`, is not established — so both now state only what is certain: workflow subagents run in `acceptEdits`, their file edits are auto-approved, and **a role's writes are therefore not gated by its `file_scope` on that path**. The compensating design (fan out read/analyze roles; keep code-mutating roles on the hook-gated `squad-spawn` path) is unchanged.
+
+- **CI runs `bats tests/*.bats`** instead of an explicit four-file list, so a new suite can never be silently unwired by someone forgetting to register it.
+
+### Fixed
+
+- **`squad-roster` rejected valid roles.** Roster validation required `model` to be one of `sonnet`/`opus`/`haiku`/`inherit`, so a role using the `fable` alias or a full model ID failed audit. It now accepts the documented set, plus an optional `effort` value.
+
+### Removed
+
+- **`.squad/features/*`** — reserved in v0.1.0, never defined, never used. Retired rather than carried forward undefined.
+
 ## [0.4.1] - 2026-07-29
 
 Security release. One hook change, one guarantee restored, no new features.

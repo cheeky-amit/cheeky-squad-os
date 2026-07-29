@@ -137,7 +137,8 @@ After any write to `.squad/roster.json`, regenerate `.squad/roster.md` with this
 Before writing `.squad/roster.json`:
 
 - `mode` equals `.squad/goal.md`'s mode — re-derive it from goal.md and overwrite the roster copy (goal.md is authoritative); warn if they had diverged. It must be one of `one-time`, `multi-use`, `evergreen`.
-- Every role has `name` (kebab-case, no collisions), `purpose` (non-empty), `agent_file` (path exists or will exist), `role_goal` (path exists or will exist), `file_scope` (non-empty array of strings), `tools` (non-empty array), `model` (`sonnet`, `opus`, `haiku`, or `inherit`).
+- Every role has `name` (kebab-case, no collisions), `purpose` (non-empty), `agent_file` (path exists or will exist), `role_goal` (path exists or will exist), `file_scope` (non-empty array of strings), `tools` (non-empty array), `model` — one of `sonnet`, `opus`, `haiku`, `fable`, `inherit`, or a full model ID matching `claude-[a-z0-9.-]+`.
+- If present, `effort` is one of `low`, `medium`, `high`, `xhigh`, `max`. Optional — a role with no `effort` field is valid; do not demand one.
 - `active` is a boolean.
 - If `environment` is present: `environment.workspace` is a non-empty project-relative path with no leading `/` and no `..`; and `<workspace>/**` (trailing slash stripped, `/**` appended) appears in `file_scope`. If the workspace glob is missing from `file_scope`, add it automatically and warn that you widened the scope to cover the sandbox. `dirs`/`context`/`tools` (if present) are arrays; `env` (if present) is an object.
 - JSON is well-formed.

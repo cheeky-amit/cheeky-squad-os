@@ -92,7 +92,7 @@ Should contain `mode: one-time`, an ISO-8601 `created`, an ISO-8601 `target` (ab
 
 ## Step 4 — squad-role generates two roles
 
-When `squad-role` runs for role 1 (`readme-auditor`), answer roughly:
+When `squad-role` runs for role 1 (`readme-auditor`), answer roughly. (If `squad-role` also asks an optional effort question after the model question, skip it — it inherits the session's effort level, and the rest of this walkthrough is unaffected.)
 
 - **Q1 purpose:** "Read README.md, identify unclear sentences, weak headings, and missing context; write findings to reports/readme/audit.md."
 - **Q2 name:** `readme-auditor`
