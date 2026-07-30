@@ -12,10 +12,10 @@ skills/squad-spawn/scripts/spawn.sh  multi-use mode worktree pre-creation helper
 skills/squad-env/scripts/provision.sh  per-role sandbox provisioner
 skills/squad-verify/scripts/verify.sh  definition-of-done evidence scaffold
 commands/              squad-workflow.md (optional One-time Workflow dispatch)
-templates/             goal.md, role-goal.md, role-definition.md, roster.json, squad-dispatch.workflow.js, verification.md, role-comm.md
+templates/             goal.md, role-goal.md, role-definition.md, role-plan.md, roster.json, squad-dispatch.workflow.js, verification.md, role-comm.md, world-claims.md, partner.md
 examples/              three walkthrough docs (one per mode)
-tests/                 smoke-test.md (manual) + permission-request.bats / spawn.bats / provision.bats / verify.bats (automated)
-.github/workflows/     ci.yml — shellcheck + bats + example-roster schema lint on push/PR
+tests/                 smoke-test.md (manual) + permission-request.bats / spawn.bats / provision.bats / verify.bats / session-start.bats / world.bats + mermaid-lint.sh (automated)
+.github/workflows/     ci.yml — shellcheck + bats + mermaid lint + workflow-template syntax check + example-roster schema lint on push/PR
 ARCHITECTURE.md        full design doc
 ```
 
@@ -25,7 +25,9 @@ Almost everything is markdown and bash. The two exceptions: `templates/squad-dis
 
 ### 1. A new skill
 
-Add a directory under `skills/<your-skill-name>/` containing a single `SKILL.md`. Follow the YAML frontmatter conventions used by the existing eight skills:
+**First, the count criterion: a new skill only when the human authors the artifact.** Nine skills is not a budget, it is the result of applying one test. If the content of the thing being written originates with the *human* — they dictate it, sentence by sentence — it earns a skill: `squad-goal` (the goal), `squad-role` (the role), `squad-world`'s `claims-user.md`, `squad-partner` (the partner model). If the content originates in the world or in a role's work and the human merely *gates, approves, or edits* it, that is a **verb on an existing skill**, not a new one — which is why guided domain research shipped as a fifth verb on `squad-world` and added zero skills. Apply the test before you write a `SKILL.md`; a verb on the skill that already owns the file is almost always the right answer.
+
+Then add a directory under `skills/<your-skill-name>/` containing a single `SKILL.md`. Follow the YAML frontmatter conventions used by the existing nine skills:
 
 ```yaml
 ---

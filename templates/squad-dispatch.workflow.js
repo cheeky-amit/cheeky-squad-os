@@ -45,6 +45,20 @@
 //                          // never "" and never a placeholder. The absence
 //                          // contract is the same one every other
 //                          // .squad/world/-touching surface honors.
+//     "partner": "<full text of .squad/partner.md>",           // optional;
+//                          // hard rule #12 — the human's own standing brief.
+//                          // PROJECT-wide (not even squad-wide): read ONCE by
+//                          // the runner, identical in every role's prompt.
+//                          // OMIT THE KEY ENTIRELY when the file is absent or
+//                          // empty — never "" and never a placeholder; the
+//                          // absence contract is byte-identical prompts.
+//                          // Baked, never re-read: the file is gitignored by
+//                          // default, so a role cannot find it on disk. No
+//                          // role ever WRITES it — squad-partner is its only
+//                          // writer, and on this path acceptEdits means the
+//                          // PermissionRequest reservation that enforces that
+//                          // elsewhere is inert, so the prompt says so out
+//                          // loud below.
 //     "roles": [
 //       {
 //         "name": "klaviyo-data-puller",      // matches .claude/agents/<name>.md
@@ -77,6 +91,10 @@ const roles = Array.isArray(squad.roles) ? squad.roles : [];
 // section drops out of every prompt below; never render an empty heading.
 const worldIndex =
 	typeof squad.worldIndex === "string" ? squad.worldIndex.trim() : "";
+// hard rule #12 — the human's own standing brief. Project-wide, so read once
+// here rather than per role. Absent/blank collapses to "" and the whole
+// section drops out of every prompt below; never render an empty heading.
+const partner = typeof squad.partner === "string" ? squad.partner.trim() : "";
 
 if (!roles.length) {
 	log("No active roles supplied in args.roles — nothing to dispatch.");
@@ -108,7 +126,8 @@ const ROLE_RESULT_SCHEMA = {
 		follow_ups: {
 			type: "array",
 			items: { type: "string" },
-			description: "anything needing human judgment or a follow-on role",
+			description:
+				"anything needing human judgment or a follow-on role; also carries the hard-rule-#12 tag lines when a partner model was baked in — '[surfaced-ask-first] …' and '[belief-check: …] confirmed | contradicted | could not test — …'",
 		},
 	},
 };
@@ -121,7 +140,56 @@ function spawnPrompt(role) {
 
 # Squad goal (binding north-star)
 ${goal}
+${
+	partner
+		? `
+# Partner model (hard rule #12) — the human's own standing brief
+${partner}
 
+Binding on this run, on top of what the file itself says:
+- Decide vs. ask is a SURFACING rule, not a settling rule. An item listed
+  under "Always ask first" is never yours to decide, however obvious the
+  right call looks or however short you are on time. Do not quietly pick
+  the safer option and move on. Add one line to your follow_ups for each
+  one you hit, in exactly this shape:
+  "[surfaced-ask-first] <the decision, one line> — <why it is ask-first>".
+  An item under "Decide without me" is yours to settle and needs no line.
+  If the file's Attention lines give a deadline tie-break and it actually
+  applies this run, follow it and say so in the same line rather than
+  silently improvising one.
+- Surfacing versus stopping. Check your own stop conditions below. If the
+  ask-first item you hit is named there as a "stop:" bound, it is a stop:
+  end the run, write status: escalated and fired: <that bullet, verbatim>
+  on your engagement record (hard rule #14), return status "blocked", AND
+  add the [surfaced-ask-first] line — one event, two channels, not a
+  choice between them. If it is NOT among your declared bounds (you carry
+  at most four, so most ask-first items will not be), do not escalate and
+  do not stop: leave that one decision unmade, carry on with everything
+  that does not depend on it, say in your summary what you could not
+  finish because of it, and add the line. Either way the decision reaches
+  the human unmade; what differs is whether the rest of your work stops.
+- Standing constraints bind this run exactly the way the squad goal above
+  does — a hard boundary on your own work, not a preference to weigh
+  against convenience.
+- A belief to check is verified, not inherited. If your task actually
+  touches one of the hypotheses under "Beliefs to check", test it rather
+  than assume it still holds, and add one follow_ups line in exactly this
+  shape: "[belief-check: <the belief, one line>] confirmed | contradicted
+  | could not test — <the evidence, one line>". A belief you never touched
+  needs no line; those three words are the only three that belong there.
+  Both tag shapes ride follow_ups because that array is the only channel
+  on this dispatch path that reaches the human's synthesis intact.
+- This section was baked into your prompt once, at dispatch. Do not try to
+  read .squad/partner.md — it is gitignored by default and you will not
+  find it. Do NOT write it, ever: squad-partner is its only writer anywhere
+  in this plugin, and a fact about the human that the human did not say is
+  exactly what hard rule #12 exists to keep out of that file. Elsewhere in
+  this plugin the PermissionRequest hook refuses that write structurally;
+  on THIS path you run under acceptEdits, so nothing mechanically stops you
+  — police it yourself, exactly as you police your file scope below.
+`
+		: ""
+}
 # Your role's goal
 ${role.roleGoal || `(role goal not supplied — read .squad/role-goal-${role.name}.md before doing anything)`}
 ${
@@ -257,6 +325,21 @@ phase("Synthesize");
 
 const countBy = (status) => results.filter((r) => r.status === status).length;
 
+// hard rule #12 — the partnership receipt's fourth counter, on this path.
+// Roles were told to tag ask-first surfaces and belief checks in follow_ups
+// (the only channel that survives to synthesis here); these just count and
+// collect them. No partner model in args => no tags => 0 and [], and the
+// orchestrator prints nothing, exactly as with an absent partner.md on the
+// direct-Agent path. Nothing here ever WRITES .squad/partner.md.
+const taggedFollowUps = (tag) =>
+	results.flatMap((r) =>
+		(r.follow_ups || [])
+			.filter((f) => typeof f === "string" && f.trim().startsWith(tag))
+			.map((f) => `${r.role}: ${f.trim()}`),
+	);
+const askFirstSurfaced = taggedFollowUps("[surfaced-ask-first]");
+const beliefChecks = taggedFollowUps("[belief-check:");
+
 // Return a structured digest. The orchestrator turns this into the user-facing
 // report (and squad-spawn's synthesis step can read each role's file_scope for
 // the full artifacts). Intermediate per-role detail stayed in `results`, never
@@ -270,4 +353,13 @@ return {
   all_follow_ups: results.flatMap((r) =>
     (r.follow_ups || []).map((f) => `${r.role}: ${f}`),
   ),
+  // hard rule #12. Both keys are ALWAYS present with their honest value —
+  // [] and 0 when there was no partner model, or when no role's task ever
+  // touched one. The "earn the sentence or skip it" rule lives in the
+  // orchestrator's receipt (squad-spawn's synthesis), not here: a digest
+  // that omitted the key would be indistinguishable from a build that never
+  // shipped the counter.
+  ask_first_surfaced: askFirstSurfaced,
+  ask_first_surfaced_count: askFirstSurfaced.length,
+  belief_checks: beliefChecks,
 };

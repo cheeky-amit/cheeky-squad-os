@@ -248,7 +248,7 @@ See [`tests/smoke-test.md`](tests/smoke-test.md) for a copy-pasteable end-to-end
 
 ---
 
-## The eight skills & three hooks
+## The nine skills & three hooks
 
 | Component | Kind | What it does |
 | --- | --- | --- |
@@ -260,7 +260,8 @@ See [`tests/smoke-test.md`](tests/smoke-test.md) for a copy-pasteable end-to-end
 | `squad-roster` | skill | Manages `roster.json` + auto-generated `roster.md`. |
 | `squad-verify` | skill | Verifies deliverables against the goal's Definition of done; writes `.squad/verification.md` with a met/partial/unmet verdict. |
 | `squad-world` | skill | The shared belief ledger (`.squad/world/claims-<owner>.md`, hard rule #13) — seed a belief, inspect what the squad believes, adjudicate two owners who disagree, retire what stopped being true, and **research** the domain before the goal is decomposed, behind two human gates. |
-| `SessionStart` | hook | Injects the goal into every session. |
+| `squad-partner` | skill | The partner model (`.squad/partner.md`, hard rule #12) — the human's own standing brief: what to decide without them, what to always ask first, the constraints that bind every squad in the project, and the beliefs of theirs a role should check rather than inherit. **Told, not inferred**: every sentence is one the human confirmed in the same turn it was written, and this skill is the file's only writer. |
+| `SessionStart` | hook | Injects the goal into every session — and the partner model right after it, when one exists. |
 | `UserPromptSubmit` | hook | Tags each turn with the goal (observational). |
 | `PermissionRequest` | hook | Auto-approves in-scope Edit/Write + in-sandbox scaffolding; defers everything else. |
 
@@ -296,6 +297,10 @@ cheeky-squad-os/
 │   ├── squad-verify/
 │   │   ├── SKILL.md
 │   │   └── scripts/verify.sh        # definition-of-done evidence scaffold
+│   ├── squad-world/
+│   │   ├── SKILL.md
+│   │   └── scripts/world.sh         # belief-ledger parser + projection
+│   ├── squad-partner/SKILL.md       # the partner model (hard rule #12)
 │   └── squad-roster/SKILL.md
 ├── commands/
 │   └── squad-workflow.md            # optional Workflow dispatch (One-time)
@@ -307,9 +312,12 @@ cheeky-squad-os/
 │   ├── goal.md
 │   ├── role-goal.md
 │   ├── role-definition.md
+│   ├── role-plan.md                 # engagement record (hard rule #11)
 │   ├── roster.json
 │   ├── role-comm.md                 # hand-off manifest (worker↔worker channel)
 │   ├── verification.md              # squad-verify report skeleton
+│   ├── world-claims.md              # belief-ledger block schema (hard rule #13)
+│   ├── partner.md                   # the human's standing brief (hard rule #12)
 │   └── squad-dispatch.workflow.js   # canonical fan-out + synthesize script
 ├── docs/
 │   ├── ROADMAP.md                   # measurable path to the north star, ranked gaps
@@ -323,9 +331,12 @@ cheeky-squad-os/
 │   ├── permission-request.bats      # automated: hook allow/defer matrix
 │   ├── spawn.bats                   # automated: spawn.sh preflight + worktrees
 │   ├── provision.bats               # automated: provision.sh sandbox build
-│   └── verify.bats                  # automated: verify.sh evidence scaffold
+│   ├── verify.bats                  # automated: verify.sh evidence scaffold
+│   ├── session-start.bats           # automated: goal + partner + escalation notice
+│   ├── world.bats                   # automated: world.sh parser + projection
+│   └── mermaid-lint.sh              # automated: diagram structural check
 ├── .github/
-│   └── workflows/ci.yml             # shellcheck + bats on push/PR
+│   └── workflows/ci.yml             # shellcheck + bats + lints on push/PR
 ├── ARCHITECTURE.md
 ├── LOGIC.md
 ├── CONTRIBUTING.md

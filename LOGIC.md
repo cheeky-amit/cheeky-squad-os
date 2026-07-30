@@ -663,7 +663,7 @@ The invariants every diagram above upholds (full text in
 | 9 | Propose what can't be contained — system/MCP/network/global needs go to the user, never auto-run. |
 | 10 | Synthesis summarizes, verification decides — `.squad/verification.md` is the only authority for "goal met". |
 | 11 | Plan before act — a role publishes `.squad/role-plan-<role>.md` before its first write elsewhere; the hook gates auto-approval on it, deferring, never denying. |
-| *(12)* | *Reserved for a later PR — not shipped, not documented here. Numbering is append-only, so the gap is deliberate.* |
+| 12 | Told, not inferred — `.squad/partner.md` holds only statements the human confirmed in the same turn; `squad-partner` is its only writer. Already a reserved artifact (rule #7); the hook needed no change. |
 | 13 | A belief with no source is a rumor — a belief block missing `Claim`/`Source`/`Grade`/`Observed` is invalid and never reaches a prompt, enforced by `world.sh`'s parser. Two `live` blocks under one key from different owners are `disputed` (derived, never written); only the human adjudicates. |
 | 14 | Declared bounds — a fired `stop:` bound ends the run with `status: escalated`; an open escalation blocks `met`; only the human's ruling in `verification.md` closes one. |
 | 15 | The human meets the same evidence bar — a NEEDS-HUMAN row or escalation converts to PASS only against a verbatim, attributed, dated ruling — never blocked, always put on the record. |
@@ -780,3 +780,58 @@ about the verb — the two gates, the contradiction stop, the four source
 classes and their degradations — is skill-body discipline with no mechanism
 behind it, and `ARCHITECTURE.md`'s enforced-versus-asked table says so row by
 row.
+
+---
+
+## 11. The partner-model channel (hard rule #12)
+
+`.squad/partner.md` sits beside `.squad/goal.md` as a second thing every
+worker may need to see — but unlike the goal it is **optional** (absent on any
+project that never ran `squad-partner`) and **gitignored by default** (so
+typically absent inside a worktree even when it exists at the project root).
+Both properties shape how it travels; full artifact schema, the hook
+verification, and the honesty table live in `ARCHITECTURE.md § "The partner
+model"` — this section is the channel diagram only.
+
+**Who writes it.** `squad-partner` is the only writer, ever — every arrow
+below is a read.
+
+```mermaid
+flowchart LR
+    HUMAN(["Human, same-turn confirmed"]) --> SP["squad-partner<br/>create / show / update / delete"]
+    SP -->|only writer| PMD[".squad/partner.md<br/>(gitignored by default)"]
+
+    PMD --> SS["session-start.sh<br/>appended AFTER the goal,<br/>size-gated: empty changes nothing"]
+    PMD --> BAKE["squad-spawn bakes full body<br/>+ binding block into every<br/>spawn prompt (same channel<br/>as hard rule #4)"]
+
+    SS --> MAIN["Main session +<br/>Agent Teams teammates"]
+    BAKE --> WORKER["Subagent / teammate<br/>spawn prompt"]
+
+    classDef ok fill:#e6f4ea,stroke:#34a853,color:#111;
+    class MAIN,WORKER ok;
+```
+
+**Where it enters a spawn prompt.** `squad-spawn` bakes `.squad/partner.md`'s
+full body — Decide vs. ask, Standing constraints, Beliefs to check — plus a
+short binding block into every spawn prompt, in the same position hard rule #4
+already reserves for `goal.md` + `role-goal.md`: ask-first decisions are
+**surfaced, never settled**; standing constraints **bind like the goal**; a
+role that touches a belief-to-check must **report on it** (confirmed /
+contradicted / could not test). **Baked, never re-read** — the file is
+gitignored by default, so it is typically absent the moment a role is running
+in its own worktree; the spawn prompt is the only reliable channel, the exact
+discipline §7's two-channel table already states for the goal.
+
+**Where `SessionStart` appends it.** `hooks/session-start.sh` reads
+`.squad/partner.md` after it reads `.squad/goal.md` — **the goal always comes
+first** — and appends the body via the same `additionalContext` channel
+(§5.1). The append is `[ -s ]`-gated: an empty or missing file changes
+nothing, so a project that never ran `squad-partner` sees byte-identical
+`SessionStart` output to one that predates hard rule #12.
+
+> **Absence contract.** No `.squad/partner.md` ⇒ byte-identical spawn
+> prompts, byte-identical `SessionStart` output, byte-identical
+> `verification.md`. §5.2's `R3` reserved-artifact check already lists
+> `partner.md` — a project with no partner model gets the same defer any
+> other reserved path gets, never a crash on a missing file; nothing above
+> fires until a human runs `squad-partner create`.

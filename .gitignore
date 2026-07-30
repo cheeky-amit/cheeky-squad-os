@@ -11,6 +11,14 @@
 .squad/role-comm-*
 .squad/role-plan-*
 
+# The partner model (hard rule #12) — a model of the human living in a git
+# repo, and the source paper (§5.3) flags models of humans as dual-use.
+# Gitignored by DEFAULT, not by enforcement: `squad-partner`'s create flow
+# proposes this line and the file write as one write set, and the human can
+# decline it. This is a default offer, not a mechanism — if you want your
+# partner model committed, remove this line deliberately.
+.squad/partner.md
+
 # Generated worktrees from Multi-use mode (per Claude Code worktrees doc tip)
 .claude/worktrees/
 

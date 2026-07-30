@@ -32,7 +32,8 @@ You orchestrate dispatch. The squad has been onboarded (`.squad/goal.md` exists)
 
    **If stdout is non-empty, live beliefs exist** — bake it into every role's prompt at the position in the template below. **If stdout is empty** (no `.squad/world/` at all, or every claims file's blocks are invalid/superseded/retired with nothing currently `live`), **omit the `# Shared world model` section entirely from every role's prompt this dispatch** — never an empty heading, never "no beliefs recorded yet" filler. This is the same absence contract every other `.squad/world/`-touching surface in this plugin honors.
 
-10. **Dispatch triage (§3.4 — "who starts?").** For each role you are about to dispatch this invocation, read its `## Stop conditions` from `.squad/role-goal-<role.name>.md` (hard rule #14) and filter to the `needs:`-prefixed bullets only — `stop:` bullets are mid-run bounds the role self-polices, not something a preflight check can evaluate before the role has started. Probe each `needs:` bullet that's actually checkable from here: a file/path existing on disk, a declared tool being present in the role's `tools` list, or one cheap read-only MCP call if the bullet names one explicitly and a matching tool is available. A bullet phrased as a judgment call isn't checkable — skip it silently, it neither passes nor fails triage. **One class of non-checkable bullet is the exception and is never skipped silently: a `needs:` bullet that names an open question research came back `unanswered` on** (hard rule #13's research verb writes them in exactly that shape — see `squad-role`'s stop-condition derivation). Nothing on disk can settle an open question, so probing it is meaningless — but it is precisely a knowable-in-advance blocker, and swallowing it would leave the human's own unanswered question visible only inside a prompt the human never reads. Print one line per role:
+10. **Read the partner model once (hard rule #12).** Read `.squad/partner.md` if it exists. **Absence contract, same discipline as step 9:** file absent, or present but empty, means omit the `# Partner model` section entirely from every role's prompt this dispatch — never an empty heading. If present and non-empty, capture its full text once, before building any per-role prompt below — like the world index, it describes something squad-wide (the human commanding the whole project, not this role), so the same text goes into every role's prompt this dispatch. **Baked, never re-read:** do not instruct any role to read `.squad/partner.md` itself anywhere in the prompt you build — the file is gitignored by default (`squad-partner`'s create flow proposes that as its default) and will not exist inside a worktree (hard rule #7 isolation), so hard rule #4's prompt-baking is the only reliable channel, exactly as for the goal. Never instruct a role to write to it either: `squad-partner` is its only writer anywhere in this plugin (hard rule #12), and `hooks/permission-request.sh`'s `.squad/` reservation already defers every role's write to it structurally — confirmed by running the hook, not by reading it and assuming.
+11. **Dispatch triage (§3.4 — "who starts?").** For each role you are about to dispatch this invocation, read its `## Stop conditions` from `.squad/role-goal-<role.name>.md` (hard rule #14) and filter to the `needs:`-prefixed bullets only — `stop:` bullets are mid-run bounds the role self-polices, not something a preflight check can evaluate before the role has started. Probe each `needs:` bullet that's actually checkable from here: a file/path existing on disk, a declared tool being present in the role's `tools` list, or one cheap read-only MCP call if the bullet names one explicitly and a matching tool is available. A bullet phrased as a judgment call isn't checkable — skip it silently, it neither passes nor fails triage. **One class of non-checkable bullet is the exception and is never skipped silently: a `needs:` bullet that names an open question research came back `unanswered` on** (hard rule #13's research verb writes them in exactly that shape — see `squad-role`'s stop-condition derivation). Nothing on disk can settle an open question, so probing it is meaningless — but it is precisely a knowable-in-advance blocker, and swallowing it would leave the human's own unanswered question visible only inside a prompt the human never reads. Print one line per role:
    - `starts: machine — <role.name>` — every checkable `needs:` bullet passed (or none were checkable).
    - `starts: YOU — <role.name>: <failing precondition, verbatim from the bullet>` — at least one checkable bullet failed.
    - `starts: YOU — <role.name>: <the open question, verbatim from the bullet> (unanswered by research)` — the role carries an unanswered-question bullet. Not a failure and not a probe result: a question only the human can close.
@@ -40,13 +41,61 @@ You orchestrate dispatch. The squad has been onboarded (`.squad/goal.md` exists)
 
 ## Build the spawn prompt (per role)
 
-Every spawn — subagent, teammate, scheduled — follows the same canonical prompt order, regardless of mode: **goal → role-goal → world index → hand-offs → file scope → Step 0 → stop-condition contract → task.**
+Every spawn — subagent, teammate, scheduled — follows the same canonical prompt order, regardless of mode: **goal → partner model → role-goal → world index → hand-offs → file scope → Step 0 → stop-condition contract → task.** Partner model sits right after the goal, not buried after role-specific material, for the same reason session-start.sh appends it right after the goal too: standing constraints bind like the goal (hard rule #12), and a role should see the human's own brief before it sees its own slice of the work.
 
 ```
 You are the <role.name> role on a cheeky-squad-os squad.
 
 # Squad goal (binding north-star)
 <full contents of .squad/goal.md>
+
+# Partner model (hard rule #12) — only if .squad/partner.md exists and is non-empty (step 10)
+<the full contents of .squad/partner.md, pasted VERBATIM — do not reformat,
+summarize, or truncate it; it is short by design>
+
+Binding on this run, on top of what the file itself says:
+- **Decide vs. ask is a surfacing rule, not a settling rule.** An item
+  listed under "Always ask first" above is never yours to decide, no
+  matter how obvious the right call looks or how short you are on time.
+  Do not silently pick the safer option and move on. Instead, end your
+  final response to the orchestrator (the summary you return when your
+  task is done) with one line per item you hit:
+  `[surfaced-ask-first] <the decision, one line> — <why it's ask-first>`.
+  An item under "Decide without me" is yours to settle and needs no line
+  here — only ask-first items get one. If the file's "Attention" lines
+  give a deadline tie-break and it actually applies this run, follow it
+  and say so in the same line rather than silently improvising one.
+- **Surfacing versus stopping — which one an ask-first item triggers.**
+  Check your own "Your stop conditions" block below. If the item you hit
+  is named there as a `stop:` bound, it is a stop: end the run, write
+  `status: escalated` and `fired: <that bullet, verbatim>` on your
+  engagement record (hard rule #14), *and* emit the
+  `[surfaced-ask-first]` line — the two are one event reported on two
+  channels, not a choice between them. If the item is **not** among your
+  declared bounds (your role carries at most four, so most ask-first
+  items will not be), do not escalate and do not stop: leave that one
+  decision unmade, carry on with everything that does not depend on it,
+  say in your summary what you could not finish because of it, and emit
+  the line. Either way the decision reaches the human unmade — what
+  differs is only whether the rest of your work stops with it.
+- **Standing constraints bind this run exactly the way `.squad/goal.md`
+  does** — treat every constraint listed above as a hard boundary on your
+  own work this run, not a preference to weigh against convenience.
+- **A belief to check is verified, not inherited.** If your task actually
+  touches one of the hypotheses under "Beliefs to check" above, test it
+  rather than assume it's still true, and report what you found: end your
+  final response with `[belief-check: <the belief, one line>] confirmed |
+  contradicted | could not test — <the evidence, one line>`. A belief you
+  never touched needs no line; one you did needs exactly one, and the
+  three outcomes above are the only three words that belong after the
+  bracket.
+- This section is baked into your prompt once, at dispatch — it is not
+  re-read, and you will not find `.squad/partner.md` on disk if you are
+  running in a worktree (it is gitignored by default). Never attempt to
+  read or write it yourself: `squad-partner` is its only writer anywhere
+  in this plugin, and every role's write to it — including a role named
+  `partner` — defers to the human structurally, regardless of what your
+  file_scope says.
 
 # Your role's goal
 <full contents of .squad/role-goal-<role.name>.md>
@@ -148,9 +197,9 @@ record is not optional even though you also returned a status.
 Read .squad/goal.md and .squad/role-goal-<role.name>.md at any time during your work. Stay inside your file scope. Hand off deliverables by writing to your scope. When a deliverable is ready for another role, publish a hand-off manifest at .squad/role-comm-<role.name>--<consumer>.md (shape: templates/role-comm.md — what's ready, how to consume, caveats).
 ```
 
-Include the workspace block only for roles that have an `environment`; omit it otherwise. Include the Step 0 block and the "Your stop conditions" block always — both are baked unconditionally, in every mode, with no opt-out. A role with an empty `## Stop conditions` section (shouldn't happen post-`squad-role`, but don't assume) still gets the contract block — it just has nothing to fire on. The "Shared world model" block is the one section in this template that IS conditional, per step 9 above — every role in a given dispatch gets the same yes/no, since it reflects squad-wide state, not anything role-specific.
+Include the workspace block only for roles that have an `environment`; omit it otherwise. Include the Step 0 block and the "Your stop conditions" block always — both are baked unconditionally, in every mode, with no opt-out. A role with an empty `## Stop conditions` section (shouldn't happen post-`squad-role`, but don't assume) still gets the contract block — it just has nothing to fire on. The "Shared world model" block and the "Partner model" block are the two sections in this template that ARE conditional, per steps 9 and 10 above respectively — every role in a given dispatch gets the same yes/no on each, since both reflect state that's squad-wide (or project-wide, for the partner model) rather than anything role-specific. Never bake an empty "Partner model" heading — absent or empty `.squad/partner.md` means the section is left out entirely, not printed with nothing under it.
 
-**Hard rule #4:** the full text of `.squad/goal.md` and the role's `.squad/role-goal-<role.name>.md` is the only reliable channel from parent to subagent. The SessionStart hook does not fire for subagents. Bake the goal text in; don't rely on hook injection for the One-time path.
+**Hard rule #4:** the full text of `.squad/goal.md` and the role's `.squad/role-goal-<role.name>.md` is the only reliable channel from parent to subagent. The SessionStart hook does not fire for subagents. Bake the goal text in; don't rely on hook injection for the One-time path. `.squad/partner.md` rides the same channel for the same reason (hard rule #12): it is gitignored by default, so it is typically absent inside an `isolation: worktree` checkout even where SessionStart *does* fire — baking is the only path that works everywhere, every mode, every isolation setting.
 
 ## Branch on mode
 
@@ -247,20 +296,21 @@ For One-time and Multi-use modes, after the squad finishes (or per-iteration in 
 2. Read each role's outputs from their `file_scope`.
 3. **Declared-vs-produced diff.** For each dispatched role, read its engagement record at `.squad/role-plan-<role.name>.md`, if it published one. Diff the record's `## Deliverables` list against what actually landed in `file_scope`: name every path the role declared but never produced, and every path it produced but never declared. A role with no record has nothing to diff against — say so plainly in that role's row rather than skipping it silently.
 4. **Quote every `[assumed]` bullet, verbatim.** Pull every `## Assumptions` bullet graded `[assumed]` out of each record into the summary, unedited — the claim and its `if wrong → …` clause together. These are the guesses the human should see even when nothing failed; do not paraphrase, summarize, or drop the `if wrong →` clause.
-5. Compose a user-facing summary: what each role produced, where the artifacts live, what's next.
-6. Surface any role that failed or returned an error.
-7. Suggest follow-up actions (replace a role, change a scope, replace the goal).
-8. Hand off to `/cheeky-squad-os:squad-verify` to check the goal's Definition of done and write `.squad/verification.md`. Synthesis summarizes; verification decides — never declare the goal met from the summary alone.
-9. **The partnership receipt.** After the summary, compose at most one closing paragraph, built **only** from artifacts that already exist by this point in synthesis — never re-derived, never estimated:
+5. **Collect ask-first surfaces and belief-check reports (hard rule #12).** Only relevant when step 10's preflight found a non-empty `.squad/partner.md`. From each dispatched role's own final response — the text it returned to you (a One-time subagent's returned deliverable summary; a Multi-use teammate's own messages to you as team lead) — pull every `[surfaced-ask-first]`-tagged line and every `[belief-check: ...]`-tagged line, verbatim. Both live only in that conversational text — there is no `.squad/` file backing either one (a role's write to `.squad/partner.md` is structurally refused, hard rule #12), so this is the only place they exist, and only this run's own synthesis can capture them; nothing reads them back afterward. Keep both lists — one feeds the summary below, the other feeds the receipt.
+6. Compose a user-facing summary: what each role produced, where the artifacts live, what's next. **Every `[belief-check: ...]` line collected in the step above goes here too, plainly, undigested** — it is the direct answer to a `## Beliefs to check` entry in `.squad/partner.md`, and the human should see the role's own verdict (confirmed / contradicted / could not test) in its own words, not your paraphrase of it.
+7. Surface any role that failed or returned an error.
+8. Suggest follow-up actions (replace a role, change a scope, replace the goal).
+9. **Suggest `squad-partner update`, never write it (hard rule #12).** If anything from this run's own turns — a hand-off note, an escalation ruling, a direct correction the human gave mid-run — visibly contradicted something written in `.squad/partner.md` (a standing constraint that no longer held, a decide-vs-ask item where the human just decided the opposite of what the file says, or a `[belief-check: ...]` report that came back `contradicted`), say so plainly and suggest: *"This looks like it contradicts `.squad/partner.md`'s [section] — want me to run `squad-partner update`?"* **A suggestion only, in this same synthesis message.** Never write `.squad/partner.md` yourself, under any phrasing of consent — `squad-partner` is its only writer anywhere in this plugin (hard rule #12), and this skill writing it on the human's behalf, even with good intentions, would be exactly the inference that rule exists to forbid. Say nothing when nothing this run contradicted anything on file.
+10. Hand off to `/cheeky-squad-os:squad-verify` to check the goal's Definition of done and write `.squad/verification.md`. Synthesis summarizes; verification decides — never declare the goal met from the summary alone.
+11. **The partnership receipt.** After the summary, compose at most one closing paragraph, built **only** from artifacts that already exist by this point in synthesis — never re-derived, never estimated:
    - **N `[assumed]` bullets quoted** — the count from step 4 above (every `[assumed]` bullet pulled into this summary this run).
-   - **K blocking a PASS** — of those, how many `squad-verify`'s forcing rule actually capped a signal on. Read this back from `.squad/verification.md`'s "Assumptions surfaced to the human" section *if* step 8 already ran this synthesis; if verification hasn't run yet, drop this clause rather than guess it.
+   - **K blocking a PASS** — of those, how many `squad-verify`'s forcing rule actually capped a signal on. Read this back from `.squad/verification.md`'s "Assumptions surfaced to the human" section *if* step 10 already ran this synthesis; if verification hasn't run yet, drop this clause rather than guess it.
    - **N escalations** — count of roles dispatched this run whose engagement record now shows `status: escalated`.
+   - **N ask-first decisions surfaced instead of auto-decided** — the count of `[surfaced-ask-first]` lines collected in step 5 above, across every role dispatched this run. This completes the partner-model tally an earlier draft of this receipt left as a placeholder; it exists now. When `.squad/partner.md` is absent or empty, or no dispatched role's task ever touched a "Decide vs. ask" item, the honest count is 0 — same treatment as the other three counts, folded into the same "at least one non-zero" check below rather than a ritual line of its own.
 
-   Format: `This run: N [assumed] bullets quoted, K blocking a PASS · N escalations.`
+   Format: `This run: N [assumed] bullets quoted, K blocking a PASS · N escalations · N ask-first decisions surfaced instead of auto-decided.`
 
-   Emit it only when **at least one** of the counted lines is non-zero — a fully quiet run (nothing assumed, nothing capped, nothing escalated) gets no receipt at all. A line that prints "0 and 0 and 0" every time is the exact ritual hard rule #15 warns against; earn the sentence or skip it.
-
-   One more counter — a partner-model tally — arrives in a later PR. Leave the sentence's `·`-separated shape room to grow, but do not print a number for it now; that system doesn't exist yet in this codebase, and a count for a system that doesn't exist is the unearned-confidence failure mode this plugin argues against.
+   Emit it only when **at least one of the four counted lines** is non-zero — a fully quiet run (nothing assumed, nothing capped, nothing escalated, nothing surfaced) gets no receipt at all. A line that prints "0 and 0 and 0 and 0" every time is the exact ritual hard rule #15 warns against; earn the sentence or skip it.
 
    **The world model (hard rule #13) gets no counter here on purpose.** It exists as of this release, but its count belongs to `squad-verify` — `verify.sh` computes `world_conflicts` itself and the verdict report routes on it. Printing a second, independently-derived dispute count in the dispatch receipt would give the human two numbers for one fact, and the receipt's would be the staler of the two (it is read at synthesis time, before verification runs). Say nothing about beliefs here; `/cheeky-squad-os:squad-verify` and `/cheeky-squad-os:squad-world` both report them properly.
 
