@@ -10,7 +10,7 @@
 
 [![CI](https://github.com/cheeky-amit/cheeky-squad-os/actions/workflows/ci.yml/badge.svg)](https://github.com/cheeky-amit/cheeky-squad-os/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.4.1-blue.svg)](.claude-plugin/plugin.json)
+[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](.claude-plugin/plugin.json)
 [![Claude Code plugin](https://img.shields.io/badge/Claude_Code-plugin-8A2BE2.svg)](https://code.claude.com/docs/en/plugins)
 [![Built with](https://img.shields.io/badge/built_with-Markdown_%2B_Bash-1f425f.svg)](CONTRIBUTING.md)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
@@ -23,7 +23,7 @@
 **[Modes](#the-three-modes)** ·
 **[Workflows](#dynamic-workflows-optional-one-time-mode)** ·
 **[Install](#installation)** ·
-**[Components](#the-seven-skills--three-hooks)** ·
+**[Components](#the-nine-skills--three-hooks)** ·
 **[Roadmap](docs/ROADMAP.md)** ·
 **[Contributing](CONTRIBUTING.md)**
 
@@ -267,6 +267,19 @@ See [`tests/smoke-test.md`](tests/smoke-test.md) for a copy-pasteable end-to-end
 
 ---
 
+## What v1.0 adds
+
+Hard rules #11–#15 shipped this release, each with a mechanism behind it. This table states only what the cited bats case proves — the full "what's enforced vs. what's asked" breakdown for each rule is in [ARCHITECTURE.md's honesty table](ARCHITECTURE.md#the-honesty-table).
+
+| Rule | What actually happens | Proven by |
+| --- | --- | --- |
+| **#11** — Autonomy is purchased with intent. | The `PermissionRequest` hook defers a role's in-scope Edit/Write and in-sandbox Bash until `.squad/role-plan-<role>.md` exists, then auto-approves the same call once it does. | `permission-request.bats`: *"gate: in-scope Write DEFERS until the engagement record exists"* / *"…is auto-approved once the record exists"* |
+| **#12** — Told, not inferred. | `.squad/partner.md`, when present and non-empty, is appended into session context after the goal — the literal file content, never a summary. | `session-start.bats`: *"partner model is appended after the goal, when present and non-empty"* |
+| **#13** — A belief with no source is a rumor. | A `.squad/world/claims-<owner>.md` block missing `Claim`, `Source`, `Grade`, or `Observed` is excluded from every index `world.sh` projects. | `world.bats`: *"missing Source is invalid and excluded"* (and the matching cases for `Claim` / `Grade` / `Observed`) |
+| **#14 + #15** — Stopping well is a deliverable · the human meets the same evidence bar. | An engagement record with `status: escalated` keeps `verify.sh`'s `escalations_open` count above zero until the role is named in `.squad/verification.md`'s `resolved_escalations`. | `verify.bats`: *"escalated record is detected: status surfaces and it counts toward escalations_open"* / *"a resolved escalation drops out, an unresolved one stays open"* |
+
+---
+
 ## What this plugin does NOT ship
 
 - ✕ **Zero role files.** No `frontend-dev`, no `backend-dev`, no `qa-engineer`. The generator builds what your goal needs.
@@ -274,6 +287,20 @@ See [`tests/smoke-test.md`](tests/smoke-test.md) for a copy-pasteable end-to-end
 - ✕ **No assumption you're an engineer.** An ops loop and a marketing audit use the same primitives as a feature build.
 
 This is intentional. Defaults bias every goal toward the shape the defaults assume. The plugin's design forces you to think about what your goal actually needs — and then build exactly that.
+
+---
+
+> ### Why we say "squad" — and what we mean by it
+>
+> Collins et al. (arXiv:2408.03943, §5.3) warn that the words we choose for AI partners set expectations: *"teammate implies the machine and human are on equal footing."* We read that critique, kept the word **squad**, and answer it on its own terms.
+>
+> A squad is not a circle of peers. It is a unit that exists to serve an outcome someone else owns, under someone else's command. That someone is you. Every mechanism here encodes the asymmetry: you set the goal and confirm every reformulation of it; nothing global runs without your same-turn consent; every out-of-scope action defers to you rather than being decided for you; every judgment the machine cannot evidence is routed to NEEDS-HUMAN — to you. The squad has obligations: to declare its intent before acting (#11), to source what it claims (#13), to stop at its declared bounds (#14). It has no standing. Authority and accountability never leave the human.
+>
+> The squad's model of *you* is subject to *your* authority too: `.squad/partner.md` holds only sentences you confirmed, is written by one skill, and its creation proposes keeping it out of your repo (#12). And you are not exempt from the discipline you imposed — rule #15 holds you to the same evidence bar you hold the machine to.
+>
+> These are **human-centric** partners, not **human-like** ones. Roles are bespoke functions with a file scope, a goal slice, and refusal conditions — not personalities. The plugin never gives a role a face, a feeling, or a claim of intent; roles are named for their work (`klaviyo-data-puller`), never for a person. Where our docs say "teammate," it names Claude Code's Agent Teams primitive: machine-to-machine coordination, never machine-to-human parity.
+>
+> We use organizational language because coordination, hand-offs, and supervision are real. We refuse anthropomorphic language because minds on equal footing is not.
 
 ---
 
@@ -344,6 +371,25 @@ cheeky-squad-os/
 ├── LICENSE (MIT)
 └── README.md
 ```
+
+### `.squad/` runtime state (created in *your* project, not this repo)
+
+This repo ships no `.squad/` directory — it's the state the plugin writes into whatever project you run it in. The shipped `.gitignore` (mirror it into your own project's) draws the commit/ignore line as follows:
+
+| Artifact | Written by | Status |
+| --- | --- | --- |
+| `.squad/goal.md` | `squad-onboard` / `squad-goal` | Commit |
+| `.squad/partner.md` | `squad-partner` (hard rule #12) | **Gitignore by default** — offered as one half of the create write set, not enforced; decline the offer to commit it |
+| `.squad/role-goal-<role>.md` | `squad-role` | Commit |
+| `.squad/roster.json` / `.squad/roster.md` | `squad-role` / `squad-roster` | Commit |
+| `.squad/verification.md` | `squad-verify` (hard rules #14–#15) | Commit — overwritten on each re-verify |
+| `.squad/world/claims-<owner>.md` | `squad-world` (hard rule #13) | Commit — never cleared, accumulates |
+| `.squad/squads/<slug>/` | `squad-goal` park/switch | Commit — parked squads, same grade as active |
+| `.squad/role-plan-<role>.md` | the role itself, before its first act (hard rule #11) | Gitignore — per-engagement, cleared on redispatch |
+| `.squad/role-comm-<from>--<to>.md` | the publishing role | Gitignore — per-run hand-off manifest, cleared on redispatch |
+| `.squad/workspaces/<role>/` | `provision.sh` | Gitignore — ephemeral sandbox; `roster.json` is the source of truth |
+
+Full rationale for every row: [ARCHITECTURE.md § Version control](ARCHITECTURE.md#version-control).
 
 ---
 

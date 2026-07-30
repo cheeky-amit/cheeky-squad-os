@@ -7,7 +7,7 @@ This is a small plugin with a clear shape. Contributions land in one of five pla
 ```
 .claude-plugin/        plugin manifest + self-marketplace
 hooks/                 three bash scripts (SessionStart, UserPromptSubmit, PermissionRequest)
-skills/<name>/SKILL.md seven SKILL.md files (squad-onboard, squad-goal, squad-role, squad-env, squad-spawn, squad-roster, squad-verify)
+skills/<name>/SKILL.md nine SKILL.md files (squad-onboard, squad-goal, squad-role, squad-env, squad-spawn, squad-roster, squad-verify, squad-world, squad-partner)
 skills/squad-spawn/scripts/spawn.sh  multi-use mode worktree pre-creation helper
 skills/squad-env/scripts/provision.sh  per-role sandbox provisioner
 skills/squad-verify/scripts/verify.sh  definition-of-done evidence scaffold
