@@ -37,7 +37,7 @@ jobs:
         run: bats tests/*.bats
 
       - name: Lint mermaid sequence diagrams
-        # Three diagrams in this repo had never rendered. Structural check, not
+        # Four diagrams in this repo had never rendered. Structural check, not
         # a real render: CI here is shellcheck + bats and finishes in ~25s;
         # pulling Chromium in to render diagrams would cost minutes for a class
         # of bug this catches for free.

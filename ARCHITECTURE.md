@@ -8,6 +8,12 @@ cheeky-squad-os ships the discipline, not the team. Your goal generates the team
 
 This means the plugin contains **zero opinionated role files**. No `frontend-dev`. No `backend-dev`. No defaults. The role generator builds what each goal needs. A Klaviyo lifecycle audit needs different roles than a homepage redesign needs different roles than a weekly competitive intel loop. The framework is domain-neutral.
 
+## The thesis
+
+> **The team is generated; the partnership is engineered.**
+
+"Ship the discipline, not the team" — the line above — always asserted the first half: no shipped roster, no defaults, a team generated fresh from the goal. It never said what "the discipline" itself was. v1.0 names it: a two-party contract. Hard rules #1–#10 were always the squad's half of that contract — one goal, explicit file scope, mode-appropriate dispatch, an artifact of record for "done." v1.0 builds the half that was missing: #11–#14 bind what the squad owes back beyond doing the work — declared intent before acting, a sourced belief instead of a guess, a declared bound it stops at. And #15, for the first time in this plugin's history, binds not the squad but **the human** — the same evidence bar, applied to the party who was previously exempt from it by default. That is the release: not a bigger squad, a squad with obligations back to the person who commands it, and a person who now has one too. See README's "Why we say squad" section for what that asymmetry is, and — as pointedly — what it is not.
+
 ## What the plugin contains (and does not)
 
 | Component | Ships in plugin | Generated per goal | Notes |
@@ -42,12 +48,12 @@ These are the load-bearing invariants the rest of the document references by num
 10. **Synthesis summarizes, verification decides** — `.squad/verification.md` is the only authority for declaring the goal met.
 11. **Plan before act.** Before a role's first write to anywhere else, it publishes its engagement record — `.squad/role-plan-<role>.md` (schema: `templates/role-plan.md`) — stating what it read the task to be, its intended approach, its deliverables, and its assumptions, each graded by evidence class (never by number — see "Evidence grades" below). Until that record exists, the `PermissionRequest` hook defers every in-scope Edit/Write and in-sandbox Bash call for that role; it never denies. The record's own path is the one grant that needs no record: a role cannot publish its plan if publishing the plan required a plan. Autonomy is purchased with intent.
 
-12. **Told, not inferred.** `.squad/partner.md` contains only statements the human confirmed in the same turn they were written; `squad-partner` is its only writer, anywhere in the plugin, and it holds no third parties and no secrets — the plugin never observes, infers, or commits it on the human's behalf. Three sections, each earning its place because it changes what a role *does*: **Decide vs. ask** changes what a role surfaces instead of silently settling; **Standing constraints** bind every squad in this project the way `.squad/goal.md` binds one squad; **Beliefs to check** turns an assumption the human holds into verification work for whichever role touches it, rather than inherited truth — the direct answer to the paper's "possibly false beliefs." The name is the mechanism: a partner model assembled by inference is a dossier; this one is a brief the human dictates, sentence by sentence, confirmed as it goes in. `.squad/partner.md` is already a reserved artifact under the `.squad/` structural reservation (hard rule #7) — `hooks/permission-request.sh` needs **no change** to enforce this, confirmed by running the hook rather than assumed: a `**`-scoped role, the `./`-prefixed spelling, the in-sandbox Bash surface, a main-session call carrying no `agent_type`, and a role literally *named* `partner` all defer to the human today. Privacy here is a **default offer, not a mechanism** — the create flow proposes the file and the project's `.gitignore` line as one write set; accepting that default, not any enforcement, is what produces the private outcome. See "The partner model" below for the full artifact, the verification of the hook, and the honesty table.
+12. **Told, not inferred.** `.squad/partner.md` contains only statements the human confirmed in the same turn they were written; `squad-partner` is its only writer, anywhere in the plugin, and it holds no third parties and no secrets — the plugin never observes, infers, or commits it on the human's behalf. Three sections, each earning its place because it changes what a role *does*: **Decide vs. ask** changes what a role surfaces instead of silently settling; **Standing constraints** bind every squad in this project the way `.squad/goal.md` binds one squad; **Beliefs to check** turns an assumption the human holds into verification work for whichever role touches it, rather than inherited truth — the direct answer to the paper's "possibly false beliefs." The name is the mechanism: a partner model assembled by inference is a dossier; this one is a brief the human dictates, sentence by sentence, confirmed as it goes in. `.squad/partner.md` is already a reserved artifact under the `.squad/` structural reservation (hard rule #7) — `hooks/permission-request.sh` needs **no change** to enforce this, confirmed by running the hook rather than assumed: a `**`-scoped role, the `./`-prefixed spelling, the in-sandbox Bash surface, a main-session call carrying no `agent_type`, and a role literally *named* `partner` all defer to the human today. Privacy here is a **default offer, not a mechanism** — the create flow proposes the file and the project's `.gitignore` line as one write set; accepting that default, not any enforcement, is what produces the private outcome. See "The partner model" below for the full artifact and the verification of the hook, and "The honesty table" further below for what this rule does and doesn't guarantee. This is the rule the metaphor stance (README, "Why we say squad") points at as *"the squad's model of you is subject to your authority too"* — a model the human dictates and confirms is not a dossier assembled about them.
 
 13. **A belief with no source is a rumor — and a rumor never reaches a prompt.** A role's claims about the domain — not the task, `goal.md` already owns that — live in `.squad/world/claims-<role>.md`, one file per owner, granted positionally by the role's own `agent_type` exactly as its engagement record and hand-off outbox are (the `.squad/` reservation, hard rule #7). Every belief block carries `Claim`, `Source`, `Grade`, `Observed` — the first three and the last are **required**, and a block missing any of them is invalid and is mechanically excluded from every projected index: the guarantee is enforced by `world.sh`'s parser, not by a role goal asking nicely. `Grade` reuses hard rule #11's four-class vocabulary (`confirmed | reported | inferred | assumed`) — one vocabulary across the plugin, never a number, never a second scheme invented for this artifact. Two `live` blocks under the same key, from different owners, are a dispute; nobody writes the word `disputed` — it is derived from state, never a field a role can set or clear. The human is the sole adjudicator: never averaged, never latest-wins, never auto-resolved. See "The belief ledger" below.
 
 14. **Declared bounds.** Every role declares `needs:` preconditions and `stop:` bounds in its role goal. A fired condition ends the run with `status: escalated` on the engagement record. An open escalation blocks a `met` verdict; escalations are opened by roles and closed only in `verification.md` by the human's recorded ruling. Escalation is evidence generation, never decision — hard rule #10 holds. *Stopping well is a deliverable.*
-15. **The human meets the same evidence bar.** A NEEDS-HUMAN row or open escalation converts to PASS only against a stated what-you-checked / what-you-found, recorded verbatim in `verification.md` with attribution and date, permanently marked distinct from machine-verified truth. The human is never blocked — they are put on the record.
+15. **The human meets the same evidence bar.** A NEEDS-HUMAN row or open escalation converts to PASS only against a stated what-you-checked / what-you-found, recorded verbatim in `verification.md` with attribution and date, permanently marked distinct from machine-verified truth. The human is never blocked — they are put on the record. This is the rule the metaphor stance (README, "Why we say squad") means by *"you are not exempt from the discipline you imposed"* — the one hard rule in this list that binds the human rather than the squad; see "The thesis" above.
 
 ## Evidence grades
 
@@ -172,6 +178,8 @@ Independent web/codebase questions may fan out as anonymous subagents, grouped p
 
 ### What the ledger enforces, and what it merely asks
 
+The full-detail source for the belief-ledger rows in "The honesty table" further below.
+
 | Surface | What's enforced | What's merely asked |
 | --- | --- | --- |
 | The four required fields | `world.sh`'s parser: a block missing `Claim`, `Source`, `Grade`, or `Observed` is invalid, counted, and excluded from the projected index — it never reaches a prompt. | Whether `Source:` is true, `Grade:` is honest, or `Claim:` is actually falsifiable. The parser reads text; it has no way to check the world. |
@@ -235,7 +243,7 @@ Four verbs, one artifact, no other writer anywhere in the plugin: **create** dra
 
 This is a model of a person living in a git repo, and §5.3 of the source paper flags such models as **dual-use**. The plugin does not make the file private by any enforced mechanism — it *offers* to keep it out of git, once, at creation, and the human can decline. The create flow's confirmation proposes the file write and the project `.gitignore` line `.squad/partner.md` as **one write set**: accepting both produces the private-by-default outcome; declining the ignore-line half while keeping the file is an explicit, informed opt-in to committing a model of the human. Say it exactly this way, every time it comes up — *"the plugin never commits it for you, and proposes the ignore line at creation"* — and never say "it is private," because that overstates what a proposed-and-declinable line actually guarantees.
 
-Three honest limits, stated plainly rather than glossed:
+Three honest limits, stated plainly rather than glossed — privacy and currency reappear as rows in "The honesty table" further below:
 
 | Claim | What's actually true |
 | --- | --- |
@@ -544,7 +552,7 @@ Write .squad/verification.md (from templates/verification.md — frontmatter:
 
 **Trigger:** "here's how I want you to work with me", "decide that without me next time", "always ask before X", "no vendor mentions ever, that's a standing rule", "check whether I'm right that X", "show my partner model", "update the partner model", "delete the partner model"; offered once, skippably, by `squad-onboard` during onboarding.
 
-**Contract:** Four verbs over one artifact (`.squad/partner.md`, hard rule #12 — see "The partner model" above for the full schema, the hook verification, and the honesty table):
+**Contract:** Four verbs over one artifact (`.squad/partner.md`, hard rule #12 — see "The partner model" above for the full schema and the hook verification, and "The honesty table" further below for what's enforced and what's asked):
 - **create** — drafts the three sections from the conversation so far, then asks at most three skippable questions to fill real gaps, folds in the answers, proposes the file write and the `.gitignore` line as one write set, writes with `created`/`updated` both set to now.
 - **show** — prints the file in full, plus a staleness note (never a nag) if `updated` is more than 30 days old. Absent file: points at `create`, does not offer to draft one outside that verb.
 - **update** — diffs the proposed change against the section it lands in, gets an explicit confirm, writes, bumps `updated`, leaves `created` untouched.
@@ -665,7 +673,7 @@ Two properties of this list are load-bearing enough to name separately, because 
 
 ### What is enforced, and what is asked
 
-The plan gate is mechanical where it applies, and honestly limited where it doesn't:
+The plan gate is mechanical where it applies, and honestly limited where it doesn't. The full-detail source for the plan-gate rows in "The honesty table" further below:
 
 | Surface | What's enforced | What's merely asked |
 | --- | --- | --- |
@@ -731,7 +739,6 @@ Schemas for `goal.md` and `roster.json` are above. `role-goal-<role-name>.md` mi
 | `.claude/agents/<role>.md` | **Commit** | Generated subagent definitions are part of the project's reproducible setup; committing them lets a teammate clone and run the same squad. |
 | `.claude/worktrees/<role>/` | **Gitignore** | Git worktrees `spawn.sh` pre-creates for Multi-use teammates (per worktrees-doc tip); ephemeral, recreated on each spawn. |
 | `.claude/workflows/squad-dispatch.js` | **Commit** | Generated dynamic-Workflow dispatch script (One-time mode, optional); committing it makes the squad's fan-out rerunnable by anyone who clones. |
-
 | `.squad/squads/<slug>/` | **Commit** | Parked squads (see below) — same commit-grade state as the active squad, just inactive. |
 
 The shipped `.gitignore` matches exactly this policy. Users who want their generated roles to stay private can move them to `~/.claude/agents/` instead (user scope) — Claude Code's subagent scanner finds both locations.
@@ -886,13 +893,38 @@ What hard rules #14–#15 cost a human, stated as plainly as what they buy:
 
 > Zero new setup questions; one new mandatory friction point at verification, placed deliberately at the exact moment a tired human wants to rubber-stamp. That is the design working, and it is a real cost.
 
-## What v1 deliberately does not do
+## The honesty table
 
-- **Drift blocking.** `UserPromptSubmit` observes; it does not refuse. Drift policy is v2.
-- **Cross-session role memory.** `memory:` is a documented subagent frontmatter field — a persistent per-agent directory, scoped `user`/`project`/`local` — available to any generated role, but not auto-set by `squad-role` in v1. Future flag.
-- **Squad-of-squads composition.** Subagents can't spawn subagents (per docs). v1 does not model nested squads.
-- **Automatic mode escalation.** If a one-time turns into a multi-use, the user re-runs `squad-onboard`. No silent migration.
-- **Roster sync to remote.** All state is local under `.squad/`. Future: optional sync.
+Every "what's enforced, and what's merely asked" surface this plugin has, assembled here in one place. Each row already has a fuller local treatment — the surrounding mechanism, the code path, sometimes a worked example — at the section its rule number points to; this table exists so a reader doesn't have to find every edge of a mechanism by reading nine hundred lines. **Cut this section and the document loses its best feature.**
+
+| Rule | Surface | What's enforced | What's merely asked |
+| --- | --- | --- | --- |
+| #11 | The plan gate itself | A bare file-existence check on `.squad/role-plan-<agent_type>.md`, required before in-scope Edit/Write (outside `.squad/`) or in-sandbox Bash auto-approves. | Whether the record is honest, complete, or well-reasoned. The hook cannot tell a careful, evidence-graded plan from a one-line stub — that judgment is `squad-verify`'s, reading the record as process evidence, not the hook's. |
+| #11 | `acceptEdits` / `bypassPermissions`, including the Workflow dispatch path | Nothing — **the gate is inert here.** The session's own permission mode decides before this hook's decision is consulted (or overrides it; which of the two is not established — assume neither). | That the role plans first is asked of it by the baked spawn prompt's Step 0, not enforced by the hook, on this path. |
+| #7 / #11 / #13 | Worktree isolation | Nothing mid-run from the main checkout. A worktree-isolated role's engagement record *and* its belief-ledger claims file both live in that worktree's own `.squad/`, gitignored, invisible at the project root while the role runs. | **Both reach the root only at collect time**, not mid-run: `spawn.sh collect` copies `.squad/role-plan-<role>.md` and `.squad/world/claims-<role>.md` per active role, newer-mtime wins — run once at synthesis, never continuously, never automatically. A `squad-verify` run with no synthesis before it sees whatever the last collect left behind. |
+| #14 / #15 | Escalation resolution — the ruling | `escalations_open` is a mechanical set difference no role can *close*: the human's ruling is producible only through `squad-verify`, written to a file (`verification.md`) no role can reach, and the record's status enum has no `resolved` value for a role to write. What a role cannot do is manufacture the ruling. | Whether a role's `stop:` bound fires *honestly* at all — nothing watches for a bound that should have fired but didn't. And **a role can flip its own `status: escalated` back to `active`** — behaviorally identical to never having stopped, the acknowledged aspirational half of hard rule #14. |
+| #14 | Stop conditions themselves | `needs:` preconditions are checked at `squad-spawn`'s dispatch triage, and again by the role itself at the start of its run. | `stop:` bounds are **self-policed, not hook-enforced** — the role checks its own mid-run bound against its own conduct; there is no external monitor for it, ever. |
+| #12 | Partner-model privacy | Nothing. The plugin cannot enforce a `.gitignore` line — it can only propose one, once, at creation, as one half of the same write set as the file itself. | Privacy here is **a default offer, not a mechanism.** Declining the line while keeping the file is an informed, explicit opt-in to committing a model of a person — never described in this repo as "private," only as an offer that can be declined. |
+| #12 | Partner-model currency | Nothing. No section of `.squad/partner.md` expires on a timer. | Whether a line is still true of the human — nothing re-checks `Standing constraints`, and a `Beliefs to check` entry stays unchecked until a role happens to touch it or the human runs `update`. |
+| #12 | Expertise adaptation | Nothing, on purpose. No `## Expertise` section shipped; no mechanism reads a self-graded skill level; **nothing in this plugin adapts explanation depth to expertise.** | Nothing either. This is the one paper desideratum (*"adapts strategy to an expert versus a layperson"*) the design cut rather than asked of a role — a self-graded skill level is never checked against a consequence, so there was nothing honest to ask for. |
+| #13 | The four required belief fields | `world.sh`'s parser: a block missing `Claim`, `Source`, `Grade`, or `Observed` is invalid, counted, and excluded from every projected index — it never reaches a prompt. | Whether `Source:` is true, `Grade:` is honest, or `Claim:` is actually falsifiable. **Belief grades are self-reported**; the parser reads text, it has no way to check the world. |
+| #13 | Conflict detection (`disputed`) | Derived, mechanically, from two `live` blocks sharing the identical key across different owners' files — never a field a role can set or clear to fake or hide a dispute. | **Only identically-keyed beliefs are ever compared.** Two roles contradicting each other in different words, under different keys, go unnoticed — the ledger catches key collisions, not disagreement. |
+| #13 (research) | The composition loop | Nothing. **There is no artifact of the priors-only decomposition to diff against**, so no script, hook, or test can confirm a rewrite rule fired, that a citation belongs to the workstream it's stapled to, or that the printed delta line is true. | Whether the decomposition was actually *rewritten* by research rather than generated from priors and decorated with belief keys afterward — the feature's entire justification, carried by `squad-onboard`'s skill body alone. |
+| #13 (research) | The R2 contradiction stop | Nothing. `world.sh` has no R2 check of any kind — **the stop is an instruction, not a mechanism**: it lives entirely in `squad-world`'s skill body, applied in the main session before Gate 2. | Whether the check actually ran, and whether it caught every genuine contradiction. |
+
+## What v1.0 deliberately does not do
+
+- **No drift blocking.** `UserPromptSubmit` stays observational — it tags every turn with the goal, it never refuses one. Drift policy is a future release.
+- **No plan-gated two-stage dispatch.** Deferred to v1.1, not cut. The keep/kill review found it doubles dispatch cost for the gated role and recurs as a decline-by-default offer every engagement, while the engagement record, the hook gate, and the verify integration this release ships already stand without it — see `docs/ROADMAP.md`, ranked gap 8.
+- **No semantic contradiction detection.** The belief ledger's `disputed` check is a key-equality test, not a meaning check — see "The honesty table" above.
+- **No TTL on beliefs.** A belief observed a year ago is still `live` until something contests or retires it; nothing ages it out on a timer.
+- **No expertise-adaptation.** Cut deliberately, not merely unbuilt — see "The honesty table" and "The partner model" above.
+- **No explicit-ask emission from the hook.** `PermissionRequest` never reads `.squad/partner.md`'s "Decide vs. ask" list; surfacing an ask-first item is entirely the role's own self-report in its baked prompt, never a hook decision.
+- **No cross-squad belief merge.** A parked squad's ledger travels with it under `.squad/squads/<slug>/world/`; nothing merges two squads' beliefs into one on switch or restore.
+- **Squad-of-squads still unmodelled.** Subagents can't spawn subagents (per docs); v1.0 does not model nested squads.
+- **No cross-session role memory.** `memory:` is a documented subagent frontmatter field — a persistent per-agent directory, scoped `user`/`project`/`local` — available to any generated role, but `squad-role` still does not set it. Future flag.
+- **No automatic mode escalation.** If a One-time squad turns into a Multi-use one, the human re-runs `squad-onboard`. No silent migration.
+- **Roster sync still local.** All state lives under `.squad/`; nothing syncs it across machines or teammates.
 
 ## Version targets
 

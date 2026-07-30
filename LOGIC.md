@@ -20,7 +20,7 @@ pieces talk.
 flowchart TB
     subgraph PLUGIN["📦 cheeky-squad-os (ships)"]
         direction TB
-        subgraph SKILLS["skills/"]
+        subgraph SKILLS["skills/ (9)"]
             ONB["squad-onboard<br/><i>entry point</i>"]
             GOAL["squad-goal<br/><i>owns goal.md</i>"]
             ROLE["squad-role<br/><i>role generator</i>"]
@@ -28,16 +28,18 @@ flowchart TB
             ROST["squad-roster<br/><i>owns roster.json</i>"]
             SPAWN["squad-spawn<br/><i>dispatch</i>"]
             VER["squad-verify<br/><i>checks definition of done</i>"]
+            WLD["squad-world<br/><i>belief ledger + research</i>"]
+            PTNR["squad-partner<br/><i>the partner model</i>"]
         end
         subgraph CMDS["commands/"]
             WF["/squad-workflow<br/><i>Workflow dispatch</i>"]
         end
-        subgraph HOOKS["hooks/"]
+        subgraph HOOKS["hooks/ (3)"]
             H1["SessionStart"]
             H2["UserPromptSubmit"]
             H3["PermissionRequest"]
         end
-        subgraph TPL["templates/"]
+        subgraph TPL["templates/ (10)"]
             T1["goal.md"]
             T2["role-goal.md"]
             T3["role-definition.md"]
@@ -45,6 +47,9 @@ flowchart TB
             T5["squad-dispatch.workflow.js"]
             T6["verification.md"]
             T7["role-comm.md"]
+            T8["role-plan.md<br/><i>rule #11</i>"]
+            T9["world-claims.md<br/><i>rule #13</i>"]
+            T10["partner.md<br/><i>rule #12</i>"]
         end
     end
 
@@ -58,6 +63,9 @@ flowchart TB
         WS[".squad/workspaces/&lt;role&gt;/"]
         WFJS[".claude/workflows/squad-dispatch.js"]
         VMD[".squad/verification.md"]
+        RPMD[".squad/role-plan-&lt;role&gt;.md"]
+        WCMD[".squad/world/claims-&lt;owner&gt;.md"]
+        PMD[".squad/partner.md"]
     end
 
     ONB --> GOAL --> GMD
@@ -68,30 +76,42 @@ flowchart TB
     ROLE --> ENV
     ENV --> WS
     ENV --> ROST
+    ONB -.offers gates 1 &amp; 2.-> WLD
+    WLD --> WCMD
+    ONB -.offers once, skippable.-> PTNR
+    PTNR --> PMD
     ONB --> SPAWN
     SPAWN --> ENV
     SPAWN -->|One-time| AGENTS
     SPAWN -->|Multi-use| WT
+    SPAWN -.bakes into spawn prompt.-> PMD
     SPAWN -.points user at.-> WF
     WF --> WFJS
     WF --> T5
     SPAWN -.hands off to.-> VER
     VER --> VMD
     VER --> T6
+    SPAWN -.role writes before acting, rule #11.-> RPMD
+    SPAWN -.role may assert, rule #13.-> WCMD
 
     H1 -.reads.-> GMD
+    H1 -.reads.-> PMD
     H2 -.reads.-> GMD
     H3 -.reads.-> RJSON
+    H3 -.gates auto-approval on.-> RPMD
 
     classDef ship fill:#e8f0fe,stroke:#4285f4,color:#111;
     classDef gen fill:#e6f4ea,stroke:#34a853,color:#111;
-    class ONB,GOAL,ROLE,ROST,SPAWN,VER,WF,H1,H2,H3,T1,T2,T3,T4,T5,T6,T7 ship;
-    class GMD,RGMD,RJSON,AGENTS,WT,WFJS,VMD gen;
+    class ONB,GOAL,ROLE,ROST,SPAWN,VER,WLD,PTNR,WF,H1,H2,H3,T1,T2,T3,T4,T5,T6,T7,T8,T9,T10 ship;
+    class GMD,RGMD,RJSON,AGENTS,WT,WFJS,VMD,WS,RPMD,WCMD,PMD gen;
 ```
 
 **Reading it:** blue = ships in the plugin (zero role files). Green = generated
 per goal in the user's project. The hooks (dashed) only *read* generated state;
-they never write it.
+they never write it. `squad-spawn`'s dashed edges into `RPMD`/`WCMD` are a
+simplification — the artifacts are written by the **dispatched role itself**,
+not by `squad-spawn` directly; the edges mark where in the flow that writing
+is gated (hard rules #11 and #13), not who holds the pen.
 
 ---
 
@@ -789,9 +809,10 @@ row.
 worker may need to see — but unlike the goal it is **optional** (absent on any
 project that never ran `squad-partner`) and **gitignored by default** (so
 typically absent inside a worktree even when it exists at the project root).
-Both properties shape how it travels; full artifact schema, the hook
-verification, and the honesty table live in `ARCHITECTURE.md § "The partner
-model"` — this section is the channel diagram only.
+Both properties shape how it travels; full artifact schema and the hook
+verification live in `ARCHITECTURE.md § "The partner model"`, and the
+enforced-vs-asked rows for it live in `ARCHITECTURE.md § "The honesty
+table"` — this section is the channel diagram only.
 
 **Who writes it.** `squad-partner` is the only writer, ever — every arrow
 below is a read.

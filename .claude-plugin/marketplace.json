@@ -9,7 +9,7 @@
       "name": "cheeky-squad-os",
       "source": "./",
       "description": "Ship the discipline, not the team. Turn any Claude Code goal into a bespoke squad of roles generated from the goal itself.",
-      "version": "0.4.1",
+      "version": "1.0.0",
       "author": {
         "name": "cheeky-amit"
       },
@@ -19,7 +19,9 @@
         "subagents",
         "agent-teams",
         "workflow",
-        "discipline"
+        "discipline",
+        "thought-partner",
+        "human-in-the-loop"
       ],
       "category": "productivity",
       "tags": [

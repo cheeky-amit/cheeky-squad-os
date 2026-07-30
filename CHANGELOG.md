@@ -3,9 +3,48 @@
 All notable changes to cheeky-squad-os are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [SemVer](https://semver.org/).
 
-## [Unreleased]
+## [1.0.0] - 2026-07-30
 
-Work toward 1.0.0 — "the partnership release". Entries accumulate here and the version bumps once, when the release lands.
+The partnership release. v0.x wrote the squad's obligations to the goal — bespoke
+roles, scoped responsibilities, structured hand-offs, a verified Definition of done.
+v1.0 writes the obligations the human and the squad owe *each other*, and for the
+first time, one rule binds the human, not the squad.
+
+**Five hard rules, each with a shipped mechanism:**
+
+| Rule | Law | Mechanism |
+| --- | --- | --- |
+| **#11** | Autonomy is purchased with intent. | `.squad/role-plan-<role>.md`, the engagement record |
+| **#12** | Told, not inferred. | `.squad/partner.md`, written only by `squad-partner` |
+| **#13** | A belief with no source is a rumor. | `.squad/world/claims-<owner>.md`, parsed by `world.sh` |
+| **#14** | Stopping well is a deliverable. | `## Stop conditions` + `status: escalated` engagement records |
+| **#15** | The human meets the same evidence bar. | `PASS (attested)` in `.squad/verification.md` |
+
+Two new skills — `squad-world` (shared world model + guided research) and
+`squad-partner` (the partner model) — take skills 7 → 9. Templates 7 → 10
+(`role-plan.md`, `partner.md`, `world-claims.md` are new). Hooks hold at 3.
+`bats` grows 79 → 238 across 6 suites (up from 4 suites at 0.4.1); CI grows
+from 3 checks to 5 (mermaid-lint and `node --check` on the workflow template
+are new).
+
+**Four defects in previously-shipped code**, found and closed before this release:
+
+- the `.squad/` reservation's forgery hole, reopened by a `./` path prefix, plus its
+  two follow-on paths — the scaffolding-Bash surface never consulting the
+  reservation at all, and a legitimate human ruling silently ignored when recorded
+  in canonical (indented) YAML;
+- worktree-isolated roles losing auto-approval entirely when `$CLAUDE_PROJECT_DIR`
+  pointed at the main checkout instead of the worktree holding `.squad/`;
+- four mermaid `sequenceDiagram` blocks (`ARCHITECTURE.md`, `LOGIC.md`,
+  `LOGIC.local.md`, `docs/workflows-runtime-reference.md`) that had never
+  rendered on GitHub, now guarded by `tests/mermaid-lint.sh` in CI;
+- `templates/squad-dispatch.workflow.js`, shipped JavaScript CI never
+  syntax-checked, now gated by `node --check`.
+
+One novelty claim, hedged: to the best of a search at the time of writing, no
+other agent-orchestration framework ships the Collins et al. (arXiv:2408.03943)
+desiderata as working infrastructure rather than as a citation. Search coverage
+is not proof, and we did not attempt an exhaustive one.
 
 ### Added
 
@@ -79,7 +118,7 @@ Work toward 1.0.0 — "the partnership release". Entries accumulate here and the
 
 - **A recorded human ruling was silently ignored when written in canonical YAML.** `verify.sh`'s `resolved_escalations` parser required the block-style dash at column 0, so the two-space-indented list that `templates/verification.md` and `examples/klaviyo-audit.md` both document never matched. The subtraction found nothing to subtract, `escalations_open` stayed above zero forever, and `met` became unreachable no matter what the human ruled. Indentation is now accepted; flow style still is too.
 
-- **Three mermaid diagrams had never rendered.** `ARCHITECTURE.md`'s dispatch sequence diagram and the end-to-end sequence diagrams in `LOGIC.md` and `LOGIC.local.md` failed to parse on GitHub, for two separate reasons — both found by actually rendering every block rather than reading them:
+- **Four mermaid diagrams had never rendered.** `ARCHITECTURE.md`'s dispatch sequence diagram, the end-to-end sequence diagrams in `LOGIC.md` and `LOGIC.local.md`, and the dispatch hand-off diagram in `docs/workflows-runtime-reference.md` failed to parse on GitHub, for two separate reasons — both found by actually rendering every block rather than reading them:
   - a **`;` inside a sequence message** is a mermaid *statement separator*, so the message truncated mid-sentence and the remainder parsed as a bare statement;
   - **`&lt;`/`&gt;` entities break the sequence parser.** This is the exact opposite of the flowchart rule — in a flowchart node label you *must* escape angle brackets, and this repo had correctly learned that, then applied it one block over where it is a bug.
 
