@@ -1,6 +1,6 @@
 # Worked Example: Klaviyo Lifecycle Audit
 
-A walkthrough of using **cheeky-squad-os** to spin up a bespoke three-role squad for a one-week Klaviyo audit. This is agentic business infrastructure work — not engineering — and the squad is generated specifically for this goal. No generic team applied. Section 2 also walks guided domain research end to end: both human gates, one question the human cuts and one they add, one finding that comes back unanswered, a grade the human downgrades and a finding they drop, and the delta line that changes the decomposition before a single role is proposed.
+A walkthrough of using **cheeky-squad-os** to spin up a bespoke three-role squad for a one-week Klaviyo audit. This is agentic business infrastructure work — not engineering — and the squad is generated specifically for this goal. No generic team applied. Section 2 also walks guided domain research end to end: both human gates, one question the human cuts and one they add, one finding that comes back unanswered, a grade the human downgrades and a finding they drop, and the delta line that changes the decomposition before a single role is proposed. Section 10 shows the founder's `.squad/partner.md` — on file since her very first session with the plugin — changing three decisions a role made in this same run, without adding a single new file or metric.
 
 ---
 
@@ -186,7 +186,17 @@ post-purchase, winback, sunset) plus list health and deliverability.
 - Not auditing SMS flows — email only
 - Not redesigning templates — flow logic, timing, segments only
 - Not touching production Klaviyo account — read-only data pulls
+- Not quoting a revenue-impact number without naming the exact data point it
+  rests on (from `.squad/partner.md`'s standing constraints)
 ```
+
+That last bullet is the only line in this goal the founder did not state during
+onboarding — `squad-onboard` read her existing `.squad/partner.md` silently at
+Step 3 and pre-populated it from **Standing constraints** (hard rule #12),
+attributed inline so it is never mistaken for a goal-specific exclusion. No new
+question was asked to produce it; she had already said it, in an earlier
+session, and it binds every squad this project ever runs. See section 10 for the
+file itself and the three decisions it changed.
 
 ---
 
@@ -785,3 +795,89 @@ can tell a human closed this gap, not a script. With every signal PASS and
 `escalations_open: 0`, the verdict is `met`, and `reports/klaviyo/final-report.md`
 ships exactly as it does in section 7 — one day later than the clean run,
 with an audit trail of exactly what went wrong and who signed off on the fix.
+
+---
+
+## 10. The partner model — three decisions it changed
+
+This founder already has `.squad/partner.md` on disk, written in her very
+first `cheeky-squad-os` session — `squad-onboard` read it silently this time,
+no new question, no re-confirmation. Its standing constraint became the last,
+inline-attributed bullet of the goal's Out of scope in section 3, and its full
+body rode every spawn prompt in sections 6 and 9 alongside the goal and role
+goal (hard rule #4):
+
+```markdown
+---
+created: 2026-03-11T09:00:00Z
+updated: 2026-03-11T09:00:00Z
+---
+# Partner model
+
+## Decide vs. ask
+
+Decide without me: report structure, formatting, and how to order or
+weight competing findings — I'd rather see the finished call than be
+asked to make it.
+Always ask first: anything that would touch the live Klaviyo account,
+even a read someone glancing at the account's activity log could mistake
+for a change.
+
+## Standing constraints
+
+Never quote a revenue-impact number without naming the exact data point
+it rests on — I've been burned once by a number that couldn't survive a
+follow-up question from the board.
+
+## Beliefs to check
+
+I think our welcome-flow benchmark (~45% open/click) is still roughly
+right, but I haven't rechecked it since we switched ESP-adjacent vendors
+six months ago.
+```
+
+**Three decisions a role made differently because of it — not a new file, not
+a new metric, the same run:**
+
+1. **`report-writer` decided the report's structure without asking.** Its
+   role goal (§4) states a hard trade-off with no obvious right answer: *"Compliance
+   issues marked high severity must appear in the top 3 regardless of revenue
+   impact."* Facing that call, a cautious role with no partner model might
+   reasonably have escalated it as a judgment call for the founder. This one
+   didn't need to — `Decide without me: … how to order or weight competing
+   findings` put exactly this class of call outside the ask-first line, so
+   Fix #2 (the compliance bounce-rate flag) sits at #2 in the final report
+   (§7) ahead of two higher-dollar fixes, decided and shipped, never surfaced
+   as a question.
+2. **`report-writer` named the data point behind every dollar figure.** Look
+   again at any `**Evidence:**` line under §7's fixes — cart volume, the
+   exact benchmark comparison, the file the number traces to. The role goal
+   (§4) only asked for "a confidence score with rationale," a thinner bar.
+   The standing constraint — *never quote a revenue-impact number without
+   naming the data point it rests on* — is what actually binds the report to
+   that level of specificity, on every fix, not just the ones the role goal
+   happened to spell out.
+3. **`report-writer` reported back on the founder's own benchmark, instead
+   of quoting it.** Her `Beliefs to check` entry is the ~45% welcome-flow
+   open/click figure — the same thing research question 3 came back
+   **unanswered** on at Gate 2 (§2), and the same thing `squad-role` turned
+   into the role's `needs:` bullet that made triage print
+   `starts: YOU — report-writer` (§6). Baked into the prompt as a
+   belief-to-check, it stopped being a number to reuse and became a thing to
+   test. The role tested it against `data/klaviyo/` and could not settle it,
+   so it ended its run with one line back to the orchestrator —
+   `[belief-check: welcome-flow open/click benchmark ~45% is still roughly
+   right] could not test — nothing in data/klaviyo/ measures open/click at
+   the flow level for this window` — which `squad-spawn`'s per-spawn
+   synthesis printed to the founder verbatim, in the role's own words rather
+   than a paraphrase. The visible consequence is what
+   is **missing** from §7: no fix in the final report quotes a welcome-flow
+   benchmark percentage. Without the partner model that ~45% was a figure
+   the founder had used before and a role would have inherited as settled;
+   with it, the report routes around a number nobody could stand behind and
+   the founder learns her six-month-old assumption is still untested.
+
+A partner model assembled by inference would have guessed at all three of
+these and gotten at least one wrong. This one didn't guess — the founder said
+all three lines herself, in an earlier session, and `squad-partner` wrote
+down exactly what she said.

@@ -10,6 +10,20 @@
 # squad goal is in scope for every session turn. The goal ALWAYS comes
 # first in that context.
 #
+# PARTNER MODEL (hard rule #12)
+# ------------------------------
+# .squad/partner.md — the human's own standing brief, written only by
+# squad-partner (told, not inferred) — is appended immediately after the
+# goal when it exists and is non-empty. The check is a bare `[ -s ]` size
+# test, no jq required: an absent file or a zero-byte one changes nothing,
+# byte for byte, versus a build with no partner-model support at all. This
+# is the SessionStart half of hard rule #12's two read paths — the other is
+# squad-spawn's prompt-baking into subagents, which this hook cannot reach
+# (SessionStart does not fire for subagents; see squad-spawn's own hard
+# rule #4 handling). A session and an Agent Teams teammate DO fire this
+# hook, so this is their path to seeing the partner model without anyone
+# re-reading the file mid-session.
+#
 # OPEN-ESCALATION NOTICE (hard rules #14, #15)
 # ----------------------------------------------
 # A role that hit a declared `stop:` bound ends its run with
@@ -41,7 +55,10 @@
 #
 # ABSENCE CONTRACT: no .squad/ dir, no role-plan-*.md records, or a count of
 # zero produces NO notice — output is byte-identical to a build that never
-# shipped this feature. Verified by tests/session-start.bats.
+# shipped this feature. Same contract for the partner model: no
+# .squad/partner.md, or a zero-byte one, appends nothing — output is
+# byte-identical to a build with no partner-model support. Verified by
+# tests/session-start.bats.
 #
 # Always exits 0. Never blocks session start.
 
@@ -51,6 +68,7 @@ PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$PWD}"
 SQUAD_DIR="$PROJECT_DIR/.squad"
 GOAL="$SQUAD_DIR/goal.md"
 VERIFICATION="$SQUAD_DIR/verification.md"
+PARTNER="$SQUAD_DIR/partner.md"
 
 # Drain stdin (the hook input JSON). We don't currently use any fields from
 # it — SessionStart fires unconditionally and the goal/notice are the same
@@ -183,6 +201,24 @@ if [ -f "$GOAL" ]; then
   CTX="$PREAMBLE"$'\n\n'"$CONTENT"
 else
   CTX='no squad goal set — run /cheeky-squad-os:squad-onboard to set one'
+fi
+
+# --- Partner model (hard rule #12) ---------------------------------------------
+#
+# Appended immediately after the goal — the goal always comes first, this
+# always comes second. `[ -s ]` is a plain size test (exists AND non-empty);
+# no jq needed to decide whether to append. .squad/partner.md describes the
+# human, not the squad, so its presence here does not depend on GOAL
+# existing above — a project can have a partner model before it has ever
+# run squad-onboard. The content itself still passes through emit_context's
+# existing jq path below for safe JSON-escaping, same as the goal always
+# has — that dependency on jq is pre-existing, not new here.
+if [ -s "$PARTNER" ]; then
+  PARTNER_CONTENT=$(cat "$PARTNER" 2>/dev/null || printf '%s' '')
+  if [ -n "$PARTNER_CONTENT" ]; then
+    PARTNER_PREAMBLE='[cheeky-squad-os partner model in scope — .squad/partner.md, hard rule #12: told, not inferred]'
+    CTX="$CTX"$'\n\n'"$PARTNER_PREAMBLE"$'\n\n'"$PARTNER_CONTENT"
+  fi
 fi
 
 if [ -n "$NOTICE" ]; then

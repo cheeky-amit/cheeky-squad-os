@@ -14,6 +14,16 @@
 # resolved_escalations: list, never via anything on the role-plan record
 # itself (there is no `resolved` status, no `resolution:` field — a role
 # has nothing in its own file it could flip to silence this notice).
+#
+# Since hard rule #12, the hook also appends the partner model
+# (.squad/partner.md) immediately after the goal:
+#   goal-only behavior unchanged when no partner.md exists · partner
+#   appended after the goal, in the documented order relative to the
+#   escalation notice · appended even with no squad goal set (the file
+#   describes the human, not the squad) · empty partner.md ([ -s ] gate)
+#   changes nothing, byte-identical · absent partner.md is byte-identical
+#   to a build with no partner-model support · exit 0 even when
+#   partner.md is unreadable.
 
 setup() {
   HOOK="$BATS_TEST_DIRNAME/../hooks/session-start.sh"
@@ -39,6 +49,13 @@ ctx() {
 publish_goal() {
   mkdir -p "$PROJECT_DIR/.squad"
   printf '%s\n' "$1" > "$PROJECT_DIR/.squad/goal.md"
+}
+
+# publish_partner <content> → writes .squad/partner.md with the given
+# content (non-empty by construction, since printf always adds a newline).
+publish_partner() {
+  mkdir -p "$PROJECT_DIR/.squad"
+  printf '%s\n' "$1" > "$PROJECT_DIR/.squad/partner.md"
 }
 
 # publish_plan <role> <status> → an engagement record for <role> with the
@@ -201,5 +218,104 @@ Ship the thing.'
   [ "$status" -eq 0 ]
   [[ "$output" == *"jq not installed"* ]]
   [[ "$output" == *"full goal injection disabled"* ]]
+  [[ "$output" == *"1 open escalation is waiting on your ruling"* ]]
+}
+
+# --- partner model (hard rule #12) ----------------------------------------------
+
+@test "goal-only behavior is unchanged when no partner.md exists" {
+  publish_goal 'Goal body.'
+  run_hook
+  [ "$status" -eq 0 ]
+  out="$(ctx)"
+  [[ "$out" == *"Goal body."* ]]
+  [[ "$out" != *"partner model"* ]]
+  [[ "$out" != *"partner.md"* ]]
+}
+
+@test "partner model is appended after the goal, when present and non-empty" {
+  publish_goal 'Goal body.'
+  publish_partner '# Partner model
+
+## Decide vs. ask
+
+Always ask first: anything customer-facing.'
+  run_hook
+  [ "$status" -eq 0 ]
+  out="$(ctx)"
+  [[ "$out" == *"Goal body."* ]]
+  [[ "$out" == *"[cheeky-squad-os partner model in scope — .squad/partner.md, hard rule #12: told, not inferred]"* ]]
+  [[ "$out" == *"Always ask first: anything customer-facing."* ]]
+  goal_pos=$(printf '%s' "$out" | grep -bo "Goal body." | head -1 | cut -d: -f1)
+  partner_pos=$(printf '%s' "$out" | grep -bo "Always ask first: anything customer-facing." | head -1 | cut -d: -f1)
+  [ "$goal_pos" -lt "$partner_pos" ]
+}
+
+@test "partner model is appended even with no squad goal set" {
+  publish_partner 'Partner content with no goal on file.'
+  run_hook
+  [ "$status" -eq 0 ]
+  out="$(ctx)"
+  [[ "$out" == *"no squad goal set"* ]]
+  [[ "$out" == *"Partner content with no goal on file."* ]]
+}
+
+@test "partner model, escalation notice, and goal coexist in the documented order" {
+  publish_goal 'Goal body.'
+  publish_plan "alpha" "escalated"
+  publish_partner 'Standing constraint: never touch prod directly.'
+  run_hook
+  [ "$status" -eq 0 ]
+  out="$(ctx)"
+  goal_pos=$(printf '%s' "$out" | grep -bo "Goal body." | head -1 | cut -d: -f1)
+  partner_pos=$(printf '%s' "$out" | grep -bo "Standing constraint" | head -1 | cut -d: -f1)
+  notice_pos=$(printf '%s' "$out" | grep -bo "open escalation" | head -1 | cut -d: -f1)
+  [ "$goal_pos" -lt "$partner_pos" ]
+  [ "$partner_pos" -lt "$notice_pos" ]
+}
+
+@test "empty partner.md file ([ -s ] gate) changes nothing, byte-identical" {
+  publish_goal 'Goal body.'
+  run_hook
+  baseline="$output"
+
+  mkdir -p "$PROJECT_DIR/.squad"
+  : > "$PROJECT_DIR/.squad/partner.md"   # zero bytes — exists but empty
+
+  run_hook
+  [ "$status" -eq 0 ]
+  [ "$output" = "$baseline" ]
+}
+
+@test "absent partner.md is byte-identical to a build with no partner-model support" {
+  publish_goal 'Goal body.'
+  publish_plan "alpha" "escalated"
+  run_hook
+  [ "$status" -eq 0 ]
+  out="$(ctx)"
+  [[ "$out" == *"Goal body."* ]]
+  [[ "$out" == *"1 open escalation"* ]]
+  [[ "$out" != *"partner"* ]]
+}
+
+@test "exit 0 even when partner.md is unreadable" {
+  publish_goal 'Goal body.'
+  publish_partner 'Some standing constraint.'
+  chmod 000 "$PROJECT_DIR/.squad/partner.md"
+  run_hook
+  [ "$status" -eq 0 ]
+  chmod 644 "$PROJECT_DIR/.squad/partner.md"
+}
+
+@test "missing jq: partner model degrades the same way goal content does (no crash, notice still fires)" {
+  publish_goal 'Goal body.'
+  publish_plan "alpha" "escalated"
+  publish_partner 'Some standing constraint.'
+  bindir="$(mktemp -d)"
+  for b in bash cat grep awk; do ln -s "$(command -v "$b")" "$bindir/$b"; done
+  run env -i PATH="$bindir" CLAUDE_PROJECT_DIR="$PROJECT_DIR" bash -c "printf '{}' | '$HOOK'"
+  rm -rf "$bindir"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"jq not installed"* ]]
   [[ "$output" == *"1 open escalation is waiting on your ruling"* ]]
 }

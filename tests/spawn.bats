@@ -283,3 +283,57 @@ render_workflow_prompt() {
   [ "$status" -eq 0 ]
   [[ "$output" != *"Shared world model"* ]]
 }
+
+# --- The workflow dispatch template's partner-model wiring (hard rule #12) ------
+#
+# Exactly the same exposure as the worldIndex block above, and for the same
+# reason: `node --check` proves the file parses, never that args.partner
+# reaches the prompt. The partner model is the one section a role cannot
+# recover by reading the disk (the file is gitignored by default), so a
+# silent drop here is unrecoverable rather than merely degraded — and the
+# absence contract (no partner.md => byte-identical prompts) is only a
+# guarantee if something asserts it.
+
+@test "workflow template: args.partner reaches the spawned prompt verbatim" {
+  command -v node >/dev/null || skip "node not installed"
+  TEMPLATE="$BATS_TEST_DIRNAME/../templates/squad-dispatch.workflow.js"
+  PM='# Partner model\n\n## Decide vs. ask\nAlways ask first: anything customer-facing.'
+  run render_workflow_prompt "{\"goal\":\"G\",\"roles\":[{\"name\":\"scout\"}],\"partner\":\"$PM\"}"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"# Partner model (hard rule #12)"* ]]
+  [[ "$output" == *"Always ask first: anything customer-facing."* ]]
+  # the binding block, and the never-write instruction acceptEdits makes load-bearing
+  [[ "$output" == *"[surfaced-ask-first]"* ]]
+  [[ "$output" == *"[belief-check:"* ]]
+  [[ "$output" == *"squad-partner is its only writer"* ]]
+}
+
+@test "workflow template: an absent partner renders no partner section at all" {
+  command -v node >/dev/null || skip "node not installed"
+  TEMPLATE="$BATS_TEST_DIRNAME/../templates/squad-dispatch.workflow.js"
+  run render_workflow_prompt '{"goal":"G","roles":[{"name":"scout"}]}'
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"Partner model"* ]]
+  [[ "$output" != *"surfaced-ask-first"* ]]
+  [[ "$output" != *"partner.md"* ]]
+}
+
+@test "workflow template: a blank partner renders no partner section either" {
+  command -v node >/dev/null || skip "node not installed"
+  TEMPLATE="$BATS_TEST_DIRNAME/../templates/squad-dispatch.workflow.js"
+  run render_workflow_prompt '{"goal":"G","roles":[{"name":"scout"}],"partner":"   \n  "}'
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"Partner model"* ]]
+}
+
+@test "workflow template: the partner model sits after the goal and before the role goal" {
+  command -v node >/dev/null || skip "node not installed"
+  TEMPLATE="$BATS_TEST_DIRNAME/../templates/squad-dispatch.workflow.js"
+  run render_workflow_prompt '{"goal":"GOALBODY","roles":[{"name":"scout"}],"partner":"PARTNERBODY"}'
+  [ "$status" -eq 0 ]
+  goal_pos=$(printf '%s' "$output" | grep -bo "GOALBODY" | head -1 | cut -d: -f1)
+  partner_pos=$(printf '%s' "$output" | grep -bo "PARTNERBODY" | head -1 | cut -d: -f1)
+  rolegoal_pos=$(printf '%s' "$output" | grep -bo "# Your role's goal" | head -1 | cut -d: -f1)
+  [ "$goal_pos" -lt "$partner_pos" ]
+  [ "$partner_pos" -lt "$rolegoal_pos" ]
+}
