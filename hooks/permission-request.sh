@@ -126,6 +126,26 @@ if [ -z "$AGENT_TYPE" ]; then
   exit 0
 fi
 
+# Portable v2 exports namespace provider discovery IDs so user/project agents
+# cannot collide. The canonical roster keeps the provider-neutral role ID. Map
+# only the exact namespace declared by the adjacent manifest; a missing or
+# mismatched manifest defers instead of guessing. Legacy rosters have no
+# schema_version and continue to use agent_type byte-for-byte.
+ROLE_NAME="$AGENT_TYPE"
+if jq -e '.schema_version == 2' "$ROSTER" >/dev/null 2>&1; then
+  MANIFEST="$PROJECT_DIR/.squad/manifest.json"
+  [ -f "$MANIFEST" ] || exit 0
+  SQUAD_ID=$(jq -r 'select(.schema_version == 2) | .squad.id // empty' "$MANIFEST" 2>/dev/null)
+  case "$SQUAD_ID" in
+    ''|*[!a-z0-9.-]*) exit 0 ;;
+  esac
+  ROLE_PREFIX="${SQUAD_ID//./-}--"
+  case "$AGENT_TYPE" in
+    "$ROLE_PREFIX"*) ROLE_NAME="${AGENT_TYPE#"$ROLE_PREFIX"}" ;;
+    *) exit 0 ;;
+  esac
+fi
+
 # Resolve project root to a canonical absolute path (shared by both surfaces).
 PROJECT_ABS=$(cd "$PROJECT_DIR" 2>/dev/null && pwd)
 if [ -z "$PROJECT_ABS" ]; then
@@ -383,8 +403,8 @@ case "$TOOL_NAME" in
     # The role must be registered before any grant is considered — an
     # unregistered agent_type gets nothing, on either surface below.
     ROLE_JSON=$(printf '%s' "$(cat "$ROSTER")" \
-      | jq -c --arg name "$AGENT_TYPE" \
-          'first(.roles[] | select(.name == $name)) // empty' 2>/dev/null)
+      | jq -c --arg name "$ROLE_NAME" \
+          'first(.roles[] | select((.name // .id // "") == $name)) // empty' 2>/dev/null)
     if [ -z "$ROLE_JSON" ]; then
       exit 0  # unknown role → defer
     fi
@@ -395,7 +415,7 @@ case "$TOOL_NAME" in
       WS=$(printf '%s' "$ROLE_JSON" \
         | jq -r '.environment.workspace // empty' 2>/dev/null)
       WS="${WS%/}"
-      if squad_grant "$REL_PATH" "$AGENT_TYPE" "$WS"; then
+      if squad_grant "$REL_PATH" "$ROLE_NAME" "$WS"; then
         emit_allow
       fi
       exit 0  # granted or not, .squad/ never falls through to file_scope
@@ -404,11 +424,12 @@ case "$TOOL_NAME" in
     # ----- The plan gate (hard rule #11) -------------------------------------
     # Outside .squad/, scope auto-approval is conditioned on the role having
     # declared its intent first. Defer — never deny — until it has.
-    if ! has_engagement_record "$AGENT_TYPE"; then
+    if ! has_engagement_record "$ROLE_NAME"; then
       exit 0
     fi
 
-    SCOPES=$(printf '%s' "$ROLE_JSON" | jq -r '.file_scope[]?' 2>/dev/null)
+    SCOPES=$(printf '%s' "$ROLE_JSON" \
+      | jq -r '(.file_scope // .file_ownership.include // [])[]?' 2>/dev/null)
     if [ -z "$SCOPES" ]; then
       exit 0  # no file_scope → defer
     fi
@@ -436,14 +457,14 @@ case "$TOOL_NAME" in
 
     # The plan gate applies to the sandbox surface too (hard rule #11) — a role
     # scaffolding its workspace is still acting, and intent is bought first.
-    if ! has_engagement_record "$AGENT_TYPE"; then
+    if ! has_engagement_record "$ROLE_NAME"; then
       exit 0
     fi
 
     # The role's sandbox root. No declared workspace → no sandbox → defer.
     WS=$(printf '%s' "$(cat "$ROSTER")" \
-      | jq -r --arg name "$AGENT_TYPE" \
-          '.roles[] | select(.name == $name) | .environment.workspace // empty' 2>/dev/null)
+      | jq -r --arg name "$ROLE_NAME" \
+          '.roles[] | select((.name // .id // "") == $name) | .environment.workspace // empty' 2>/dev/null)
     if [ -z "$WS" ]; then
       exit 0
     fi

@@ -551,6 +551,47 @@ JSON
   printf '%s' "$output" | jq -e '.hookSpecificOutput.decision.behavior == "allow"'
 }
 
+@test "portable v2: exact namespaced agent maps to canonical role ownership" {
+  cat > "$PROJECT_DIR/.squad/manifest.json" <<'JSON'
+{
+  "schema_version": 2,
+  "squad": {"id": "cheeky.portability-demo", "name": "Portability demo"},
+  "execution_mode": "one-time",
+  "destination": "project",
+  "providers": ["claude", "codex"],
+  "runtime_owner": "claude",
+  "export_version": "1.1.0"
+}
+JSON
+  cat > "$PROJECT_DIR/.squad/roster.json" <<'JSON'
+{
+  "schema_version": 2,
+  "squad_goal_ref": ".squad/goal.md",
+  "execution_mode": "one-time",
+  "roles": [
+    {
+      "id": "report-writer",
+      "purpose": "Write report",
+      "description": "Write report",
+      "file_ownership": {"include": ["reports/final/**"], "exclude": []},
+      "capabilities": ["filesystem.write"],
+      "reasoning": {"profile": "balanced", "effort": "inherit"},
+      "active": true
+    }
+  ]
+}
+JSON
+  publish_record report-writer
+
+  run_hook '{"agent_type":"cheeky-portability-demo--report-writer","tool_name":"Write","tool_input":{"file_path":"reports/final/report.md"}}'
+  [ "$status" -eq 0 ]
+  printf '%s' "$output" | jq -e '.hookSpecificOutput.decision.behavior == "allow"'
+
+  run_hook '{"agent_type":"other-squad--report-writer","tool_name":"Write","tool_input":{"file_path":"reports/final/report.md"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
 @test "gate: a broad-scope role CANNOT write ANOTHER role's engagement record" {
   # Forgery check — the record is reserved, whatever the scope says, and even
   # with the forging role's own record in place.
