@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cheeky-squad-os.dev/schemas/export-plan-v1.json",
+  "title": "Portable squad export plan v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "manifest", "target_root", "source_sha256", "writes", "deletes", "plan_id"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "manifest": {"$ref": "https://cheeky-squad-os.dev/schemas/manifest-v2.json"},
+    "target_root": {"type": "string", "minLength": 1},
+    "source_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "plan_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "writes": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["path", "sha256", "size", "executable"], "properties": {"path": {"type": "string", "minLength": 1}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "size": {"type": "integer", "minimum": 0}, "executable": {"type": "boolean"}}}},
+    "deletes": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["path"], "properties": {"path": {"type": "string", "minLength": 1}}}}
+  }
+}

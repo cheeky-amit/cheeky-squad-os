@@ -1,0 +1,51 @@
+{
+  "schema_version": 2,
+  "squad_goal_ref": ".squad/goal.md",
+  "execution_mode": "one-time",
+  "created": "2026-08-08T00:00:00Z",
+  "roles": [
+    {
+      "id": "evidence-reader",
+      "purpose": "Read source material and produce cited findings",
+      "description": "Read source material and produce cited findings",
+      "file_ownership": {"include": ["reports/evidence/**"], "exclude": []},
+      "capabilities": ["filesystem.glob", "filesystem.read", "filesystem.search"],
+      "reasoning": {"profile": "fast", "effort": "inherit"},
+      "active": true,
+      "goal_ref": ".squad/role-goal-evidence-reader.md",
+      "provider_overrides": {
+        "claude": {
+          "model": "haiku",
+          "tools": ["Read", "Glob", "Grep"],
+          "agent_file": ".claude/agents/evidence-reader.md"
+        }
+      },
+      "created": "2026-08-08T00:00:01Z"
+    },
+    {
+      "id": "report-writer",
+      "purpose": "Write the verified final report",
+      "description": "Write the verified final report",
+      "file_ownership": {"include": ["reports/final/**", ".squad/workspaces/report-writer/**"], "exclude": []},
+      "capabilities": ["filesystem.edit", "filesystem.read", "filesystem.write", "shell.execute"],
+      "reasoning": {"profile": "deep", "effort": "high"},
+      "active": true,
+      "goal_ref": ".squad/role-goal-report-writer.md",
+      "environment": {
+        "workspace": ".squad/workspaces/report-writer/",
+        "directories": ["inputs", "outputs"],
+        "variables": {"REPORT_FORMAT": "markdown"},
+        "context": [],
+        "tools": [{"name": "jq", "kind": "system", "verify": "command -v jq"}]
+      },
+      "provider_overrides": {
+        "claude": {
+          "model": "opus",
+          "tools": ["Read", "Write", "Edit", "Bash"],
+          "agent_file": ".claude/agents/report-writer.md"
+        }
+      },
+      "created": "2026-08-08T00:00:02Z"
+    }
+  ]
+}

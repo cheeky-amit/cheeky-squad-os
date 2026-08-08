@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cheeky-squad-os.dev/schemas/roster-v2.json",
+  "title": "Provider-neutral squad roster v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "squad_goal_ref", "execution_mode", "roles"],
+  "properties": {
+    "schema_version": {"const": 2},
+    "squad_goal_ref": {"type": "string", "minLength": 1},
+    "execution_mode": {"enum": ["one-time", "multi-use", "evergreen"]},
+    "created": {"type": "string", "minLength": 1},
+    "roles": {"type": "array", "items": {"$ref": "#/$defs/role"}}
+  },
+  "$defs": {
+    "reasoningEffort": {"enum": ["inherit", "low", "medium", "high", "xhigh", "max"]},
+    "role": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "purpose", "description", "file_ownership", "capabilities", "reasoning", "active"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$"},
+        "purpose": {"type": "string", "minLength": 1},
+        "description": {"type": "string", "minLength": 1},
+        "file_ownership": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["include", "exclude"],
+          "properties": {
+            "include": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+            "exclude": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
+          }
+        },
+        "capabilities": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$"}},
+        "reasoning": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["profile", "effort"],
+          "properties": {
+            "profile": {"enum": ["fast", "balanced", "deep", "inherit"]},
+            "effort": {"$ref": "#/$defs/reasoningEffort"}
+          }
+        },
+        "active": {"type": "boolean"},
+        "goal_ref": {"type": "string", "minLength": 1},
+        "created": {"type": "string", "minLength": 1},
+        "environment": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["workspace", "directories", "variables", "context", "tools"],
+          "properties": {
+            "workspace": {"type": "string", "minLength": 1},
+            "directories": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+            "variables": {"type": "object", "additionalProperties": {"type": "string"}},
+            "context": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["source", "target", "kind"], "properties": {"source": {"type": "string", "minLength": 1}, "target": {"type": "string", "minLength": 1}, "kind": {"enum": ["copy", "link", "fetch"]}}}},
+            "tools": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["name", "kind"], "properties": {"name": {"type": "string", "minLength": 1}, "kind": {"enum": ["local", "system", "mcp"]}, "verify": {"type": "string", "minLength": 1}, "install": {"type": "string", "minLength": 1}}}}
+          }
+        },
+        "provider_overrides": {
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "properties": {
+            "claude": {"type": "object", "additionalProperties": false, "minProperties": 1, "properties": {"model": {"type": "string", "minLength": 1}, "tools": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}}, "agent_file": {"type": "string", "minLength": 1}}},
+            "codex": {"type": "object", "additionalProperties": false, "minProperties": 1, "properties": {"model": {"type": "string", "minLength": 1}, "reasoning_effort": {"$ref": "#/$defs/reasoningEffort"}, "sandbox_mode": {"enum": ["read-only", "workspace-write", "danger-full-access"]}}}
+          }
+        }
+      }
+    }
+  }
+}
