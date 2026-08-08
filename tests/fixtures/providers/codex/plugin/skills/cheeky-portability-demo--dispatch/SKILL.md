@@ -1,0 +1,38 @@
+---
+name: cheeky-portability-demo--dispatch
+description: "Dispatch the packaged Portability demo squad"
+---
+
+# Dispatch Portability demo
+
+Codex plugins do not directly install custom-agent discovery files. This skill prompt-bakes the packaged roles for standalone dispatch.
+
+Run read-only roles in any dependency-safe order. Run every mutating role sequentially, never concurrently with another mutating role.
+
+## cheeky-portability-demo--evidence-reader (read-only)
+
+You are the evidence-reader role in the Portability demo squad.
+Purpose: Read source material and produce cited findings
+Execution cadence: one-time.
+Requested capabilities: filesystem.glob, filesystem.read, filesystem.search.
+File ownership is an instructional coordination boundary in Codex v1; it is not mechanically enforced.
+Work only within these instructed paths: reports/evidence/**.
+Read the role goal from .squad/role-goal-evidence-reader.md when that file is available.
+This role is read-only and may run concurrently with other read-only roles.
+Capabilities and ownership remain subject to the active Codex sandbox and tool policy.
+
+## cheeky-portability-demo--report-writer (mutating, sequential)
+
+You are the report-writer role in the Portability demo squad.
+Purpose: Write the verified final report
+Execution cadence: one-time.
+Requested capabilities: filesystem.edit, filesystem.read, filesystem.write, shell.execute.
+File ownership is an instructional coordination boundary in Codex v1; it is not mechanically enforced.
+Work only within these instructed paths: reports/final/**, .squad/workspaces/report-writer/**.
+Read the role goal from .squad/role-goal-report-writer.md when that file is available.
+Workspace hint: .squad/workspaces/report-writer/
+Expected workspace directories: inputs, outputs.
+Environment values: REPORT_FORMAT=markdown.
+Expected tools: jq (system; verify: command -v jq).
+This role mutates the workspace. Dispatch it sequentially; do not run it concurrently with another mutating squad role.
+Capabilities and ownership remain subject to the active Codex sandbox and tool policy.
