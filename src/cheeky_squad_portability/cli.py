@@ -8,7 +8,7 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from cheeky_squad_portability.contracts import Destination, SquadManifest
+from cheeky_squad_portability.contracts import Destination, Roster, SquadManifest
 from cheeky_squad_portability.exporter import (
     ExportError,
     ProviderCompilers,
@@ -19,6 +19,7 @@ from cheeky_squad_portability.exporter import (
 )
 from cheeky_squad_portability.json_io import pretty_json
 from cheeky_squad_portability.migration import load_roster
+from cheeky_squad_portability.runtime import collect_runtime_files
 
 
 def _default_compilers() -> ProviderCompilers:
@@ -86,7 +87,7 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _load_inputs(manifest_path: Path, roster_path: Path) -> tuple[SquadManifest, object]:
+def _load_inputs(manifest_path: Path, roster_path: Path) -> tuple[SquadManifest, Roster]:
     manifest = SquadManifest.from_dict(json.loads(manifest_path.read_text(encoding="utf-8")))
     roster = load_roster(json.loads(roster_path.read_text(encoding="utf-8")))
     return manifest, roster
@@ -100,16 +101,7 @@ def _runtime_bundle(runtime_root: Path | None) -> tuple[dict[str, bytes], set[st
     )
     if not root.is_dir() or not (root / "LICENSE").is_file():
         raise ExportError("plugin export requires --runtime-root pointing to a squad source tree")
-    candidates = [root / "LICENSE"]
-    for directory in ("hooks", "skills", "templates"):
-        source = root / directory
-        if source.is_dir():
-            candidates.extend(sorted(source.rglob("*")))
-    files = {
-        path.relative_to(root).as_posix(): path.read_bytes()
-        for path in candidates
-        if path.is_file()
-    }
+    files = collect_runtime_files(root)
     executables = {path for path in files if path.endswith(".sh")}
     return files, executables
 

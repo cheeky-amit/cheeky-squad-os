@@ -12,6 +12,9 @@ license = { file = "LICENSE" }
 authors = [{ name = "cheeky-amit" }]
 dependencies = []
 
+[project.scripts]
+squad-export = "cheeky_squad_portability.cli:main"
+
 [project.optional-dependencies]
 dev = [
   "jsonschema>=4.23,<5",

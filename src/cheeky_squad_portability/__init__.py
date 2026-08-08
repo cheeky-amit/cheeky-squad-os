@@ -21,6 +21,19 @@ from cheeky_squad_portability.contracts import (
     SquadManifest,
 )
 from cheeky_squad_portability.errors import ContractError
+from cheeky_squad_portability.exporter import (
+    ApplyResult,
+    ExportError,
+    PreparedExport,
+    ProviderCompilers,
+    UninstallResult,
+    ValidationReport,
+    apply_export,
+    plan_export,
+    uninstall_export,
+    validate_installed_export,
+    validate_prepared_export,
+)
 from cheeky_squad_portability.migration import load_roster, migrate_legacy_roster
 from cheeky_squad_portability.plan import (
     DeleteOperation,
@@ -30,6 +43,7 @@ from cheeky_squad_portability.plan import (
 )
 
 __all__ = [
+    "ApplyResult",
     "Capability",
     "ClaudeOverride",
     "CodexOverride",
@@ -40,9 +54,12 @@ __all__ = [
     "EnvironmentContext",
     "EnvironmentTool",
     "ExecutionMode",
+    "ExportError",
     "ExportPlan",
     "FileOwnership",
+    "PreparedExport",
     "Provider",
+    "ProviderCompilers",
     "ProviderOverrides",
     "ReasoningEffort",
     "ReasoningProfile",
@@ -51,8 +68,15 @@ __all__ = [
     "RuntimeOwner",
     "SquadIdentity",
     "SquadManifest",
+    "UninstallResult",
+    "ValidationReport",
     "WriteOperation",
+    "apply_export",
     "build_export_plan",
     "load_roster",
     "migrate_legacy_roster",
+    "plan_export",
+    "uninstall_export",
+    "validate_installed_export",
+    "validate_prepared_export",
 ]
