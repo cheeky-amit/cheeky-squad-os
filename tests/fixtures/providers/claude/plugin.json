@@ -1,0 +1,51 @@
+{
+  "author": {
+    "name": "cheeky-squad-os export"
+  },
+  "description": "Canonical dual-provider fixture",
+  "displayName": "Portability demo",
+  "hooks": {
+    "PermissionRequest": [
+      {
+        "hooks": [
+          {
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/permission-request.sh",
+            "timeout": 3,
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash|Edit|Write"
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/session-start.sh",
+            "timeout": 5,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/user-prompt-submit.sh",
+            "timeout": 3,
+            "type": "command"
+          }
+        ]
+      }
+    ]
+  },
+  "keywords": [
+    "squad",
+    "portable-squad",
+    "claude-code-plugin"
+  ],
+  "license": "MIT",
+  "name": "cheeky-portability-demo",
+  "version": "1.1.0"
+}
