@@ -261,8 +261,32 @@ def _activation_bytes(manifest: SquadManifest) -> bytes:
     ).encode()
 
 
+def _portable_roster_dict(roster: Roster) -> dict[str, object]:
+    """Return canonical roles with environment values stripped from the snapshot."""
+
+    portable: dict[str, object] = roster.to_dict()
+    roles = portable.get("roles")
+    if not isinstance(roles, list):
+        raise ExportError("canonical roster roles must be an array")
+    for role in roles:
+        if not isinstance(role, dict):
+            raise ExportError("canonical roster role must be an object")
+        environment = role.get("environment")
+        if not isinstance(environment, dict):
+            continue
+        variables = environment.get("variables")
+        if isinstance(variables, dict):
+            environment["variables"] = dict.fromkeys(variables, "")
+    return portable
+
+
 def _session_prompt(manifest: SquadManifest, roster: Roster) -> str:
-    active_roles = [role.to_dict() for role in roster.roles if role.active]
+    portable = _portable_roster_dict(roster)
+    active_roles = [
+        role
+        for role in portable["roles"]  # type: ignore[index]
+        if isinstance(role, dict) and role.get("active") is True
+    ]
     payload = pretty_json(
         {
             "manifest": manifest.to_dict(),
@@ -543,7 +567,7 @@ def _render_desired_files(
             )
 
     manifest_bytes = _json_bytes(manifest.to_dict())
-    roster_bytes = _json_bytes(roster.to_dict())
+    roster_bytes = _json_bytes(_portable_roster_dict(roster))
     _add_engine_output(rendered, manifest_path, manifest_bytes)
     _add_engine_output(rendered, roster_path, roster_bytes)
     if manifest.destination is Destination.PLUGIN:
