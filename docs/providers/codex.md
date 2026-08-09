@@ -1,0 +1,67 @@
+# Codex provider guide
+
+The Codex adapter compiles active canonical roles into namespaced TOML custom agents for
+project/user discovery and into prompt-baked skills for standalone plugin transport.
+
+## Project and user agents
+
+Each role TOML contains the required fields:
+
+```toml
+name = "acme-release-readiness--report-writer"
+description = "Write the verified release report"
+developer_instructions = "...provider-neutral purpose and boundaries..."
+sandbox_mode = "workspace-write"
+```
+
+Optional model and reasoning settings are derived from the canonical reasoning profile
+or an explicit Codex override. Read-only roles default to `read-only`; roles with a
+mutating capability use `workspace-write`. Repo-local role skills are generated under
+`.agents/skills/`.
+
+Environment requirements may identify variable names, directories, context, or tools;
+generated instructions do not embed environment variable values.
+
+The exporter mounts project agents under `.codex/agents/`. User output uses the
+corresponding namespaced user discovery surface and requires a separate global-write
+confirmation.
+
+## Standalone plugin
+
+The generated package has a native `.codex-plugin/plugin.json`, packaged role prompts,
+role skills, a squad dispatch skill, canonical contracts, runtime snapshot, activation
+instructions, license, and receipt.
+
+Codex plugins do not directly package custom-agent discovery for these generated roles.
+The standalone dispatcher therefore prompt-bakes every packaged role. This is a stated
+compatibility strategy, not an invisible substitute for custom-agent discovery.
+
+Inspect the selected directory and add the plugin deliberately using the active Codex
+plugin flow. Generation stops before installation or enablement. Official package
+reference: [Build plugins](https://developers.openai.com/plugins/build/plugins).
+
+## Sequential mutation policy
+
+The generated developer instructions and dispatch skill distinguish read-only from
+mutating roles:
+
+- dependency-safe read-only roles may run concurrently;
+- every mutating role runs sequentially and never concurrently with another mutating
+  squad role.
+
+This avoids two writers racing across an instructional boundary. It is not a claim that
+the role owns a mechanically locked set of files.
+
+## Enforcement boundary
+
+In Codex v1:
+
+- `sandbox_mode` is sandbox-enforced by the active Codex runtime;
+- provider tool policy remains sandbox/tool-policy enforced;
+- `file_ownership` is instructional;
+- there is no exported file-scope blocking hook;
+- the exporter does not claim Claude’s `PermissionRequest` hook applies to Codex.
+
+If a mutating role writes outside its instructed ownership paths, the active sandbox may
+still restrict where it can write, but this release does not register a narrower
+per-role file-scope mechanism. Reports and user-facing docs must preserve that distinction.

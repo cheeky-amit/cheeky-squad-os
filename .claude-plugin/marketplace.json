@@ -8,8 +8,8 @@
     {
       "name": "cheeky-squad-os",
       "source": "./",
-      "description": "Ship the discipline, not the team. Turn any Claude Code goal into a bespoke squad of roles generated from the goal itself.",
-      "version": "1.0.0",
+      "description": "Ship the discipline, not the team. Generate and export bespoke squads for Claude Code and Codex.",
+      "version": "1.1.0",
       "author": {
         "name": "cheeky-amit"
       },
@@ -20,6 +20,8 @@
         "agent-teams",
         "workflow",
         "discipline",
+        "codex",
+        "portable-agents",
         "thought-partner",
         "human-in-the-loop"
       ],

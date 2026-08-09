@@ -1,5 +1,9 @@
 # Worked example — weekly competitive intel (Evergreen)
 
+> This example follows the established Claude authoring lifecycle and uses its legacy
+> roster vocabulary. Version 1.1 accepts it through deterministic in-memory migration;
+> see [portable-export.md](portable-export.md) for a provider-neutral v2 export.
+
 A recurring operational agent built with `cheeky-squad-os`. Three bespoke roles, one
 durable cadence, one Monday-morning artifact.
 

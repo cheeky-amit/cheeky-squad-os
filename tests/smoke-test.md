@@ -1,7 +1,8 @@
-# Smoke test — cheeky-squad-os end-to-end (v1.0.0)
+# Smoke test — cheeky-squad-os end-to-end (v1.1.0)
 
-Copy-pasteable manual verification. Exercises every skill, every hook, and all
-five v1.0 hard rules (#11–#15) with one small real goal. The core path (no
+Copy-pasteable manual verification. Part I exercises portable Claude/Codex exports in
+temporary homes and package directories. Part II exercises every lifecycle skill, every
+Claude hook, and all five v1.0 partnership rules (#11–#15) with one small real goal. The lifecycle core path (no
 optional steps) completes in under 10 minutes on a fresh project; with every
 optional step included, budget 20–30.
 
@@ -25,6 +26,146 @@ artifacts (`.squad/role-plan-*.md`, `.squad/verification.md`,
 dispute produces.
 
 ---
+
+## Part I — portable export smoke
+
+Run this part from the cheeky-squad-os checkout. It uses the canonical dual-provider
+fixture, creates only temporary directories, and never writes to your real home.
+
+### Prerequisites
+
+```bash
+python3 --version   # 3.11 or newer
+claude --version
+codex --version
+git --version
+```
+
+Install the checkout entry point, then set `SQUAD_REPO` to its absolute path:
+
+```bash
+python3 -m pip install -e .
+export SQUAD_REPO="$PWD"
+squad-export --help
+```
+
+The help output must list `plan`, `apply`, `validate`, and `uninstall`.
+
+### 1. Project export — both providers
+
+Create an isolated repository:
+
+```bash
+export SQUAD_SMOKE_ROOT="$(mktemp -d)"
+mkdir -p "$SQUAD_SMOKE_ROOT/project"
+git -C "$SQUAD_SMOKE_ROOT/project" init -q
+```
+
+Preview using the canonical v2 fixtures:
+
+```bash
+squad-export plan \
+  --manifest "$SQUAD_REPO/tests/fixtures/portable/manifest-v2.json" \
+  --roster "$SQUAD_REPO/tests/fixtures/portable/roster-v2.json" \
+  --target "$SQUAD_SMOKE_ROOT/project" \
+  --plan-file "$SQUAD_SMOKE_ROOT/project-plan.json"
+```
+
+Review the complete output and copy its `plan_id`. Apply with the same inputs:
+
+```bash
+squad-export apply \
+  --manifest "$SQUAD_REPO/tests/fixtures/portable/manifest-v2.json" \
+  --roster "$SQUAD_REPO/tests/fixtures/portable/roster-v2.json" \
+  --target "$SQUAD_SMOKE_ROOT/project" \
+  --plan-file "$SQUAD_SMOKE_ROOT/project-plan.json" \
+  --confirm-plan-id '<reviewed plan_id>'
+```
+
+Verify project discovery and syntax:
+
+```bash
+find "$SQUAD_SMOKE_ROOT/project/.claude/agents" -type f -name '*.md' -print
+find "$SQUAD_SMOKE_ROOT/project/.codex/agents" -type f -name '*.toml' -print
+find "$SQUAD_SMOKE_ROOT/project/.agents/skills" -type f -name 'SKILL.md' -print
+squad-export validate \
+  --target "$SQUAD_SMOKE_ROOT/project" \
+  --destination project \
+  --squad-id cheeky.portability-demo
+```
+
+Expected: two namespaced active roles for each provider, two Codex role skills, canonical
+contracts/receipt, and a successful validation report. No file appears outside the temp
+project. Parse every generated Codex agent with Python `tomllib` or run the automated
+provider tests before continuing.
+
+Start Codex from the temp project with a temporary home or ephemeral/user-config-disabled
+mode. Confirm the project agents are discoverable, then invoke the generated evidence
+reader skill. This is a discovery smoke, not permission to let the report writer mutate
+the repository.
+
+### 2. Session export — no discovery writes
+
+Make a copy of the fixture manifest and set only `destination` to `session`. Plan without
+`--target`, review the empty `writes` and `deletes`, then apply with the matching plan
+ID. Expected: stdout contains the prompt-baked canonical roles; the project, temporary
+home, `.claude`, `.codex`, and `.agents` trees are unchanged.
+
+This check is mechanically important: session is not a small project install. It is a
+zero-discovery-write path.
+
+### 3. User export — fake HOME and double confirmation
+
+Create `"$SQUAD_SMOKE_ROOT/home"`, copy the manifest with `destination: user`, and plan
+with both `--target "$SQUAD_SMOKE_ROOT/home"` and
+`--home "$SQUAD_SMOKE_ROOT/home"`.
+
+First apply with only the matching plan ID. Expected: refusal requiring a separate
+global-write confirmation and no files written. Then repeat with
+`--confirm-global-write`. Expected: every discovery artifact is namespaced, all writes
+remain under the fake home, and a namespaced uninstall receipt exists.
+
+Validate with the same fake home. Uninstall once without global confirmation (must
+refuse), then with `--confirm --confirm-global-write`. Confirm it removes only
+receipt-owned, unmodified files.
+
+### 4. Standalone plugin — generate, validate, do not install
+
+Create `"$SQUAD_SMOKE_ROOT/plugin"`, copy the manifest with `destination: plugin`, and
+plan/apply to that exact directory. Expected package contents:
+
+- `.claude-plugin/plugin.json` and namespaced Claude agents;
+- `.codex-plugin/plugin.json`, packaged role skills/prompts, and sequential dispatcher;
+- canonical manifest/roster, activation instructions, license, shared runtime, receipt;
+- no dependency importing `cheeky_squad_portability` from generated runtime.
+
+Run `squad-export validate` for destination `plugin`. Validate the Claude manifest with
+the installed Claude CLI, then launch it from the package using Claude’s temporary local
+plugin-directory option. Confirm both packaged role IDs are visible and the selected
+runtime owner registers the lifecycle hooks once.
+
+Add the same directory as a temporary Codex plugin in a fake home. Confirm plugin skill
+discovery and invoke its prompt-baked dispatcher with a read-only request. Inspect the
+dispatch prompt and prove the report writer is labeled mutating/sequential. Do not run
+mutating roles concurrently.
+
+Stop after local activation. This release smoke must not publish, submit, globally
+install, or leave the plugin enabled.
+
+### 5. Conservative removal
+
+For either project or fake-user output, modify one receipt-owned generated file and run
+uninstall. Expected: the modified file is preserved and reported; only still-matching
+receipt-owned files are removed. An untracked neighboring file is never touched.
+
+The automated suite owns traversal, symlink, malicious-name, interrupted-transaction,
+rollback, hash mismatch, unowned-collision, malformed-manifest, idempotency, fresh-home,
+and secret-exclusion matrices. Part I confirms the real provider CLIs can consume the
+artifacts those tests protect.
+
+---
+
+## Part II — Claude lifecycle smoke
 
 ## Prerequisites
 

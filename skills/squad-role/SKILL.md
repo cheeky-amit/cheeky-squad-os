@@ -1,20 +1,20 @@
 ---
 name: squad-role
-description: Use when the user wants to add a teammate to the squad — phrases like "generate a role", "add a teammate", "we need someone who…", "add a researcher/auditor/writer/analyst/scraper to the squad", "create a role for X". Also invoked by squad-onboard once per proposed role during onboarding. Interactive flow that asks what the role does, what files it owns, what tools it needs, what model, and what scope — then writes a subagent definition to .claude/agents/<role-name>.md and registers it in .squad/roster.json. The role file is reusable as both a subagent (via Agent tool) and an Agent Teams teammate.
-version: 0.1.0
+description: Use when the user wants to add a teammate to the squad — phrases like "generate a role", "add a teammate", "we need someone who…", "add a researcher/auditor/writer/analyst/scraper to the squad", "create a role for X". Also invoked by squad-onboard once per proposed role. Asks what the role does, owns, needs, and how deeply it reasons; writes the provider-neutral roster v2 entry and the current Claude role artifact.
+version: 1.1.0
 author: cheeky-squad-os
 license: MIT
-compatible-with: [claude-code, agentskills-1.0]
+compatible-with: [claude-code, codex, agentskills-1.0]
 ---
 
 # squad-role
 
-You generate one bespoke role per invocation. Roles are tailored to the squad's goal — never generic. The role file you produce conforms to `templates/role-definition.md`, lives at `.claude/agents/<role-name>.md`, and is registered in `.squad/roster.json` by `squad-roster`.
+You generate one bespoke role per invocation. Roles are tailored to the squad's goal — never generic. The provider-neutral role is registered in `.squad/roster.json` schema v2 by `squad-roster`. For the active Claude lifecycle, also render `templates/role-definition.md` to `.claude/agents/<role-name>.md`. Codex artifacts are compiled from the same canonical role during export; do not author a second Codex-specific roster.
 
 ## Preflight
 
 1. Read `.squad/goal.md`. If absent: refuse with *"No squad goal set. Run `/cheeky-squad-os:squad-onboard` first."*
-2. Read `.squad/roster.json` if it exists. Note existing role names — your new role's name must not collide.
+2. Read `.squad/roster.json` if it exists. Canonicalize a legacy roster in memory through `squad-roster`; do not rewrite it merely because it is legacy. Note existing role IDs — the new role must not collide.
 3. Note the squad's mode (`one-time`, `multi-use`, `evergreen`). It affects the `isolation` field decision below.
 4. If `.squad/world/claims-research.md` exists, read it. It holds domain-research findings the human gated during `squad-onboard` (Grade `confirmed` or `reported` only — `world.sh` rejects anything else from that file). Feed it into **Derive stop conditions** below. Absent file → this source is simply skipped; nothing about the rest of this flow changes. A squad that never ran research looks identical to one running a version of this plugin that never shipped the feature.
 5. If `.squad/partner.md` exists, read it (hard rule #12). Its `## Decide vs. ask` section's "Always ask first" items feed **Derive stop conditions** below the same way belief-derived bounds do. Its `## Standing constraints` and `## Beliefs to check` are not a role-generation input here — `squad-onboard` already used Standing constraints to pre-populate the goal's Out of scope (which source 3 below already reads), and `squad-spawn` bakes the whole file into every dispatch prompt fresh each run (hard rule #4), so nothing from it needs to be captured into a standing role file at generation time. Absent file → this source is simply skipped, same as source 1 above; nothing else in this flow changes.
@@ -99,6 +99,25 @@ Most roles benefit from a sandbox — a private workspace dir with scaffolded fo
 If **yes**, hand off to `/cheeky-squad-os:squad-env` to derive the `environment` block from the role's purpose, role goal, `file_scope`, and tools — it sets `workspace`, `dirs`, `env`, `context`, and `tools`, and (importantly) adds `<workspace>/**` to this role's `file_scope` so the role's in-sandbox writes auto-approve. Substitute the canonical "Your workspace (sandbox)" section for `{{workspace_block}}`.
 
 If **no**, omit `{{workspace_block}}` entirely and leave the `environment` field off the roster entry.
+
+## Map answers to the canonical role
+
+The interactive questions retain familiar Claude terms because the active lifecycle
+still produces a Claude agent. Before registration, map them into roster v2:
+
+- Q2 name → `id`.
+- Q1 purpose → `purpose`; derive the “Use when…” trigger as `description`.
+- Q3 `file_scope` → `file_ownership.include`; explicit denials →
+  `file_ownership.exclude`.
+- Q4 tools → portable `capabilities`, and preserve exact Claude tools in
+  `provider_overrides.claude.tools`. Never guess an `external.mcp` mapping.
+- Q5 model/effort → neutral reasoning profile/effort plus a Claude model override when
+  the choice is provider-specific.
+- Q7 sandbox → canonical `environment` (`dirs` becomes `directories`, `env` becomes
+  `variables`).
+
+The Claude agent path goes in `provider_overrides.claude.agent_file`. Do not add Codex
+syntax here; the Codex adapter compiles from the canonical role at export time.
 
 ## Derive stop conditions (hard rule #14 — not a question, the flow does not grow)
 
@@ -307,7 +326,11 @@ Write the composed system prompt to `.claude/agents/<name>.md`. Use the YAML fro
 
 ## Register in roster
 
-Call into `squad-roster` to add an entry for this role. The entry includes name, purpose, agent_file path, role_goal path, file_scope, tools, model, active flag (true), created timestamp, and — if the role got a sandbox in Q7 — the `environment` block. If the Q5 follow-up set a non-default effort tier, include `effort` too; if the user left it at inherit, omit the field entirely.
+Call into `squad-roster` to add a schema-v2 entry for this role. It includes `id`,
+`purpose`, `description`, `file_ownership`, `capabilities`, `reasoning`, `active: true`,
+`goal_ref`, the created timestamp, optional canonical `environment`, and the exact
+Claude choices under `provider_overrides.claude`. New writes are provider-neutral even
+though the current lifecycle also writes a Claude agent artifact.
 
 **Do not register `.squad/` contract paths in `file_scope`.** Since v0.4.1's `.squad/` structural reservation, the `PermissionRequest` hook grants a role three of its `.squad/` contract paths structurally, derived from its own `agent_type`, checked *before* `file_scope` is ever consulted for a `.squad/` path: its own engagement record, `.squad/role-plan-<name>.md` (hard rule #11, always granted — it's the bootstrap); its own hand-off outbox, `.squad/role-comm-<name>--*` (`templates/role-comm.md`, granted once the record exists); and its own belief-ledger claims file, `.squad/world/claims-<name>.md` (hard rule #13, granted the same way, once the record exists — asserting a belief is acting too). Registering any of these yourself in `file_scope` was the forgery hole v0.4.1 closed: a broad scope (`**`, `.squad/**`) would otherwise have matched them and auto-approved writes to another role's record, outbox, or claims file. So leave all three paths out of the `file_scope` you write to the roster entry — don't ask the user about them either; it's not a generation choice, it's how the hook derives the grant.
 

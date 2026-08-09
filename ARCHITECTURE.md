@@ -2,7 +2,7 @@
 
 ## The pill
 
-All Claude Code work — engineering, operational, agentic business infrastructure, knowledge work — goes better when you treat your AI session like a team with roles, responsibilities, communication, and supervision.
+Goal-driven work in Claude Code and Codex — engineering, operational, agentic business infrastructure, knowledge work — goes better when you treat an AI session like a team with roles, responsibilities, communication, and supervision.
 
 cheeky-squad-os ships the discipline, not the team. Your goal generates the team. Every squad is bespoke to the goal that spawned it.
 
@@ -13,6 +13,78 @@ This means the plugin contains **zero opinionated role files**. No `frontend-dev
 > **The team is generated; the partnership is engineered.**
 
 "Ship the discipline, not the team" — the line above — always asserted the first half: no shipped roster, no defaults, a team generated fresh from the goal. It never said what "the discipline" itself was. v1.0 names it: a two-party contract. Hard rules #1–#10 were always the squad's half of that contract — one goal, explicit file scope, mode-appropriate dispatch, an artifact of record for "done." v1.0 builds the half that was missing: #11–#14 bind what the squad owes back beyond doing the work — declared intent before acting, a sourced belief instead of a guess, a declared bound it stops at. And #15, for the first time in this plugin's history, binds not the squad but **the human** — the same evidence bar, applied to the party who was previously exempt from it by default. That is the release: not a bigger squad, a squad with obligations back to the person who commands it, and a person who now has one too. See README's "Why we say squad" section for what that asymmetry is, and — as pointedly — what it is not.
+
+v1.1 makes that contract portable. It does not flatten provider differences: the
+provider-neutral roster carries role intent, each adapter owns its native syntax, and
+the compatibility matrix names which boundaries are mechanical, sandbox-enforced,
+instructional, or unsupported.
+
+## v1.1 portability architecture
+
+The export path is a compiler followed by a guarded filesystem transaction:
+
+```mermaid
+flowchart LR
+  INPUT["manifest v2 + roster v2<br/>or legacy roster"] --> CONTRACT["neutral contracts<br/>pure migration"]
+  CONTRACT --> CLAUDE["Claude adapter"]
+  CONTRACT --> CODEX["Codex adapter"]
+  CLAUDE --> PLAN["content-addressed plan"]
+  CODEX --> PLAN
+  PLAN --> APPLY["confirmed atomic apply"]
+  APPLY --> RECEIPT["ownership receipt"]
+  RECEIPT --> VALIDATE["validate"]
+  RECEIPT --> UNINSTALL["conservative uninstall"]
+```
+
+### Layer ownership
+
+| Layer | Owns | Must not own |
+| --- | --- | --- |
+| Neutral contracts | squad identity, cadence, destination, role purpose/description, ownership, capabilities, reasoning, environment shape | Claude Markdown, Codex TOML, filesystem targets |
+| Provider adapters | native role IDs, provider fields, model/tool/sandbox mapping, standalone package layout | destination selection, confirmation, writes |
+| Export engine | path boundaries, complete plans, target state, receipts, rollback, validation, uninstall | role authoring or provider syntax |
+
+This division promotes the central audit conclusion into an invariant: one shared
+contract, provider-owned syntax. A portability bug should not be fixed by leaking a
+provider path into the role model, and a target-safety bug should not be fixed inside an
+adapter.
+
+### Cadence and destination
+
+Cadence remains `one-time | multi-use | evergreen`; destination is separately
+`session | project | user | plugin`. Project and plugin are deliberately distinct:
+project output participates only in the selected repository's discovery, while plugin
+output is a transportable package that remains inactive until a separate activation.
+User/global is never the default.
+
+| Destination | Architectural boundary |
+| --- | --- |
+| Session | Empty filesystem mutation set; canonical roles are prompt-baked for this run |
+| Project | Existing selected Git root; discovery output remains inside it |
+| User | Exact explicit home, squad namespace, receipt, matching plan plus global confirmation |
+| Plugin | Existing selected non-home directory; both selected provider packages, no install/enable step |
+
+### Snapshot and runtime ownership
+
+Exports vendor all static runtime material they need and have no continuing dependency
+on the generator. They are immutable until explicit re-export. One selected provider is
+the `runtime_owner`, preventing both provider packages from registering shared lifecycle
+behavior for the same snapshot.
+
+Static runtime does not mean live squad state. `.squad/partner.md`, `.env*`, workspaces,
+worktrees, engagement/hand-off records, secrets, and caches are excluded by default.
+
+### Provider truth boundary
+
+Claude compiles namespaced Markdown agents and can carry the runtime-owner lifecycle
+hooks in a generated plugin. Codex compiles project/user TOML agents and repo-local
+skills. Its standalone package has a native manifest and prompt-bakes roles because the
+plugin package does not directly install the generated custom-agent discovery surface.
+
+Codex v1 ownership is instructional, and mutating roles dispatch sequentially. The
+active Codex sandbox enforces its sandbox mode; no file-scope blocking hook is registered
+or claimed. See [docs/compatibility-security.md](docs/compatibility-security.md) for the
+complete labeled matrix.
 
 ## What the plugin contains (and does not)
 
@@ -28,6 +100,10 @@ This means the plugin contains **zero opinionated role files**. No `frontend-dev
 | Role environment | — | Yes, by `squad-env` | Optional `environment` block per roster role; materialized as a sandbox under `.squad/workspaces/<role>/` by `provision.sh` |
 | Verification report | — | Yes, by `squad-verify` | `.squad/verification.md` — per-signal evidence + met/partial/unmet verdict against the goal's Definition of done |
 | Partner model | — | Yes, by `squad-partner` | `.squad/partner.md` — the human's own brief about themselves, told not inferred (hard rule #12); one per project, survives every park/switch |
+| Portable manifest | — | Yes, by `squad-roster export` | `.squad/manifest.json` v2 separates cadence from destination and selects providers/runtime owner |
+| Provider-neutral roster | — | Yes, by `squad-role`/`squad-roster` | Schema v2 compiles to Claude and Codex; legacy rosters migrate only in memory |
+| Export plan/receipt | — | Yes, by `squad-export` | Complete hash-bound mutation preview and exact file ownership ledger |
+| Claude/Codex export artifacts | — | Yes, by adapters | Project/user discovery or standalone package; vendored snapshot, never auto-installed |
 
 The plugin is **discipline**. Everything else is **generated** from the user's goal.
 
