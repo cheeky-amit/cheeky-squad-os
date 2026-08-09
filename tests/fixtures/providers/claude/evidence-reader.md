@@ -1,11 +1,11 @@
 ---
-name: "cheeky-portability-demo--evidence-reader"
+name: "cheeky-dportability-hdemo--evidence-reader"
 description: "Read source material and produce cited findings"
 tools: ["Read","Glob","Grep"]
 model: "haiku"
 ---
 
-# cheeky-portability-demo--evidence-reader
+# cheeky-dportability-hdemo--evidence-reader
 
 Read source material and produce cited findings
 

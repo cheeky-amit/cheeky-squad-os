@@ -7,7 +7,6 @@ equivalent user directories.
 
 from __future__ import annotations
 
-import hashlib
 import json
 from collections.abc import Mapping
 from pathlib import PurePosixPath
@@ -24,6 +23,9 @@ from cheeky_squad_portability.contracts import (
 )
 from cheeky_squad_portability.errors import ContractError
 from cheeky_squad_portability.json_io import pretty_json
+from cheeky_squad_portability.migration import load_roster
+from cheeky_squad_portability.namespace import provider_namespace, provider_role_id
+from cheeky_squad_portability.runtime import is_private_runtime_path
 
 _MUTATING_CAPABILITIES = frozenset(
     {
@@ -44,37 +46,32 @@ _PROFILE_EFFORT = {
 def codex_role_id(manifest: SquadManifest, role: Role) -> str:
     """Return a stable, namespaced identifier accepted by Codex discovery."""
 
-    squad_namespace = manifest.squad.id.replace(".", "-")
-    raw_id = f"{squad_namespace}--{role.id}"
-    if len(raw_id) <= 64:
-        return raw_id
-    digest = hashlib.sha256(raw_id.encode("utf-8")).hexdigest()[:12]
-    return f"{raw_id[:49].rstrip('-')}--{digest}"
+    return provider_role_id(manifest.squad.id, role.id)
 
 
-def compile_codex_agents(manifest: SquadManifest, roster: Roster) -> dict[str, bytes]:
+def compile_codex_agents(manifest: SquadManifest, roster: Roster | object) -> dict[str, bytes]:
     """Compile active roles to destination-neutral Codex agent TOML files."""
 
-    _validate_inputs(manifest, roster)
+    canonical = _canonical_roster(manifest, roster)
     return {
         f"agents/{codex_role_id(manifest, role)}.toml": _agent_toml(manifest, role)
-        for role in _active_roles(roster)
+        for role in _active_roles(canonical)
     }
 
 
-def compile_codex_skills(manifest: SquadManifest, roster: Roster) -> dict[str, bytes]:
+def compile_codex_skills(manifest: SquadManifest, roster: Roster | object) -> dict[str, bytes]:
     """Compile prompt-baked role skills for project or user skill discovery."""
 
-    _validate_inputs(manifest, roster)
+    canonical = _canonical_roster(manifest, roster)
     return {
         f"skills/{codex_role_id(manifest, role)}/SKILL.md": _role_skill(manifest, role)
-        for role in _active_roles(roster)
+        for role in _active_roles(canonical)
     }
 
 
 def compile_codex_plugin(
     manifest: SquadManifest,
-    roster: Roster,
+    roster: Roster | object,
     runtime_files: Mapping[str, bytes],
 ) -> dict[str, bytes]:
     """Compile a standalone Codex plugin with prompt-baked role dispatch.
@@ -85,9 +82,9 @@ def compile_codex_plugin(
     roles sequentially.
     """
 
-    _validate_inputs(manifest, roster)
-    roles = _active_roles(roster)
-    plugin_name = manifest.squad.id.replace(".", "-")
+    canonical = _canonical_roster(manifest, roster)
+    roles = _active_roles(canonical)
+    plugin_name = provider_namespace(manifest.squad.id)
     plugin_manifest = {
         "description": manifest.squad.description
         or f"Portable Codex squad snapshot for {manifest.squad.name}",
@@ -95,11 +92,14 @@ def compile_codex_plugin(
         "skills": "./skills/",
         "version": manifest.export_version,
     }
+    if "LICENSE" not in runtime_files:
+        raise ContractError("a self-contained Codex plugin requires LICENSE in runtime_files")
     output: dict[str, bytes] = {
         ".codex-plugin/plugin.json": pretty_json(plugin_manifest).encode("utf-8"),
+        "LICENSE": runtime_files["LICENSE"],
         f"skills/{plugin_name}--dispatch/SKILL.md": _dispatch_skill(manifest, roles),
     }
-    output.update(compile_codex_skills(manifest, roster))
+    output.update(compile_codex_skills(manifest, canonical))
     output.update(
         {
             f"roles/{codex_role_id(manifest, role)}.md": _role_prompt(manifest, role)
@@ -108,17 +108,23 @@ def compile_codex_plugin(
     )
     for path, content in sorted(runtime_files.items()):
         _validate_runtime_path(path)
+        if is_private_runtime_path(PurePosixPath(path)):
+            raise ContractError(f"runtime file path {path!r} is private or live state")
         if not isinstance(content, bytes):
             raise ContractError(f"runtime_files[{path!r}] must be bytes")
+        if path == "LICENSE":
+            continue
         output[f"runtime/{path}"] = content
     return dict(sorted(output.items()))
 
 
-def _validate_inputs(manifest: SquadManifest, roster: Roster) -> None:
+def _canonical_roster(manifest: SquadManifest, roster: Roster | object) -> Roster:
     if Provider.CODEX not in manifest.providers:
         raise ContractError("manifest.providers must select codex for Codex compilation")
-    if manifest.execution_mode is not roster.execution_mode:
+    canonical = roster if isinstance(roster, Roster) else load_roster(roster)
+    if manifest.execution_mode is not canonical.execution_mode:
         raise ContractError("manifest and roster execution modes must match")
+    return canonical
 
 
 def _active_roles(roster: Roster) -> tuple[Role, ...]:
@@ -144,7 +150,9 @@ def _sandbox_mode(role: Role) -> str:
                 f"mutating role {role.id!r} must use Codex sandbox_mode workspace-write"
             )
         return "workspace-write"
-    return requested or "read-only"
+    if requested is not None and requested != "read-only":
+        raise ContractError(f"read-only role {role.id!r} must use Codex sandbox_mode read-only")
+    return "read-only"
 
 
 def _reasoning_effort(role: Role) -> ReasoningEffort:
@@ -212,22 +220,18 @@ def _environment_instructions(role: Role) -> list[str]:
     if environment.directories:
         lines.append("Expected workspace directories: " + ", ".join(environment.directories) + ".")
     if environment.variables:
-        variables = ", ".join(f"{key}={value}" for key, value in environment.variables)
-        lines.append(f"Environment values: {variables}.")
+        variables = ", ".join(key for key, _ in environment.variables)
+        lines.append(
+            f"Expected environment variable names: {variables}. "
+            "Values are intentionally not embedded."
+        )
     if environment.context:
         context = ", ".join(
             f"{item.source} -> {item.target} ({item.kind})" for item in environment.context
         )
         lines.append(f"Expected context material: {context}.")
     if environment.tools:
-        rendered_tools = []
-        for tool in environment.tools:
-            details = [tool.kind]
-            if tool.verify is not None:
-                details.append(f"verify: {tool.verify}")
-            if tool.install is not None:
-                details.append(f"install: {tool.install}")
-            rendered_tools.append(f"{tool.name} ({'; '.join(details)})")
+        rendered_tools = [f"{tool.name} ({tool.kind})" for tool in environment.tools]
         tools = ", ".join(rendered_tools)
         lines.append(f"Expected tools: {tools}.")
     return lines
@@ -254,7 +258,7 @@ def _role_skill(manifest: SquadManifest, role: Role) -> bytes:
 
 
 def _dispatch_skill(manifest: SquadManifest, roles: tuple[Role, ...]) -> bytes:
-    plugin_name = manifest.squad.id.replace(".", "-")
+    plugin_name = provider_namespace(manifest.squad.id)
     sections = [
         "---",
         f"name: {plugin_name}--dispatch",

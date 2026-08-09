@@ -62,7 +62,7 @@
           "minProperties": 1,
           "properties": {
             "claude": {"type": "object", "additionalProperties": false, "minProperties": 1, "properties": {"model": {"type": "string", "minLength": 1}, "tools": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}}, "agent_file": {"type": "string", "minLength": 1}}},
-            "codex": {"type": "object", "additionalProperties": false, "minProperties": 1, "properties": {"model": {"type": "string", "minLength": 1}, "reasoning_effort": {"$ref": "#/$defs/reasoningEffort"}, "sandbox_mode": {"enum": ["read-only", "workspace-write", "danger-full-access"]}}}
+            "codex": {"type": "object", "additionalProperties": false, "minProperties": 1, "properties": {"model": {"type": "string", "minLength": 1}, "reasoning_effort": {"$ref": "#/$defs/reasoningEffort"}, "sandbox_mode": {"enum": ["read-only", "workspace-write"]}}}
           }
         }
       }

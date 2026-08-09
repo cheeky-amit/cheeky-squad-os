@@ -137,3 +137,60 @@ def test_runtime_owner_must_be_selected() -> None:
 
     with pytest.raises(ContractError, match="runtime_owner"):
         SquadManifest.from_dict(raw)
+
+    schema = load_json(SCHEMAS / "manifest.schema.json")
+    errors = list(validator_for(schema)(schema, registry=schema_registry()).iter_errors(raw))
+    assert errors
+
+
+@pytest.mark.parametrize("squad_id", ["foo..bar", "-leading", "trailing-"])
+def test_manifest_schema_and_runtime_reject_the_same_invalid_squad_ids(
+    squad_id: str,
+) -> None:
+    raw = load_json(FIXTURES / "manifest-v2.json")
+    assert isinstance(raw, dict)
+    assert isinstance(raw["squad"], dict)
+    raw["squad"]["id"] = squad_id
+    schema = load_json(SCHEMAS / "manifest.schema.json")
+
+    assert list(validator_for(schema)(schema, registry=schema_registry()).iter_errors(raw))
+    with pytest.raises(ContractError, match=r"squad\.id"):
+        SquadManifest.from_dict(raw)
+
+
+def test_manifest_schema_and_runtime_accept_full_semver() -> None:
+    raw = load_json(FIXTURES / "manifest-v2.json")
+    assert isinstance(raw, dict)
+    raw["export_version"] = "1.2.3-alpha.1+build.7"
+    schema = load_json(SCHEMAS / "manifest.schema.json")
+
+    validator_for(schema)(schema, registry=schema_registry()).validate(raw)
+    assert SquadManifest.from_dict(raw).export_version == "1.2.3-alpha.1+build.7"
+
+
+def test_manifest_schema_and_runtime_enforce_squad_id_length() -> None:
+    raw = load_json(FIXTURES / "manifest-v2.json")
+    assert isinstance(raw, dict)
+    assert isinstance(raw["squad"], dict)
+    raw["squad"]["id"] = "a" * 64
+    schema = load_json(SCHEMAS / "manifest.schema.json")
+
+    assert list(validator_for(schema)(schema, registry=schema_registry()).iter_errors(raw))
+    with pytest.raises(ContractError, match="at most 63"):
+        SquadManifest.from_dict(raw)
+
+
+def test_export_plan_schema_rejects_traversal_paths() -> None:
+    manifest = SquadManifest.from_dict(load_json(FIXTURES / "manifest-v2.json"))
+    plan = build_export_plan(
+        manifest=manifest,
+        target_root="/tmp/export-target",
+        source_sha256="a" * 64,
+        writes={"safe.txt": b"safe"},
+    ).to_dict()
+    assert isinstance(plan["writes"], list)
+    assert isinstance(plan["writes"][0], dict)
+    plan["writes"][0]["path"] = "../escape"
+    schema = load_json(SCHEMAS / "export-plan.schema.json")
+
+    assert list(validator_for(schema)(schema, registry=schema_registry()).iter_errors(plan))

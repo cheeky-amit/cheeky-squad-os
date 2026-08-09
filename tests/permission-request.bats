@@ -583,11 +583,106 @@ JSON
 JSON
   publish_record report-writer
 
-  run_hook '{"agent_type":"cheeky-portability-demo--report-writer","tool_name":"Write","tool_input":{"file_path":"reports/final/report.md"}}'
+  run_hook '{"agent_type":"cheeky-dportability-hdemo--report-writer","tool_name":"Write","tool_input":{"file_path":"reports/final/report.md"}}'
   [ "$status" -eq 0 ]
   printf '%s' "$output" | jq -e '.hookSpecificOutput.decision.behavior == "allow"'
 
   run_hook '{"agent_type":"other-squad--report-writer","tool_name":"Write","tool_input":{"file_path":"reports/final/report.md"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "portable v2: exclusions win over broad includes" {
+  cat > "$PROJECT_DIR/.squad/manifest.json" <<'JSON'
+{
+  "schema_version": 2,
+  "squad": {"id": "cheeky.portability-demo", "name": "Portability demo"},
+  "execution_mode": "one-time",
+  "destination": "project",
+  "providers": ["claude", "codex"],
+  "runtime_owner": "claude",
+  "export_version": "1.1.0"
+}
+JSON
+  cat > "$PROJECT_DIR/.squad/roster.json" <<'JSON'
+{
+  "schema_version": 2,
+  "squad_goal_ref": ".squad/goal.md",
+  "execution_mode": "one-time",
+  "roles": [
+    {
+      "id": "report-writer",
+      "purpose": "Write report",
+      "description": "Write report",
+      "file_ownership": {
+        "include": ["**"],
+        "exclude": ["reports/private/**"]
+      },
+      "capabilities": ["filesystem.write"],
+      "reasoning": {"profile": "balanced", "effort": "inherit"},
+      "active": true
+    }
+  ]
+}
+JSON
+  publish_record report-writer
+
+  run_hook '{"agent_type":"cheeky-dportability-hdemo--report-writer","tool_name":"Write","tool_input":{"file_path":"reports/public/report.md"}}'
+  [ "$status" -eq 0 ]
+  printf '%s' "$output" | jq -e '.hookSpecificOutput.decision.behavior == "allow"'
+
+  run_hook '{"agent_type":"cheeky-dportability-hdemo--report-writer","tool_name":"Write","tool_input":{"file_path":"reports/private/secret.md"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "portable v2: namespaced Bash uses canonical role for reserved claims" {
+  cat > "$PROJECT_DIR/.squad/manifest.json" <<'JSON'
+{
+  "schema_version": 2,
+  "squad": {"id": "cheeky.portability-demo", "name": "Portability demo"},
+  "execution_mode": "one-time",
+  "destination": "project",
+  "providers": ["claude", "codex"],
+  "runtime_owner": "claude",
+  "export_version": "1.1.0"
+}
+JSON
+  cat > "$PROJECT_DIR/.squad/roster.json" <<'JSON'
+{
+  "schema_version": 2,
+  "squad_goal_ref": ".squad/goal.md",
+  "execution_mode": "one-time",
+  "roles": [
+    {
+      "id": "report-writer",
+      "purpose": "Write report",
+      "description": "Write report",
+      "file_ownership": {
+        "include": ["reports/**"],
+        "exclude": []
+      },
+      "capabilities": ["filesystem.write", "shell.execute"],
+      "reasoning": {"profile": "balanced", "effort": "inherit"},
+      "environment": {
+        "workspace": ".squad/workspaces/report-writer/",
+        "directories": [],
+        "variables": {},
+        "context": [],
+        "tools": []
+      },
+      "active": true
+    }
+  ]
+}
+JSON
+  publish_record report-writer
+
+  run_hook '{"agent_type":"cheeky-dportability-hdemo--report-writer","tool_name":"Bash","tool_input":{"command":"touch .squad/world/claims-report-writer.md"}}'
+  [ "$status" -eq 0 ]
+  printf '%s' "$output" | jq -e '.hookSpecificOutput.decision.behavior == "allow"'
+
+  run_hook '{"agent_type":"cheeky-dportability-hdemo--report-writer","tool_name":"Bash","tool_input":{"command":"touch .squad/world/claims-other.md"}}'
   [ "$status" -eq 0 ]
   [ -z "$output" ]
 }

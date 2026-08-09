@@ -19,6 +19,7 @@ from cheeky_squad_portability.contracts import (
 from cheeky_squad_portability.errors import ContractError
 from cheeky_squad_portability.json_io import JsonValue, pretty_json
 from cheeky_squad_portability.migration import load_roster
+from cheeky_squad_portability.namespace import provider_namespace, provider_role_id
 
 _CAPABILITY_TO_TOOL = {
     Capability.FILESYSTEM_EDIT.value: "Edit",
@@ -119,8 +120,26 @@ def claude_role_id(manifest: SquadManifest, role: Role) -> str:
     """Return the stable discovery ID used for project, user, and plugin agents."""
 
     _require_claude(manifest)
-    squad_id = manifest.squad.id.replace(".", "-")
-    return f"{squad_id}--{role.id}"
+    return provider_role_id(manifest.squad.id, role.id)
+
+
+def _environment_lines(role: Role) -> list[str]:
+    if role.environment is None:
+        return []
+    environment = role.environment
+    lines = ["", "## Environment", "", f"Workspace: `{environment.workspace}`."]
+    if environment.directories:
+        lines.append("Expected directories: " + ", ".join(environment.directories) + ".")
+    if environment.variables:
+        variable_names = ", ".join(f"`{key}`" for key, _ in environment.variables)
+        lines.append(
+            "Load the provisioned workspace environment before running tools. "
+            f"Expected variable names: {variable_names}. Values are intentionally not embedded."
+        )
+    if environment.tools:
+        tools = ", ".join(f"{tool.name} ({tool.kind})" for tool in environment.tools)
+        lines.append(f"Expected tools: {tools}.")
+    return lines
 
 
 def _render_agent(manifest: SquadManifest, role: Role) -> bytes:
@@ -188,10 +207,17 @@ def _render_agent(manifest: SquadManifest, role: Role) -> bytes:
         lines.extend(
             [
                 "",
+                "## Engagement record",
+                "",
+                f"Before your first write, publish `.squad/role-plan-{role.id}.md` with the",
+                "artifacts you intend to change. This canonical, un-namespaced path is the",
+                "bootstrap recognized by the vendored PermissionRequest runtime.",
+                "",
                 "This is a mutating role. Make the smallest change and keep writes inside the",
                 "declared ownership paths, and report every artifact changed.",
             ]
         )
+    lines.extend(_environment_lines(role))
     lines.extend(
         [
             "",
@@ -257,7 +283,7 @@ def _hook_manifest() -> dict[str, JsonValue]:
 
 def _plugin_manifest(manifest: SquadManifest) -> bytes:
     plugin: dict[str, JsonValue] = {
-        "name": manifest.squad.id.replace(".", "-"),
+        "name": provider_namespace(manifest.squad.id),
         "displayName": manifest.squad.name,
         "description": manifest.squad.description or f"Portable squad: {manifest.squad.name}",
         "version": manifest.export_version,

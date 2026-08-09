@@ -1,6 +1,16 @@
 ---
 name: squad-partner
-description: Use when the human wants to record, view, change, or remove the standing brief that describes how they want to work with this squad — phrases like "set up my partner model", "here's how I want you to work with me", "decide that without me next time", "always ask before X", "no vendor mentions ever, that's a standing rule", "check whether I'm right that X", "show my partner model", "update the partner model", "delete the partner model". Manages `.squad/partner.md` — one per project, describing the single commanding human, not the initiative. Verbs: create (drafts from the conversation so far, then at most 3 skippable questions), show, update (diff → confirm → bump `updated`), delete (requires typing `yes, delete`).
+description: >-
+  Use when the human wants to record, view, change, or remove the standing brief
+  that describes how they want to work with this squad — phrases like "set up my
+  partner model", "here's how I want you to work with me", "decide that without
+  me next time", "always ask before X", "no vendor mentions ever, that's a
+  standing rule", "check whether I'm right that X", "show my partner model",
+  "update the partner model", "delete the partner model". Manages
+  `.squad/partner.md` — one per project, describing the single commanding human,
+  not the initiative. Verbs: create (drafts from the conversation so far, then
+  at most 3 skippable questions), show, update (diff → confirm → bump `updated`),
+  delete (requires typing `yes, delete`).
 version: 0.1.0
 author: cheeky-squad-os
 license: MIT

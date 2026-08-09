@@ -11,7 +11,7 @@
     "target_root": {"type": "string", "minLength": 1},
     "source_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "plan_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-    "writes": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["path", "sha256", "size", "executable"], "properties": {"path": {"type": "string", "minLength": 1}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "size": {"type": "integer", "minimum": 0}, "executable": {"type": "boolean"}}}},
-    "deletes": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["path"], "properties": {"path": {"type": "string", "minLength": 1}}}}
+    "writes": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["path", "sha256", "size", "executable"], "properties": {"path": {"type": "string", "minLength": 1, "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!\\.$).+"}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "size": {"type": "integer", "minimum": 0}, "executable": {"type": "boolean"}}}},
+    "deletes": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["path"], "properties": {"path": {"type": "string", "minLength": 1, "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!\\.$).+"}}}}
   }
 }

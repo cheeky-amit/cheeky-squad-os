@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from cheeky_squad_portability.errors import ContractError
 
@@ -10,7 +10,9 @@ _RUNTIME_DIRECTORIES = ("hooks", "skills", "templates")
 _PRIVATE_PARTS = {"__pycache__", ".git", ".squad", "workspaces"}
 
 
-def _is_private(path: Path) -> bool:
+def is_private_runtime_path(path: Path | PurePosixPath) -> bool:
+    """Return whether a runtime-relative path is live or private state."""
+
     if any(part in _PRIVATE_PARTS for part in path.parts):
         return True
     if path.name.startswith(".env"):
@@ -40,7 +42,7 @@ def collect_runtime_files(source_root: Path) -> dict[str, bytes]:
                 raise ContractError("runtime source is missing LICENSE")
             continue
         relative = candidate.relative_to(root)
-        if _is_private(relative) or candidate.is_dir():
+        if is_private_runtime_path(relative) or candidate.is_dir():
             continue
         if candidate.is_symlink() or not candidate.is_file():
             raise ContractError(f"runtime artifact must be a regular file: {relative.as_posix()}")

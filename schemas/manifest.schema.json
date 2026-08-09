@@ -4,6 +4,10 @@
   "title": "Portable squad manifest v2",
   "type": "object",
   "additionalProperties": false,
+  "allOf": [
+    {"if": {"properties": {"runtime_owner": {"const": "claude"}}, "required": ["runtime_owner"]}, "then": {"properties": {"providers": {"contains": {"const": "claude"}}}}},
+    {"if": {"properties": {"runtime_owner": {"const": "codex"}}, "required": ["runtime_owner"]}, "then": {"properties": {"providers": {"contains": {"const": "codex"}}}}}
+  ],
   "required": ["schema_version", "squad", "execution_mode", "destination", "providers", "runtime_owner", "export_version"],
   "properties": {
     "schema_version": {"const": 2},
@@ -12,7 +16,7 @@
       "additionalProperties": false,
       "required": ["id", "name"],
       "properties": {
-        "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9.-]*[a-z0-9]$|^[a-z0-9]$"},
+        "id": {"type": "string", "maxLength": 63, "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)*$"},
         "name": {"type": "string", "minLength": 1},
         "description": {"type": "string", "minLength": 1}
       }
@@ -28,7 +32,7 @@
     "runtime_owner": {"enum": ["claude", "codex"]},
     "export_version": {
       "type": "string",
-      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)([-+][0-9A-Za-z.-]+)?$"
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"
     }
   }
 }

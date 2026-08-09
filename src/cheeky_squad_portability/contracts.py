@@ -13,6 +13,7 @@ from enum import StrEnum
 
 from cheeky_squad_portability.errors import ContractError
 from cheeky_squad_portability.json_io import JsonValue, sorted_unique
+from cheeky_squad_portability.namespace import SQUAD_ID_MAX_LENGTH
 
 _ROLE_ID_PATTERN = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$")
 _SQUAD_ID_PATTERN = re.compile(
@@ -153,6 +154,8 @@ class SquadIdentity:
     def __post_init__(self) -> None:
         if not _SQUAD_ID_PATTERN.fullmatch(self.id):
             raise ContractError("squad.id must be a lowercase namespaced identifier")
+        if len(self.id) > SQUAD_ID_MAX_LENGTH:
+            raise ContractError(f"squad.id must contain at most {SQUAD_ID_MAX_LENGTH} characters")
         _string(self.name, "squad.name")
         if self.description is not None:
             _string(self.description, "squad.description")
@@ -471,7 +474,6 @@ class CodexOverride:
         if self.sandbox_mode is not None and self.sandbox_mode not in {
             "read-only",
             "workspace-write",
-            "danger-full-access",
         }:
             raise ContractError("provider_overrides.codex.sandbox_mode is invalid")
 

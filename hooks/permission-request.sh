@@ -139,7 +139,8 @@ if jq -e '.schema_version == 2' "$ROSTER" >/dev/null 2>&1; then
   case "$SQUAD_ID" in
     ''|*[!a-z0-9.-]*) exit 0 ;;
   esac
-  ROLE_PREFIX="${SQUAD_ID//./-}--"
+  ROLE_PREFIX="${SQUAD_ID//-/-h}"
+  ROLE_PREFIX="${ROLE_PREFIX//./-d}--"
   case "$AGENT_TYPE" in
     "$ROLE_PREFIX"*) ROLE_NAME="${AGENT_TYPE#"$ROLE_PREFIX"}" ;;
     *) exit 0 ;;
@@ -434,6 +435,15 @@ case "$TOOL_NAME" in
       exit 0  # no file_scope → defer
     fi
 
+    EXCLUDES=$(printf '%s' "$ROLE_JSON" \
+      | jq -r '(.file_ownership.exclude // [])[]?' 2>/dev/null)
+    while IFS= read -r GLOB; do
+      [ -z "$GLOB" ] && continue
+      if path_in_scope "$REL_PATH" "$GLOB"; then
+        exit 0  # an explicit exclusion always wins; defer to the user
+      fi
+    done <<< "$EXCLUDES"
+
     MATCHED=0
     while IFS= read -r GLOB; do
       [ -z "$GLOB" ] && continue
@@ -511,7 +521,7 @@ case "$TOOL_NAME" in
       # #10, #14). The Edit/Write surface has guarded exactly this since
       # v0.4.1 (squad_grant's ws != ".squad" clause); this one did not.
       if rel_under_squad "$REL"; then
-        squad_grant "$REL" "$AGENT_TYPE" "$WS" || exit 0
+        squad_grant "$REL" "$ROLE_NAME" "$WS" || exit 0
         continue
       fi
       if ! rel_under_dir "$REL" "$WS"; then

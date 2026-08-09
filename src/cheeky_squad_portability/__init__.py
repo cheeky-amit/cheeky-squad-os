@@ -35,6 +35,7 @@ from cheeky_squad_portability.exporter import (
     validate_prepared_export,
 )
 from cheeky_squad_portability.migration import load_roster, migrate_legacy_roster
+from cheeky_squad_portability.namespace import provider_namespace, provider_role_id
 from cheeky_squad_portability.plan import (
     DeleteOperation,
     ExportPlan,
@@ -76,6 +77,8 @@ __all__ = [
     "load_roster",
     "migrate_legacy_roster",
     "plan_export",
+    "provider_namespace",
+    "provider_role_id",
     "uninstall_export",
     "validate_installed_export",
     "validate_prepared_export",

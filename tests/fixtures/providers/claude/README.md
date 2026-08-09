@@ -13,7 +13,7 @@ Claude owns the shared runtime, so this package registers the vendored lifecycle
 
 ## Packaged roles
 
-- `cheeky-portability-demo--evidence-reader`
-- `cheeky-portability-demo--report-writer`
+- `cheeky-dportability-hdemo--evidence-reader`
+- `cheeky-dportability-hdemo--report-writer`
 
 Export version: `1.1.0`

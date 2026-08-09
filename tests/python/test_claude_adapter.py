@@ -20,10 +20,14 @@ from cheeky_squad_portability.contracts import (
     SquadManifest,
 )
 from cheeky_squad_portability.errors import ContractError
+from cheeky_squad_portability.namespace import provider_namespace
 
 ROOT = Path(__file__).parents[2]
 PORTABLE = ROOT / "tests" / "fixtures" / "portable"
 GOLDEN = ROOT / "tests" / "fixtures" / "providers" / "claude"
+NAMESPACE = "cheeky-dportability-hdemo"
+READER_ID = f"{NAMESPACE}--evidence-reader"
+WRITER_ID = f"{NAMESPACE}--report-writer"
 
 
 def _json(path: Path) -> object:
@@ -56,7 +60,7 @@ def runtime_files() -> dict[str, bytes]:
 
 
 def test_role_ids_are_stably_namespaced(manifest: SquadManifest, roster: Roster) -> None:
-    assert claude_role_id(manifest, roster.roles[0]) == "cheeky-portability-demo--evidence-reader"
+    assert claude_role_id(manifest, roster.roles[0]) == READER_ID
 
 
 def test_agents_match_goldens_and_map_read_write_boundaries(
@@ -65,15 +69,11 @@ def test_agents_match_goldens_and_map_read_write_boundaries(
     artifacts = compile_claude_agents(manifest, roster)
 
     assert artifacts == {
-        "agents/cheeky-portability-demo--evidence-reader.md": (
-            GOLDEN / "evidence-reader.md"
-        ).read_bytes(),
-        "agents/cheeky-portability-demo--report-writer.md": (
-            GOLDEN / "report-writer.md"
-        ).read_bytes(),
+        f"agents/{READER_ID}.md": (GOLDEN / "evidence-reader.md").read_bytes(),
+        f"agents/{WRITER_ID}.md": (GOLDEN / "report-writer.md").read_bytes(),
     }
-    reader = artifacts["agents/cheeky-portability-demo--evidence-reader.md"].decode()
-    writer = artifacts["agents/cheeky-portability-demo--report-writer.md"].decode()
+    reader = artifacts[f"agents/{READER_ID}.md"].decode()
+    writer = artifacts[f"agents/{WRITER_ID}.md"].decode()
     assert 'tools: ["Read","Glob","Grep"]' in reader
     assert 'model: "haiku"' in reader
     assert "This is a read-only role" in reader
@@ -81,6 +81,9 @@ def test_agents_match_goldens_and_map_read_write_boundaries(
     assert 'model: "opus"' in writer
     assert 'effort: "high"' in writer
     assert "This is a mutating role" in writer
+    assert ".squad/role-plan-report-writer.md" in writer
+    assert "Expected variable names: `REPORT_FORMAT`" in writer
+    assert "REPORT_FORMAT=markdown" not in writer
     for text in (reader, writer):
         frontmatter = text.split("---", 2)[1]
         assert "hooks:" not in frontmatter
@@ -94,7 +97,7 @@ def test_inactive_roles_are_not_discoverable(manifest: SquadManifest, roster: Ro
 
     artifacts = compile_claude_agents(manifest, changed)
 
-    assert list(artifacts) == ["agents/cheeky-portability-demo--report-writer.md"]
+    assert list(artifacts) == [f"agents/{WRITER_ID}.md"]
 
 
 def test_legacy_fallback_is_pure_and_byte_equivalent(manifest: SquadManifest) -> None:
@@ -170,3 +173,30 @@ def test_claude_must_be_selected(manifest: SquadManifest, roster: Roster) -> Non
 
     with pytest.raises(ContractError, match=r"manifest\.providers"):
         compile_claude_agents(codex_only, roster)
+
+
+def test_namespace_encoding_is_injective_for_dots_and_hyphens(
+    manifest: SquadManifest, roster: Roster
+) -> None:
+    dotted = replace(manifest, squad=replace(manifest.squad, id="foo.bar"))
+    hyphenated = replace(manifest, squad=replace(manifest.squad, id="foo-bar"))
+
+    assert provider_namespace(dotted.squad.id) != provider_namespace(hyphenated.squad.id)
+    assert claude_role_id(dotted, roster.roles[0]) != claude_role_id(hyphenated, roster.roles[0])
+
+
+def test_generated_agents_never_embed_environment_values(
+    manifest: SquadManifest, roster: Roster
+) -> None:
+    sentinel = "portable-secret-sentinel"
+    environment = replace(
+        roster.roles[1].environment,
+        variables=(("API_TOKEN", sentinel),),
+    )
+    writer = replace(roster.roles[1], environment=environment)
+
+    generated = compile_claude_agents(manifest, replace(roster, roles=(writer,)))
+    content = next(iter(generated.values()))
+
+    assert b"API_TOKEN" in content
+    assert sentinel.encode() not in content
