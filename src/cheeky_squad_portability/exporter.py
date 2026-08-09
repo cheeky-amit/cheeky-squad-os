@@ -22,6 +22,7 @@ from cheeky_squad_portability.contracts import (
 )
 from cheeky_squad_portability.json_io import canonical_json_bytes, pretty_json, sha256_bytes
 from cheeky_squad_portability.migration import load_roster
+from cheeky_squad_portability.namespace import provider_namespace
 from cheeky_squad_portability.plan import ExportPlan, build_export_plan
 from cheeky_squad_portability.receipt import (
     ExportReceipt,
@@ -162,7 +163,7 @@ class UninstallResult:
 def squad_namespace(squad_id: str) -> str:
     """Return the stable namespace used for user-level discovery artifacts."""
 
-    return squad_id.replace(".", "-")
+    return provider_namespace(squad_id)
 
 
 def _relative(value: str, label: str) -> str:
@@ -203,6 +204,8 @@ def _merge_outputs(target: dict[str, bytes], rendered: Mapping[str, bytes]) -> N
             raise ExportError("provider compiler output must map string paths to bytes")
         path = _relative(raw_path, "compiler output path")
         if path in target:
+            if target[path] == content:
+                continue
             raise ExportError(f"multiple generated artifacts collide at {path}")
         target[path] = content
 
