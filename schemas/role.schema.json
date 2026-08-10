@@ -1,0 +1,6 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cheeky-squad-os.dev/schemas/role-v2.json",
+  "title": "Provider-neutral squad role v2",
+  "$ref": "https://cheeky-squad-os.dev/schemas/roster-v2.json#/$defs/role"
+}

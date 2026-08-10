@@ -1,10 +1,7 @@
 ---
 name: squad-onboard
 description: Use when the user is starting any new initiative — engineering ("I want to build/ship/refactor…"), operations ("set up a weekly report", "monitor X every day"), business infrastructure ("run a Klaviyo audit", "audit our paid funnel"), knowledge work ("research X", "produce a decision memo on Y") — or any time a Claude Code session begins without .squad/goal.md present. Asks one question ("Do you have a goal?"), reformulates the user's answer as a measurable outcome, infers the squad mode from goal shape, offers one optional pass of guided domain research before decomposing, decomposes the work into parallel workstreams, proposes a bespoke role composition, and hands off to squad-role for generation. This is the entry point for cheeky-squad-os.
-version: 0.1.0
-author: cheeky-squad-os
 license: MIT
-compatible-with: [claude-code, agentskills-1.0]
 ---
 
 # squad-onboard
@@ -12,6 +9,29 @@ compatible-with: [claude-code, agentskills-1.0]
 You are running the entry-point flow for cheeky-squad-os. Your job is to turn the user's intent into a goal, a mode, an optional grounding pass, a workstream decomposition, and a proposed role list — then hand off to `squad-role` for role generation.
 
 Run the steps below in order. Do not skip steps. Do not ask multiple questions at once — Step 3 is the one place two things ride in a single message, and that compression is deliberate (see below), not a license to bundle more.
+
+## Roster shape compatibility
+
+Whenever this skill reads `.squad/roster.json`, choose its source shape once:
+`schema_version: 2` means v2; no schema version means legacy. Project roles into a
+read-only lifecycle view using these equivalents:
+
+- identifier: v2 `id` // legacy `name`
+- cadence: v2 `execution_mode` // legacy `mode`
+- goal references: `squad_goal_ref` in both shapes; v2 `goal_ref` // legacy `role_goal`
+- ownership: v2 `file_ownership.include` and `.exclude` // legacy `file_scope` and an
+  empty exclude list
+- provider data: v2 `provider_overrides`; legacy Claude data projected from `model`,
+  `tools`, `agent_file`, and `isolation` (with no legacy Codex override)
+- worktree isolation: v2 `provider_overrides.claude.isolation` // legacy `isolation`
+
+The `//` notation names source-shape equivalents; it is not permission to fall back to
+legacy aliases inside a malformed v2 object. Validate the selected shape and stop on a
+missing required field. This projection is read-only. Preserve a legacy roster's source
+shape on ordinary lifecycle writes; migrate it to v2 only through a separate
+`squad-roster` conversion plan that previews the exact writes/deletes and receives the
+matching confirmation. If a requested change cannot be represented losslessly in legacy
+shape, stop and offer that migration instead of dropping data.
 
 ## Step 1 — Ask the one question
 

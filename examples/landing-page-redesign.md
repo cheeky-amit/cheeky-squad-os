@@ -1,5 +1,9 @@
 # Worked example: homepage redesign with cheeky-squad-os
 
+> This example follows the established Claude authoring lifecycle and uses its legacy
+> roster vocabulary. Version 1.1 accepts it through deterministic in-memory migration;
+> see [portable-export.md](portable-export.md) for a provider-neutral v2 export.
+
 An engineering build, Multi-use mode. The team is "Acme B2B" — a small SaaS shop shipping a redesigned marketing homepage in one sprint.
 
 ## 1. The user's intent

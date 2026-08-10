@@ -122,6 +122,95 @@ teardown() {
   [[ "$output" == *'"status":"provisioned"'* ]]
 }
 
+@test "canonical v2 environment maps directories, context, and non-secret variable values" {
+  cat > .squad/roster.json <<'JSON'
+{
+  "schema_version": 2,
+  "squad_goal_ref": ".squad/goal.md",
+  "execution_mode": "one-time",
+  "roles": [
+    {
+      "id": "v2-puller",
+      "purpose": "Prepare v2 inputs",
+      "description": "Use when v2 inputs need preparation",
+      "file_ownership": {
+        "include": ["out/**", ".squad/workspaces/v2-puller/**"],
+        "exclude": []
+      },
+      "capabilities": ["filesystem.read", "shell.execute"],
+      "reasoning": {"profile": "balanced", "effort": "inherit"},
+      "active": true,
+      "goal_ref": ".squad/role-goal-v2-puller.md",
+      "environment": {
+        "workspace": ".squad/workspaces/v2-puller/",
+        "directories": ["inputs", "outputs"],
+        "variables": {
+          "OUTPUT_FORMAT": "portable json",
+          "REPORT_LOCALE": "en_US.UTF-8"
+        },
+        "context": [
+          {"source": "ref.txt", "target": "inputs", "kind": "copy"}
+        ],
+        "tools": [
+          {"name": "bash", "kind": "system", "verify": "command -v bash"}
+        ]
+      },
+      "provider_overrides": {
+        "claude": {
+          "model": "sonnet",
+          "tools": ["Read", "Bash"],
+          "agent_file": ".claude/agents/v2-puller.md"
+        }
+      }
+    }
+  ]
+}
+JSON
+
+  run "$PROVISION"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"role":"v2-puller"'* ]]
+  [ -d .squad/workspaces/v2-puller/inputs ]
+  [ -d .squad/workspaces/v2-puller/outputs ]
+  [ -f .squad/workspaces/v2-puller/inputs/ref.txt ]
+  run bash -c \
+    '. .squad/workspaces/v2-puller/env && test "$OUTPUT_FORMAT" = "portable json" && test "$REPORT_LOCALE" = en_US.UTF-8'
+  [ "$status" -eq 0 ]
+}
+
+@test "canonical v2 rejects unsafe environment variable names" {
+  cat > .squad/roster.json <<'JSON'
+{
+  "schema_version": 2,
+  "squad_goal_ref": ".squad/goal.md",
+  "execution_mode": "one-time",
+  "roles": [
+    {
+      "id": "bad-variable",
+      "purpose": "Exercise variable validation",
+      "description": "Use when variable validation is tested",
+      "file_ownership": {"include": ["out/**"], "exclude": []},
+      "capabilities": ["filesystem.read"],
+      "reasoning": {"profile": "balanced", "effort": "inherit"},
+      "active": true,
+      "environment": {
+        "workspace": ".squad/workspaces/bad-variable/",
+        "directories": [],
+        "variables": {"BAD-NAME": "ignored"},
+        "context": [],
+        "tools": []
+      }
+    }
+  ]
+}
+JSON
+
+  run "$PROVISION"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"invalid environment variable name 'BAD-NAME'"* ]]
+  ! grep -F 'BAD-NAME' .squad/workspaces/bad-variable/env
+}
+
 # --- safety ------------------------------------------------------------------
 
 @test "skips and reports an unsafe absolute workspace (errors, exit 1)" {
@@ -148,6 +237,44 @@ JSON
   [ "$status" -eq 1 ]
   [[ "$output" == *"unsafe"* ]]
   [ ! -d ../escape ]
+}
+
+@test "refuses a workspace symlink before writing outside the project" {
+  outside="$(mktemp -d)"
+  rm -rf .squad/workspaces
+  ln -s "$outside" .squad/workspaces
+
+  run "$PROVISION"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"symlink component in environment.workspace"* ]]
+  [ ! -e "$outside/puller" ]
+  rm -rf "$outside"
+}
+
+@test "refuses a symlinked env file without sourcing or overwriting it" {
+  mkdir -p .squad/workspaces/puller
+  outside="$(mktemp -d)"
+  printf '%s\n' 'user-owned-env' > "$outside/env"
+  ln -s "$outside/env" .squad/workspaces/puller/env
+
+  run "$PROVISION"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"refusing symlinked environment file"* ]]
+  [ "$(<"$outside/env")" = "user-owned-env" ]
+  rm -rf "$outside"
+}
+
+@test "refuses a symlinked receipt without overwriting its target" {
+  mkdir -p .squad/workspaces/puller
+  outside="$(mktemp -d)"
+  printf '%s\n' 'user-owned-receipt' > "$outside/receipt"
+  ln -s "$outside/receipt" .squad/workspaces/puller/.provisioned.json
+
+  run "$PROVISION"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"refusing symlinked provision receipt"* ]]
+  [ "$(<"$outside/receipt")" = "user-owned-receipt" ]
+  rm -rf "$outside"
 }
 
 # --- empty / preflight -------------------------------------------------------

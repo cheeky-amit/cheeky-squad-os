@@ -1,0 +1,72 @@
+# cheeky-squad-os brief (draft)
+
+Status: inferred from repository evidence; maintainer confirmation required before treating this as canonical.
+
+## Product
+
+`cheeky-squad-os` is an open-source squad generator and execution discipline for agentic work. A human defines one measurable goal; the system generates only the roles that goal needs, gives them explicit ownership and stop conditions, coordinates their work, records hand-offs and beliefs, and verifies observable completion before declaring success.
+
+## Who it is for
+
+[INFERRED] Developers, operators, founders, and knowledge workers who use Claude Code or OpenAI Codex for work large enough to benefit from multiple specialized agents but who do not want a fixed, generic roster.
+
+## Problem
+
+Single-agent sessions drift, overreach, pollute context, confuse synthesis with verification, and hide assumptions. Generic multi-agent frameworks also bias every problem toward predefined roles.
+
+The current implementation solves this well for Claude Code, but generated squads remain coupled to the installed base plugin and cannot yet be exported as self-contained projects or independently installable Claude/Codex plugins.
+
+## Desired outcome
+
+[INFERRED] Make Squad OS the provider-neutral generator/compiler for portable squads:
+
+- One canonical squad schema.
+- Claude and Codex adapters generated from the same role definitions.
+- Project-local export by default, with no user-wide writes.
+- Independent plugin export for squads meant to be shared or installed.
+- Honest capability parity: every mechanical claim is tested per provider; unsupported differences are visible.
+
+## Core principles to preserve
+
+1. The human owns the goal and every consequential ruling.
+2. Roles are generated from the goal, not shipped as defaults.
+3. Every role has one purpose, owned outputs, declared bounds, and explicit hand-offs.
+4. Durable beliefs carry sources and evidence grades.
+5. Synthesis summarizes; verification decides.
+6. Provider-specific runtime behavior never masquerades as a provider-neutral guarantee.
+7. A generated squad can survive removal of the generator that created it.
+
+## Primary deliverables
+
+- Portable squad schema v2.
+- Claude adapter/compiler.
+- Codex adapter/compiler.
+- Native `.codex-plugin/plugin.json` for the base product.
+- Self-contained project export.
+- Independent dual-manifest plugin export.
+- Cross-provider compatibility matrix, tests, and migration documentation.
+
+## Definition of done
+
+- A canonical two-role squad compiles to valid Claude and Codex role artifacts.
+- The current 238 Claude-focused Bats tests continue to pass.
+- A fresh-HOME test proves a project export works without the base plugin installed.
+- A fresh local-marketplace test proves a plugin export installs independently.
+- Neither export writes user-wide configuration unless the user explicitly chooses user scope.
+- Every compatibility claim is linked to a test or labeled instructional/unsupported.
+
+## Out of scope for the first portability release
+
+- Full behavioral parity for experimental or host-specific team/workflow features.
+- Replacing the working Claude implementation.
+- A public marketplace submission before local dual-host installation and security behavior are proven.
+- Pretending Codex file-scope enforcement exists before its `apply_patch`, sandbox, approval, and hook behavior are tested end to end.
+
+## Open questions
+
+1. Should a generated plugin be immutable after export, or retain an upgrade link back to Squad OS?
+2. Should plugin-mode Codex roles be materialized into `.codex/agents/`, prompt-baked at dispatch, or support both?
+3. Is hard-deny acceptable for Codex out-of-scope writes if Codex cannot reproduce Claude's defer-to-human behavior?
+4. Which model profiles should the provider-neutral schema expose: `fast`, `balanced`, `deep`, `long-running`, or another vocabulary?
+5. Should `.squad/partner.md` travel with a standalone export? The safer default is no, because it models a person and is currently project-specific and gitignored by default.
+

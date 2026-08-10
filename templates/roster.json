@@ -1,44 +1,45 @@
 {
-  "_note": "This is the seed template for .squad/roster.json. The single role below shows the schema — DELETE THIS ROLE when squad-role generates your real roles. The _note field is documentation only and is dropped on the next write by squad-roster. Fields prefixed with _ are reserved for documentation and ignored by the squad-roster skill.",
-  "_mode_note": "`mode` mirrors .squad/goal.md (authoritative). squad-roster re-derives it from goal.md on every write; squad-spawn reads mode from goal.md, never from here.",
-  "_environment_note": "The `environment` block is OPTIONAL and is the role's sandbox spec, materialized by skills/squad-env/scripts/provision.sh. `workspace` is the sandbox root (must be project-relative, no '..', and MUST be covered by file_scope so in-sandbox Edit/Write auto-approve). `dirs` are scaffolded subdirs. `env` is written to <workspace>/env and SOURCED (never exported globally). `context` seeds local reference material (kind copy|link run locally; kind fetch is a global_need). `tools` declare readiness: kind 'local' with an `install` command is installed INTO the sandbox; kind 'system'/'mcp' is never run — it is proposed to the user as a global_need.",
+  "schema_version": 2,
   "squad_goal_ref": ".squad/goal.md",
-  "mode": "one-time",
+  "execution_mode": "one-time",
   "created": "1970-01-01T00:00:00Z",
   "roles": [
     {
-      "_comment": "EXAMPLE ROLE — your roles get generated here by /cheeky-squad-os:squad-role. Delete this entry (or wait — squad-role overwrites the file when it adds the first real role). This example is for schema reference only; active is false so squad-spawn will skip it.",
-      "name": "example-role-delete-me",
-      "purpose": "One sentence describing what this role does. Action-first. Specific artifact.",
-      "agent_file": ".claude/agents/example-role-delete-me.md",
-      "role_goal": ".squad/role-goal-example-role-delete-me.md",
-      "file_scope": [
-        "path/the/role/owns/**",
-        "another/path/the/role/owns/**"
+      "id": "example-role-delete-me",
+      "purpose": "Produce one specific artifact for the squad goal",
+      "description": "Use when the squad needs the example artifact produced",
+      "file_ownership": {
+        "include": [
+          "path/the/role/owns/**",
+          ".squad/workspaces/example-role-delete-me/**"
+        ],
+        "exclude": []
+      },
+      "capabilities": [
+        "filesystem.read",
+        "filesystem.write",
+        "shell.execute"
       ],
-      "tools": [
-        "Read",
-        "Write",
-        "Bash"
-      ],
-      "model": "sonnet",
-      "_effort_comment": "OPTIONAL. One of low | medium | high | xhigh | max. Omit to inherit the session's effort level; available tiers depend on the model. A role with no effort field is valid.",
-      "effort": "high",
+      "reasoning": {
+        "profile": "balanced",
+        "effort": "high"
+      },
+      "active": false,
+      "goal_ref": ".squad/role-goal-example-role-delete-me.md",
       "environment": {
-        "_comment": "OPTIONAL sandbox spec. Omit the whole block for a role that needs no provisioned environment. The workspace glob below is also added to file_scope so the role's in-sandbox Edit/Write auto-approve.",
-        "workspace": ".squad/workspaces/example-role-delete-me/",
-        "dirs": [
+        "workspace": ".squad/workspaces/example-role-delete-me",
+        "directories": [
           "inputs",
           "outputs",
           "scratch"
         ],
-        "env": {
-          "EXAMPLE_VAR": "value"
+        "variables": {
+          "EXAMPLE_VAR": "non-secret-example-value"
         },
         "context": [
           {
-            "from": "path/to/local/reference/**",
-            "into": "inputs",
+            "source": "path/to/local/reference/**",
+            "target": "inputs",
             "kind": "copy"
           }
         ],
@@ -56,7 +57,18 @@
           }
         ]
       },
-      "active": false,
+      "provider_overrides": {
+        "claude": {
+          "model": "sonnet",
+          "tools": [
+            "Read",
+            "Write",
+            "Bash"
+          ],
+          "agent_file": ".claude/agents/example-role-delete-me.md",
+          "isolation": "worktree"
+        }
+      },
       "created": "1970-01-01T00:00:00Z"
     }
   ]

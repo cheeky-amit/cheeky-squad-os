@@ -51,6 +51,24 @@ publish_goal() {
   printf '%s\n' "$1" > "$PROJECT_DIR/.squad/goal.md"
 }
 
+publish_manifest() {
+  mkdir -p "$PROJECT_DIR/.squad"
+  printf '%s\n' "$1" > "$PROJECT_DIR/.squad/manifest.json"
+}
+
+publish_plugin_snapshot() {
+  local owner="${1:-claude}" providers="${2:-[\"claude\"]}"
+  PLUGIN_DIR="$(mktemp -d)"
+  export CLAUDE_PLUGIN_ROOT="$PLUGIN_DIR"
+  mkdir -p "$PLUGIN_DIR/.squad/context"
+  printf '{"schema_version":2,"squad":{"id":"portable.demo","name":"Demo"},"execution_mode":"one-time","destination":"plugin","providers":%s,"runtime_owner":"%s","export_version":"1.1.0"}\n' \
+    "$providers" "$owner" > "$PLUGIN_DIR/.squad/manifest.json"
+  printf '%s\n' '{"schema_version":1,"squad_goal":{"source":".squad/goal.md","status":"included","snapshot":"context/squad-goal.md"},"role_goals":[]}' \
+    > "$PLUGIN_DIR/.squad/context/index.json"
+  printf '%s\n' '# Vendored goal' '' 'Use only the portable snapshot.' \
+    > "$PLUGIN_DIR/.squad/context/squad-goal.md"
+}
+
 # publish_partner <content> → writes .squad/partner.md with the given
 # content (non-empty by construction, since printf always adds a newline).
 publish_partner() {
@@ -98,6 +116,72 @@ Ship the thing.'
   run_hook
   [ "$status" -eq 0 ]
   [ "$(ctx)" = "no squad goal set — run /cheeky-squad-os:squad-onboard to set one" ]
+}
+
+# --- portable runtime-owner arbitration ---------------------------------------
+
+@test "v2 project manifest emits only for a selected Claude runtime owner" {
+  publish_goal 'Claude-owned project goal.'
+  publish_manifest '{"schema_version":2,"providers":["claude","codex"],"runtime_owner":"claude"}'
+  run_hook
+  [ "$status" -eq 0 ]
+  [[ "$(ctx)" == *"Claude-owned project goal."* ]]
+
+  publish_manifest '{"schema_version":2,"providers":["claude","codex"],"runtime_owner":"codex"}'
+  run_hook
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+
+  publish_manifest '{"schema_version":2,"providers":["codex"],"runtime_owner":"claude"}'
+  run_hook
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "malformed or unknown adjacent manifest defers instead of using legacy goal" {
+  publish_goal 'Legacy fallback must not leak.'
+  publish_manifest '{not-json'
+  run_hook
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+
+  publish_manifest '{"schema_version":99,"providers":["claude"],"runtime_owner":"claude"}'
+  run_hook
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "standalone plugin emits vendored context and never substitutes live goal" {
+  publish_goal 'LIVE SOURCE MUST NOT APPEAR.'
+  publish_plugin_snapshot
+  run_hook
+  [ "$status" -eq 0 ]
+  out="$(ctx)"
+  [[ "$out" == *"Use only the portable snapshot."* ]]
+  [[ "$out" != *"LIVE SOURCE MUST NOT APPEAR"* ]]
+}
+
+@test "standalone plugin with missing or unavailable context defers without live fallback" {
+  publish_goal 'LIVE SOURCE MUST NOT APPEAR.'
+  publish_plugin_snapshot
+  rm "$PLUGIN_DIR/.squad/context/squad-goal.md"
+  run_hook
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+
+  printf '%s\n' '{"schema_version":1,"squad_goal":{"source":".squad/goal.md","status":"missing","snapshot":null},"role_goals":[]}' \
+    > "$PLUGIN_DIR/.squad/context/index.json"
+  printf '%s\n' 'forged fallback' > "$PLUGIN_DIR/.squad/context/squad-goal.md"
+  run_hook
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "standalone Codex-owned plugin makes Claude session hook defer" {
+  publish_plugin_snapshot codex '["claude","codex"]'
+  run_hook
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
 }
 
 # --- byte-identical absence contract -------------------------------------------

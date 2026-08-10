@@ -1,16 +1,36 @@
 ---
 name: squad-world
-description: Use when the human wants to record, inspect, settle, or research what the squad believes about the world — phrases like "the squad should know X", "note that X is true", "what does the squad believe about X", "show the world model", "what's disputed", "settle the disagreement about X", "adjudicate X", "that's no longer true", "retire the belief about X", "research the domain first", "research whether X changed". Manages .squad/world/claims-<owner>.md, the shared belief ledger — the human's own beliefs and rulings (claims-user.md, the only file this skill writes freely, no gate) plus a read/adjudicate surface over every role's own claims-<role>.md, plus — via the **research** verb, gated by two human approvals — claims-research.md, the ledger's findings file. seed/inspect/adjudicate/retire are NOT onboarding steps, triggered on demand; research is the one exception — offered once by squad-onboard with the goal already approved, and re-runnable on demand thereafter.
-version: 0.1.0
-author: cheeky-squad-os
+description: Use when the human wants to record, inspect, settle, or research what the squad believes about the world — phrases like "the squad should know X", "note that X is true", "what does the squad believe about X", "show the world model", "what's disputed", "settle the disagreement about X", "adjudicate X", "that's no longer true", "retire the belief about X", "research the domain first", or "research whether X changed". Manages owner-keyed claims files under .squad/world as the shared belief ledger — the human's own beliefs and rulings in claims-user.md, a read/adjudicate surface over every role's claims file, and the research verb's human-gated findings in claims-research.md. Seed, inspect, adjudicate, and retire are triggered on demand; research is the one exception, offered once by squad-onboard after goal approval and re-runnable thereafter.
 license: MIT
 allowed-tools: [Read, Write, Edit, Bash]
-compatible-with: [claude-code, agentskills-1.0]
 ---
 
 # squad-world
 
 Every other skill in this plugin acts on the human's behalf — it writes what a role or a flow decided. `squad-world` is different: **the human authors this artifact.** That is this skill's reason to exist at all (`CONTRIBUTING.md`'s skill-count rule: a new skill only when the human is the artifact's own author, not a delegate acting for them). `claims-user.md` is the human's own ledger — their beliefs, and the rulings that settle disputes between roles' beliefs. No role ever writes to it; the `PermissionRequest` hook refuses the reserved owner name `user` structurally, so this skill is the one place in `.squad/world/` trusted to write there at all.
+
+## Roster shape compatibility
+
+Whenever this skill reads `.squad/roster.json`, choose its source shape once:
+`schema_version: 2` means v2; no schema version means legacy. Project roles into a
+read-only lifecycle view using these equivalents:
+
+- identifier: v2 `id` // legacy `name`
+- cadence: v2 `execution_mode` // legacy `mode`
+- goal references: `squad_goal_ref` in both shapes; v2 `goal_ref` // legacy `role_goal`
+- ownership: v2 `file_ownership.include` and `.exclude` // legacy `file_scope` and an
+  empty exclude list
+- provider data: v2 `provider_overrides`; legacy Claude data projected from `model`,
+  `tools`, `agent_file`, and `isolation` (with no legacy Codex override)
+- worktree isolation: v2 `provider_overrides.claude.isolation` // legacy `isolation`
+
+The `//` notation names source-shape equivalents; it is not permission to fall back to
+legacy aliases inside a malformed v2 object. Validate the selected shape and stop on a
+missing required field. This projection is read-only. Preserve a legacy roster's source
+shape on ordinary lifecycle writes; migrate it to v2 only through a separate
+`squad-roster` conversion plan that previews the exact writes/deletes and receives the
+matching confirmation. If a requested change cannot be represented losslessly in legacy
+shape, stop and offer that migration instead of dropping data.
 
 ## What this is
 

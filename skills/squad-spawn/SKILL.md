@@ -1,24 +1,49 @@
 ---
 name: squad-spawn
-description: Use when the user wants to dispatch the squad to actually do the work — phrases like "dispatch the squad", "spawn the team", "start the work", "run it", "go", "kick off", "let's do it", or any "ready to start" signal after onboarding and role generation. Branches on the squad's mode — One-time spawns subagents, Multi-use spawns Agent Teams teammates (each referenced by name; spawn.sh optionally pre-creates one git worktree per role as a working directory), Evergreen surfaces scheduling options for the user to choose. Bakes the full text of .squad/goal.md and the relevant .squad/role-goal-<role>.md into every spawn prompt — that is the only reliable context channel from parent to worker.
-version: 0.1.0
-author: cheeky-squad-os
+description: Use when the user wants to dispatch the squad to actually do the work — phrases like "dispatch the squad", "spawn the team", "start the work", "run it", "go", "kick off", "let's do it", or any "ready to start" signal after onboarding and role generation. Branches on the squad's mode — One-time spawns subagents, Multi-use spawns Agent Teams teammates (each referenced by name; spawn.sh optionally pre-creates one git worktree per role as a working directory), Evergreen surfaces scheduling options for the user to choose. Bakes the full text of .squad/goal.md and each role's declared goal reference into every spawn prompt — that is the only reliable context channel from parent to worker.
 license: MIT
 allowed-tools: [Read, Bash, Agent]
-compatible-with: [claude-code, agentskills-1.0]
 ---
 
 # squad-spawn
 
 You orchestrate dispatch. The squad has been onboarded (`.squad/goal.md` exists), roles have been generated (`.squad/roster.json` is populated, `.claude/agents/<role>.md` files exist). Your job is to launch them in the right way for the squad's mode.
 
+## Roster shape compatibility
+
+Whenever this skill reads `.squad/roster.json`, choose its source shape once:
+`schema_version: 2` means v2; no schema version means legacy. Project roles into a
+read-only lifecycle view using these equivalents:
+
+- identifier: v2 `id` // legacy `name`
+- cadence: v2 `execution_mode` // legacy `mode`
+- goal references: `squad_goal_ref` in both shapes; v2 `goal_ref` // legacy `role_goal`
+- ownership: v2 `file_ownership.include` and `.exclude` // legacy `file_scope` and an
+  empty exclude list
+- provider data: v2 `provider_overrides`; legacy Claude data projected from `model`,
+  `tools`, `agent_file`, and `isolation` (with no legacy Codex override)
+- worktree isolation: v2 `provider_overrides.claude.isolation` // legacy `isolation`
+
+The `//` notation names source-shape equivalents; it is not permission to fall back to
+legacy aliases inside a malformed v2 object. Validate the selected shape and stop on a
+missing required field. This projection is read-only. Preserve a legacy roster's source
+shape on ordinary lifecycle writes; migrate it to v2 only through a separate
+`squad-roster` conversion plan that previews the exact writes/deletes and receives the
+matching confirmation. If a requested change cannot be represented losslessly in legacy
+shape, stop and offer that migration instead of dropping data.
+
+In the pseudocode below, `role.name` means this projected identifier, never a raw
+shape-specific lookup. `role.file_scope` means projected ownership includes together
+with its excludes; an exclude always wins. Resolve the role-goal and Claude agent paths
+from the projected references rather than inventing filename conventions.
+
 ## Preflight — refuse if not ready
 
 1. Read `.squad/goal.md`. If absent: refuse with *"No squad goal set. Run `/cheeky-squad-os:squad-onboard` first."* and stop.
 2. Read `.squad/roster.json`. If absent or `roles` array is empty: refuse with *"Roster is empty. Run `/cheeky-squad-os:squad-role` to generate at least one role."* and stop.
-3. For each role in roster: verify `.claude/agents/<role.name>.md` and `.squad/role-goal-<role.name>.md` exist. If any missing: print the gaps and ask the user to re-run `squad-role` for the missing ones.
-4. Read each `.squad/role-goal-<role.name>.md`.
-5. Note the squad's mode from `goal.md` frontmatter.
+3. For each active projected role, require a declared role-goal reference and Claude `agent_file`, then verify both exact paths exist. Do not substitute `.squad/role-goal-<identifier>.md` or `.claude/agents/<identifier>.md` when a declared reference is absent. If any reference or file is missing, print the exact gaps and ask the user to re-run `squad-role` for those roles.
+4. Read the exact projected role-goal reference for each active role.
+5. Note the squad's mode from `goal.md` frontmatter and require it to match the projected roster cadence.
 6. **Provision environments.** If any active role has an `environment` block, run `/cheeky-squad-os:squad-env` (or directly `${CLAUDE_PLUGIN_ROOT}/skills/squad-env/scripts/provision.sh .squad/roster.json .squad/goal.md`) **before** dispatching. This builds each role's sandbox and surfaces any `global_needs` for the user to approve. Do not dispatch a role whose sandbox could not be provisioned (the summary's `errors` > 0) — fix the `environment` first. Roles with no `environment` block skip this.
 7. **Clear the hand-off channel (staleness).** Manifests under `.squad/role-comm-*.md` are per-engagement working state. If any exist from a prior run, delete them before dispatching — baking them would feed roles stale hand-offs (the deliverables they referenced live on in committed `file_scope` paths; only the routing note is discarded). **Exception:** keep them when this dispatch is an explicit follow-on stage consuming a previous run's hand-offs (the user says so, or the previous run's synthesis planned this stage). In Evergreen mode, every iteration is a fresh engagement — clear at the start of each.
 8. **Clear engagement records — dispatched roles only.** Delete `.squad/role-plan-<role.name>.md` for each role you are about to dispatch **in this invocation**, and only those, before dispatching. This is narrower than step 7's blanket clear: a parallel dispatch — say, `squad-role` just registered one new teammate and you're dispatching only that role — must never delete a currently-running role's record just because it shares the roster. **Exception, same as step 7:** keep a role's record when this dispatch is an explicit follow-on stage for that role (the `--chain` case at the `/cheeky-squad-os:squad-workflow` command, or the equivalent explicit continuation on this path) — the record still describes the still-current engagement. In Evergreen mode, clear at the start of each iteration, for the role(s) that iteration dispatches.
@@ -127,8 +152,11 @@ Standing instructions for using it:
 # Incoming hand-offs — only if any .squad/role-comm-*--<role.name>.md (or --any.md) with status: ready exist
 <full contents of each ready manifest addressed to this role>
 
-# Your role's file scope
-<role.file_scope from roster.json>
+# Your role's file ownership
+Includes:
+<one projected file_ownership.include or legacy file_scope entry per bullet>
+Excludes (these win over every include):
+<one projected file_ownership.exclude entry per bullet, or "- (none)">
 
 # Your workspace (sandbox) — only if the role has an environment block
 Your sandbox is <role.environment.workspace>. Work inside it freely. Before
@@ -199,7 +227,7 @@ Read .squad/goal.md and .squad/role-goal-<role.name>.md at any time during your 
 
 Include the workspace block only for roles that have an `environment`; omit it otherwise. Include the Step 0 block and the "Your stop conditions" block always — both are baked unconditionally, in every mode, with no opt-out. A role with an empty `## Stop conditions` section (shouldn't happen post-`squad-role`, but don't assume) still gets the contract block — it just has nothing to fire on. The "Shared world model" block and the "Partner model" block are the two sections in this template that ARE conditional, per steps 9 and 10 above respectively — every role in a given dispatch gets the same yes/no on each, since both reflect state that's squad-wide (or project-wide, for the partner model) rather than anything role-specific. Never bake an empty "Partner model" heading — absent or empty `.squad/partner.md` means the section is left out entirely, not printed with nothing under it.
 
-**Hard rule #4:** the full text of `.squad/goal.md` and the role's `.squad/role-goal-<role.name>.md` is the only reliable channel from parent to subagent. The SessionStart hook does not fire for subagents. Bake the goal text in; don't rely on hook injection for the One-time path. `.squad/partner.md` rides the same channel for the same reason (hard rule #12): it is gitignored by default, so it is typically absent inside an `isolation: worktree` checkout even where SessionStart *does* fire — baking is the only path that works everywhere, every mode, every isolation setting.
+**Hard rule #4:** the full text of `.squad/goal.md` and the role's projected goal reference is the only reliable channel from parent to subagent. The SessionStart hook does not fire for subagents. Bake both texts in; don't rely on hook injection for the One-time path. `.squad/partner.md` rides the same channel for the same reason (hard rule #12): it is gitignored by default, so it is typically absent inside an `isolation: worktree` checkout even where SessionStart *does* fire — baking is the only path that works everywhere, every mode, every isolation setting.
 
 ## Branch on mode
 
@@ -210,9 +238,9 @@ For each role in `.squad/roster.json` (filter `active: true`):
 1. Build the spawn prompt using the template above. For "your task on this invocation", derive from the role's purpose plus the squad's definition of done — what does this role contribute *this run*?
 2. Invoke the `Agent` tool. Pass:
    - `description`: the role's purpose (3–5 words)
-   - `subagent_type`: the role's name (matches `.claude/agents/<role.name>.md`)
+   - `subagent_type`: the projected identifier (the declared Claude `agent_file` must describe this same role)
    - `prompt`: the composed spawn prompt
-3. If the role's frontmatter has `isolation: worktree`, the subagent automatically runs in a worktree (per sub-agents doc; the frontmatter handles it — no extra flag needed from you).
+3. If projected Claude isolation is `worktree`, verify the declared agent artifact carries that frontmatter; the subagent then runs in a worktree (per sub-agents doc — no extra flag needed from you).
 4. Subagents can run in parallel if their workstreams are independent. Send multiple `Agent` tool calls in one message to dispatch in parallel. Otherwise dispatch sequentially.
 5. **Sequential chains ride the hand-off channel.** Before dispatching a downstream role, glob `.squad/role-comm-*--<role.name>.md` (plus `--any.md` broadcasts); bake the full text of every `status: ready` manifest into its spawn prompt under "Incoming hand-offs". Subagents can't receive messages mid-run — the manifest travels the same prompt-baking channel as the goal (hard rule #4). If an expected upstream manifest is missing, say so in the prompt rather than silently omitting it; the consumer role must know it's working without the hand-off.
 6. Wait for each subagent's deliverable summary. Synthesize results into a user-facing report.
@@ -293,8 +321,8 @@ After the user picks an option, confirm: *"Squad is set up for Evergreen mode vi
 For One-time and Multi-use modes, after the squad finishes (or per-iteration in Evergreen):
 
 1. **Collect worktree-isolated records first.** Run `bash "${CLAUDE_PLUGIN_ROOT}/skills/squad-spawn/scripts/spawn.sh" collect .squad/roster.json`. A role dispatched under `isolation: worktree` (hard rule #7) wrote its engagement record — and, if it asserted anything, its belief-ledger claims file (hard rule #13) — inside its worktree, invisible at the project root until this copies both in. Cheap and always safe to run even when no role used worktree isolation (it reports `skipped-no-worktree` per artifact and moves on); skipping this step means step 3 below silently sees "no record" for a worktree role that actually declared one, and means the world model a next dispatch's step 9 reads is missing whatever that role asserted.
-2. Read each role's outputs from their `file_scope`.
-3. **Declared-vs-produced diff.** For each dispatched role, read its engagement record at `.squad/role-plan-<role.name>.md`, if it published one. Diff the record's `## Deliverables` list against what actually landed in `file_scope`: name every path the role declared but never produced, and every path it produced but never declared. A role with no record has nothing to diff against — say so plainly in that role's row rather than skipping it silently.
+2. Read each role's outputs from projected ownership includes, excluding every path matched by projected ownership excludes.
+3. **Declared-vs-produced diff.** For each dispatched role, read its engagement record at `.squad/role-plan-<role.name>.md`, if it published one. Diff the record's `## Deliverables` list against what actually landed inside projected ownership: name every path the role declared but never produced, every in-scope path it produced but never declared, and any produced path matched by an exclusion. A role with no record has nothing to diff against — say so plainly in that role's row rather than skipping it silently.
 4. **Quote every `[assumed]` bullet, verbatim.** Pull every `## Assumptions` bullet graded `[assumed]` out of each record into the summary, unedited — the claim and its `if wrong → …` clause together. These are the guesses the human should see even when nothing failed; do not paraphrase, summarize, or drop the `if wrong →` clause.
 5. **Collect ask-first surfaces and belief-check reports (hard rule #12).** Only relevant when step 10's preflight found a non-empty `.squad/partner.md`. From each dispatched role's own final response — the text it returned to you (a One-time subagent's returned deliverable summary; a Multi-use teammate's own messages to you as team lead) — pull every `[surfaced-ask-first]`-tagged line and every `[belief-check: ...]`-tagged line, verbatim. Both live only in that conversational text — there is no `.squad/` file backing either one (a role's write to `.squad/partner.md` is structurally refused, hard rule #12), so this is the only place they exist, and only this run's own synthesis can capture them; nothing reads them back afterward. Keep both lists — one feeds the summary below, the other feeds the receipt.
 6. Compose a user-facing summary: what each role produced, where the artifacts live, what's next. **Every `[belief-check: ...]` line collected in the step above goes here too, plainly, undigested** — it is the direct answer to a `## Beliefs to check` entry in `.squad/partner.md`, and the human should see the role's own verdict (confirmed / contradicted / could not test) in its own words, not your paraphrase of it.

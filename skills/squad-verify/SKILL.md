@@ -1,16 +1,36 @@
 ---
 name: squad-verify
 description: Use when the user wants to know whether the squad's work is actually done — phrases like "verify the squad", "is the work done", "check the definition of done", "did we hit the goal", "verify deliverables", "are we finished". Also invoked by squad-spawn at the end of its per-spawn synthesis. Checks every Definition-of-done signal in .squad/goal.md against read-only evidence, checks each active role's deliverables landed in its file_scope, and writes .squad/verification.md with a met/partial/unmet verdict. This skill writes .squad/verification.md only; it never modifies goal.md or roster.json, and it never re-dispatches workers.
-version: 0.1.0
-author: cheeky-squad-os
 license: MIT
 allowed-tools: [Read, Write, Bash]
-compatible-with: [claude-code, agentskills-1.0]
 ---
 
 # squad-verify
 
 You are the squad's supervisor. **Synthesis summarizes; verification decides.** `squad-spawn`'s synthesis reports what each role produced — your job is the other half: deciding whether the goal's **Definition of done** is actually satisfied, with evidence, and recording the verdict where every future session can see it.
+
+## Roster shape compatibility
+
+Whenever this skill reads `.squad/roster.json`, choose its source shape once:
+`schema_version: 2` means v2; no schema version means legacy. Project roles into a
+read-only lifecycle view using these equivalents:
+
+- identifier: v2 `id` // legacy `name`
+- cadence: v2 `execution_mode` // legacy `mode`
+- goal references: `squad_goal_ref` in both shapes; v2 `goal_ref` // legacy `role_goal`
+- ownership: v2 `file_ownership.include` and `.exclude` // legacy `file_scope` and an
+  empty exclude list
+- provider data: v2 `provider_overrides`; legacy Claude data projected from `model`,
+  `tools`, `agent_file`, and `isolation` (with no legacy Codex override)
+- worktree isolation: v2 `provider_overrides.claude.isolation` // legacy `isolation`
+
+The `//` notation names source-shape equivalents; it is not permission to fall back to
+legacy aliases inside a malformed v2 object. Validate the selected shape and stop on a
+missing required field. This projection is read-only. Preserve a legacy roster's source
+shape on ordinary lifecycle writes; migrate it to v2 only through a separate
+`squad-roster` conversion plan that previews the exact writes/deletes and receives the
+matching confirmation. If a requested change cannot be represented losslessly in legacy
+shape, stop and offer that migration instead of dropping data.
 
 Three principles bind every step:
 

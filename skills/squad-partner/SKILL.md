@@ -1,11 +1,18 @@
 ---
 name: squad-partner
-description: Use when the human wants to record, view, change, or remove the standing brief that describes how they want to work with this squad — phrases like "set up my partner model", "here's how I want you to work with me", "decide that without me next time", "always ask before X", "no vendor mentions ever, that's a standing rule", "check whether I'm right that X", "show my partner model", "update the partner model", "delete the partner model". Manages `.squad/partner.md` — one per project, describing the single commanding human, not the initiative. Verbs: create (drafts from the conversation so far, then at most 3 skippable questions), show, update (diff → confirm → bump `updated`), delete (requires typing `yes, delete`).
-version: 0.1.0
-author: cheeky-squad-os
+description: >-
+  Use when the human wants to record, view, change, or remove the standing brief
+  that describes how they want to work with this squad — phrases like "set up my
+  partner model", "here's how I want you to work with me", "decide that without
+  me next time", "always ask before X", "no vendor mentions ever, that's a
+  standing rule", "check whether I'm right that X", "show my partner model",
+  "update the partner model", "delete the partner model". Manages
+  `.squad/partner.md` — one per project, describing the single commanding human,
+  not the initiative. Verbs: create (drafts from the conversation so far, then
+  at most 3 skippable questions), show, update (diff → confirm → bump `updated`),
+  delete (requires typing `yes, delete`).
 license: MIT
 allowed-tools: [Read, Write, Edit, Bash]
-compatible-with: [claude-code, agentskills-1.0]
 ---
 
 # squad-partner
@@ -13,6 +20,29 @@ compatible-with: [claude-code, agentskills-1.0]
 Every other skill in this plugin writes what a role or a flow decided. `squad-world`'s `claims-user.md` is the human authoring their own beliefs about the world; this skill is the human authoring the brief on *themselves* — the second and last place in cheeky-squad-os where the human is the artifact's own author, not a delegate acting for them (`CONTRIBUTING.md`'s skill-count rule).
 
 `.squad/partner.md` is the plugin's answer to desideratum 1, "You understand me" (Collins et al. §2.3): the human's decide-vs-ask line, the constraints that bind every squad in this project, and the beliefs of theirs a role should check rather than inherit.
+
+## Roster shape compatibility
+
+Whenever this skill reads `.squad/roster.json`, choose its source shape once:
+`schema_version: 2` means v2; no schema version means legacy. Project roles into a
+read-only lifecycle view using these equivalents:
+
+- identifier: v2 `id` // legacy `name`
+- cadence: v2 `execution_mode` // legacy `mode`
+- goal references: `squad_goal_ref` in both shapes; v2 `goal_ref` // legacy `role_goal`
+- ownership: v2 `file_ownership.include` and `.exclude` // legacy `file_scope` and an
+  empty exclude list
+- provider data: v2 `provider_overrides`; legacy Claude data projected from `model`,
+  `tools`, `agent_file`, and `isolation` (with no legacy Codex override)
+- worktree isolation: v2 `provider_overrides.claude.isolation` // legacy `isolation`
+
+The `//` notation names source-shape equivalents; it is not permission to fall back to
+legacy aliases inside a malformed v2 object. Validate the selected shape and stop on a
+missing required field. This projection is read-only. Preserve a legacy roster's source
+shape on ordinary lifecycle writes; migrate it to v2 only through a separate
+`squad-roster` conversion plan that previews the exact writes/deletes and receives the
+matching confirmation. If a requested change cannot be represented losslessly in legacy
+shape, stop and offer that migration instead of dropping data.
 
 ## Hard rule #12 — told, not inferred
 

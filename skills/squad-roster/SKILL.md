@@ -1,154 +1,232 @@
 ---
 name: squad-roster
-description: Use when the user wants to inspect, modify, or audit the active squad — phrases like "show the roster", "who's on the squad", "list teammates", "remove <role>", "deactivate <role>", "what does <role> own", "audit scopes", "show file scopes", "what's <role>'s goal". Manages .squad/roster.json as the source of truth and auto-generates .squad/roster.md as a human-readable view. Also called by squad-role to register newly generated roles; the PermissionRequest hook reads roster.json directly to look up scopes.
-version: 0.1.0
-author: cheeky-squad-os
+description: Use when the user wants to inspect, modify, audit, validate, or export the active squad, including showing the roster, removing a role, auditing scopes, exporting a project or user squad, building a Claude or Codex plugin, or uninstalling an exported squad. Owns the canonical provider-neutral .squad/roster.json, its human view, and the preview/confirm lifecycle for squad-export.
 license: MIT
-compatible-with: [claude-code, agentskills-1.0]
 ---
 
 # squad-roster
 
-You manage `.squad/roster.json` — the source of truth for who's on the squad — and regenerate `.squad/roster.md` (human-readable view) on every write.
+You own `.squad/roster.json`, the source of truth for roles, and regenerate
+`.squad/roster.md` after every roster write. Version 2 is provider-neutral. Legacy
+Claude rosters remain readable through pure, deterministic in-memory migration.
 
-## File schema
+You also expose **export** as a verb on this existing lifecycle skill. Export compiles
+roles; it never authors a second roster and never installs or enables a plugin.
 
-`.squad/roster.json`:
+## Roster shape compatibility
+
+Choose the source shape once: `schema_version: 2` means v2; no schema version means
+legacy. Project roles into one read-only lifecycle view using these equivalents:
+
+- identifier: v2 `id` // legacy `name`
+- cadence: v2 `execution_mode` // legacy `mode`
+- goal references: `squad_goal_ref` in both shapes; v2 `goal_ref` // legacy `role_goal`
+- ownership: v2 `file_ownership.include` and `.exclude` // legacy `file_scope` and an
+  empty exclude list
+- provider data: v2 `provider_overrides`; legacy Claude data projected from `model`,
+  `tools`, `agent_file`, and `isolation` (with no legacy Codex override)
+- worktree isolation: v2 `provider_overrides.claude.isolation` // legacy `isolation`
+
+The `//` notation names source-shape equivalents; it is not permission to fall back to
+legacy aliases inside a malformed v2 object. Validate the selected shape and stop on a
+missing required field. The projection is deterministic and read-only. Read-only
+operations leave the source byte-for-byte untouched; ordinary mutations serialize the
+same source shape. Convert legacy to v2 only as a separate operation that previews the
+exact writes/deletes and requires the matching plan confirmation. If v2-only semantics
+cannot be represented losslessly in legacy shape, stop and offer conversion instead of
+dropping them.
+
+## Canonical roster v2
 
 ```json
 {
+  "schema_version": 2,
   "squad_goal_ref": ".squad/goal.md",
-  "mode": "one-time | multi-use | evergreen",
+  "execution_mode": "one-time",
   "created": "<ISO-8601>",
   "roles": [
     {
-      "name": "klaviyo-data-puller",
-      "purpose": "Pull Klaviyo flow performance via MCP and dump as JSON",
-      "agent_file": ".claude/agents/klaviyo-data-puller.md",
-      "role_goal": ".squad/role-goal-klaviyo-data-puller.md",
-      "file_scope": ["reports/klaviyo/**", "data/klaviyo/**", ".squad/workspaces/klaviyo-data-puller/**"],
-      "tools": ["Read", "Write", "Bash", "mcp__claude_ai_Klaviyo__*"],
-      "model": "sonnet",
-      "environment": {
-        "workspace": ".squad/workspaces/klaviyo-data-puller/",
-        "dirs": ["inputs", "outputs", "scratch"],
-        "env": {},
-        "context": [],
-        "tools": [{ "name": "jq", "kind": "system", "verify": "command -v jq" }]
+      "id": "report-writer",
+      "purpose": "Write the verified final report",
+      "description": "Use when the squad needs its verified final report",
+      "file_ownership": {
+        "include": ["reports/final/**"],
+        "exclude": []
       },
+      "capabilities": ["filesystem.read", "filesystem.write"],
+      "reasoning": {"profile": "deep", "effort": "high"},
       "active": true,
+      "goal_ref": ".squad/role-goal-report-writer.md",
+      "provider_overrides": {
+        "claude": {
+          "model": "opus",
+          "tools": ["Read", "Write"],
+          "agent_file": ".claude/agents/report-writer.md"
+        }
+      },
       "created": "<ISO-8601>"
     }
   ]
 }
 ```
 
-The `environment` block is **optional** (managed by `squad-env`, materialized by `provision.sh`). When present, `workspace` must be project-relative with no `..`, and `<workspace>/**` must appear in `file_scope` (so the role's in-sandbox Edit/Write auto-approve).
+Portable capabilities include `filesystem.read`, `filesystem.glob`,
+`filesystem.search`, `filesystem.write`, `filesystem.edit`, `shell.execute`,
+`network.fetch`, `network.search`, and `notebook.edit`. Exact provider-only tools use
+`provider_overrides`; do not invent a neutral mapping.
 
-`.squad/roster.md` is regenerated from `roster.json` after every write. It is **not authoritative** — never read from it. Always read from the JSON.
+An optional `environment` carries `workspace`, `directories`, non-secret `variables`,
+`context`, and `tools`. Portable exports retain variable names but redact every value.
+Provider overrides may tune Claude model/tools/legacy agent path or Codex
+model/reasoning/sandbox. They do not replace purpose, description, or ownership.
 
-**Source of truth for `mode`:** `.squad/goal.md` frontmatter is authoritative (it is what `squad-spawn` reads). The `mode` in `roster.json` is a **mirror** kept for the human view. On every write, re-derive it from `.squad/goal.md` and overwrite the roster copy; if they diverged, print a warning naming both values. Never let a user edit drive `roster.json`'s mode independently of the goal.
+## Legacy behavior
 
-## Operations
+When the roster has no `schema_version: 2`, load it through the deterministic migration
+path. Present the canonical in-memory result, but do not rewrite, relocate, or rename the
+legacy roster or existing `.claude/agents/` files automatically.
 
-### List / show
+Before any conversion write, preview the exact write/delete set and require the matching
+confirmation. Declining leaves the existing squad byte-for-byte untouched.
 
-If the user asks "show the roster", "who's on the squad", or similar:
+For an ordinary mutation that stays legacy, reverse-project only fields legacy can
+represent:
 
-1. Read `.squad/roster.json`. If absent: print *"No roster. Run `/cheeky-squad-os:squad-onboard` to start a squad."* and stop.
-2. Print a tabular view of all roles: name, purpose (truncated), model, active flag, file_scope (truncated).
-3. Print the squad mode and creation date as a one-line summary.
+- canonical `id` → legacy `name`; `goal_ref` → `role_goal`
+- `file_ownership.include` → `file_scope`; require `file_ownership.exclude` to be empty
+- `provider_overrides.claude.model`, `.tools`, `.agent_file`, and `.isolation` → the
+  same legacy top-level fields; any Codex override requires v2 conversion
+- canonical environment `directories`/`variables` and context `source`/`target` → legacy
+  `dirs`/`env` and `from`/`into`; never serialize secret values
 
-### Detail (one role)
+After reverse projection, project the proposed legacy object forward again and compare
+identifier, goal reference, include/exclude ownership, Claude provider choices, and
+isolation. If any lifecycle meaning changes, refuse the mutation and offer a separately
+previewed v2 conversion. Never mix v2 keys into a schema-less legacy object.
 
-If the user asks "what does `<name>` own", "show `<name>`", or similar:
+## Read operations
 
-1. Find the role in `.squad/roster.json`.
-2. Read `.claude/agents/<name>.md` and `.squad/role-goal-<name>.md`.
-3. Print: name, purpose, full file_scope (one per line), tools, model, agent_file path, role_goal path, active flag, created date. Then print the role goal contents.
+### List
 
-### Add (called by squad-role)
+1. Read and canonicalize `.squad/roster.json`. If absent, say: *"No roster. Run
+   `/cheeky-squad-os:squad-onboard` to start a squad."*
+2. Print role ID, purpose, reasoning profile, active state, and first ownership path.
+3. Print execution cadence and schema source (`v2` or `legacy, migrated in memory`).
 
-When `squad-role` finishes generating a new role, it calls into this skill to register the entry. Steps:
+### Detail
 
-1. Read `.squad/roster.json` (or create it with the schema above if absent).
-2. Check for name collision — refuse if `roles[].name` already contains the proposed name.
-3. Validate all required fields are present (name, purpose, agent_file, role_goal, file_scope, tools, model).
-4. Append the new role to `roles`.
-5. Write `.squad/roster.json` (pretty-printed, 2-space indent).
-6. Regenerate `.squad/roster.md` (see "Regenerate human view" below).
-7. Print confirmation: *"Role `<name>` added to roster."*
+For one role, print purpose, description, all include/exclude ownership paths,
+capabilities, reasoning, environment, provider overrides, goal reference, active state,
+and creation time. Read referenced files only when present; absence is not permission to
+guess their contents.
 
-### Deactivate / remove
+### Audit ownership
 
-If the user asks "remove `<name>`" or "deactivate `<name>`":
+Print every include/exclude mapping and flag overlaps. For Codex, label ownership
+**instructional in v1**. For Claude, say whether the active runtime actually owns the
+PermissionRequest hook; do not make a mechanical claim from the roster alone.
 
-1. Find the role.
-2. Ask: *"Soft-deactivate (`active: false`, file kept) or hard-delete (remove entry, file deleted)?"*
-3. **Soft-deactivate:** flip `active: false` in roster.json. Role file and role goal file are kept on disk. `squad-spawn` will skip inactive roles. Reversible — user can flip it back.
-4. **Hard-delete:** ask once more for confirmation (*"This deletes `.claude/agents/<name>.md` and `.squad/role-goal-<name>.md`. Confirm with `yes, delete`."*). On exact-match confirmation: remove from `roles`, delete the two files, write roster.json, regenerate roster.md.
-5. If neither: leave unchanged.
+The legacy Claude `.squad/` structural reservation remains runtime-specific. Never
+describe it as portable or as Codex enforcement.
 
-### Audit scopes
+## Write operations
 
-If the user asks "audit scopes", "show file scopes", or similar:
+### Add
 
-1. Read all roles' `file_scope` arrays.
-2. Print a table: scope glob → role name.
-3. Highlight overlaps — if two roles claim the same path, print a warning. In Multi-use mode, overlaps cause merge conflicts; in One-time mode, they may produce inconsistent writes.
-4. **Note the structural `.squad/` grants — not overlaps.** `hooks/permission-request.sh` grants each role three paths structurally, derived from its own `agent_type`/roster entry, and checked *before* `file_scope` is ever consulted for a `.squad/` path: its own engagement record `.squad/role-plan-<name>.md` (hard rule #11, granted unconditionally — it is the bootstrap), its own hand-off outbox `.squad/role-comm-<name>--*` (granted once that record exists), and — when it has an `environment` block — its own `<environment.workspace>/**` sandbox. None of the three need to appear in `file_scope` for the grant to work; a roster that lists one or more anyway (pre-v0.4.1 rosters commonly list the outbox) is **valid but redundant**, not an error. Do not flag them as overlaps between roles even when two roles' listed globs both happen to cover them — the hook never reaches `file_scope` for a `.squad/` path either way. (The `<environment.workspace>/**` glob is the one exception this skill still asks for explicitly — see Validation below — kept for the human-readable roster view, not because the grant needs it.)
+Called by `squad-role` after role generation:
 
-### Regenerate human view
+1. Canonicalize the roster in memory.
+2. Refuse an ID collision.
+3. Validate required neutral fields and optional provider overrides.
+4. For a v2 roster, append the role and pretty-print v2 JSON. For a legacy roster, preserve
+   its legacy shape using the reverse projection above. If the new role has exclusions,
+   Codex overrides, or any other semantics that fail the forward-projection check, stop and
+   offer a separate conversion plan; do not add a partially represented role. Regenerate
+   `.squad/roster.md` only after the selected-shape write succeeds.
+5. Report every generated provider artifact separately from the neutral roster write.
 
-After any write to `.squad/roster.json`, regenerate `.squad/roster.md` with this structure:
+### Deactivate or remove
 
-```markdown
-# Squad roster
+Ask whether to soft-deactivate (`active: false`) or hard-delete the roster entry and
+referenced generated role/goal artifacts. Hard-delete requires exact confirmation
+`yes, delete`. Delete only paths the selected role entry owns; ambiguous or missing
+ownership cancels deletion.
 
-**Goal:** [.squad/goal.md](goal.md)
-**Mode:** <mode>
-**Created:** <created>
+### Human view
 
-## Active roles
+Regenerate `.squad/roster.md` from canonical JSON. It is not authoritative and must say
+so. Show active/inactive tables and links to provider artifacts that actually exist.
 
-| Name | Purpose | Model | File scope |
-| --- | --- | --- | --- |
-| <name> | <purpose, truncated to 60 chars> | <model> | <scope[0]>, <scope[1]>, … |
+## Export verb
 
-## Inactive roles
+When the user asks to export, make portable, install to a project/user, use for this
+session, or generate a plugin:
 
-(only shown if any roles have `active: false`)
+1. Read/canonicalize `.squad/roster.json` and read `.squad/goal.md`.
+2. Ask or infer only missing export decisions: stable namespaced squad ID, destination,
+   provider selection (Claude and Codex by default), and one selected runtime owner.
+   Cadence comes from the goal and is not reinterpreted as destination.
+3. Draft `.squad/manifest.json` schema v2 and show it before any write.
+4. Run `squad-export plan` with explicit manifest, roster, target, and plan-file paths.
+5. Print the complete writes/deletes and plan ID. Explain provider enforcement labels
+   relevant to the chosen output.
+6. Apply only after the user confirms that exact plan ID. Recompute from the same inputs;
+   if anything changed, stop and plan again.
+7. For `user`, require a second explicit global-write confirmation in addition to the
+   plan ID. Never default to user scope.
+8. Run `squad-export validate` after a filesystem apply and report checked artifacts.
 
-| Name | Purpose | Model |
-| --- | --- | --- |
+### Destination rules
 
-## Files
+- `session`: no target and no discovery/global files; apply returns prompt-baked roles.
+- `project`: target is the explicit selected Git repository root; writes stay inside it.
+- `user`: target equals the explicit home; all artifacts are namespaced/receipted and
+  apply additionally requires `--confirm-global-write`.
+- `plugin`: target is an existing creator-selected non-home directory; generate both
+  selected provider packages, activation instructions, canonical roles, runtime,
+  license, and receipt, then stop before installation or enablement.
 
-| Role | Definition | Role goal |
-| --- | --- | --- |
-| <name> | [.claude/agents/<name>.md](../.claude/agents/<name>.md) | [.squad/role-goal-<name>.md](role-goal-<name>.md) |
+### Re-export, validate, uninstall
 
----
+Re-export may update/delete only receipt-owned files whose current hashes still match.
+Unowned collisions, modified owned files, traversal, symlink components, filesystem
+roots, home misuse, and ambiguous paths fail safely.
 
-*Auto-generated from `roster.json` by `squad-roster`. Edit `roster.json`, not this file.*
-```
+`validate` checks receipts, hashes, modes, contracts, placeholders, and provider
+artifacts. `uninstall` first prints or saves the complete removal plan, then applies only
+with the matching `--plan-file` and `--confirm-plan-id`. It removes only receipt-owned,
+unmodified files. Preserve and report modified files. User uninstall also requires the
+explicit home and global-write confirmation on apply.
 
-## Validation before write
+## Export exclusions
 
-Before writing `.squad/roster.json`:
+Never include `.squad/partner.md`, `.env*`, workspaces, worktrees, engagement/hand-off
+records, secrets, caches, version-control state, or unrelated live/private data by
+default. Exported packages are immutable vendored snapshots with no continuing runtime
+dependency on the generator.
 
-- `mode` equals `.squad/goal.md`'s mode — re-derive it from goal.md and overwrite the roster copy (goal.md is authoritative); warn if they had diverged. It must be one of `one-time`, `multi-use`, `evergreen`.
-- Every role has `name` (kebab-case, no collisions), `purpose` (non-empty), `agent_file` (path exists or will exist), `role_goal` (path exists or will exist), `file_scope` (non-empty array of strings), `tools` (non-empty array), `model` — one of `sonnet`, `opus`, `haiku`, `fable`, `inherit`, or a full model ID matching `claude-[a-z0-9.-]+`.
-- If present, `effort` is one of `low`, `medium`, `high`, `xhigh`, `max`. Optional — a role with no `effort` field is valid; do not demand one.
-- `active` is a boolean.
-- If `environment` is present: `environment.workspace` is a non-empty project-relative path with no leading `/` and no `..`; and `<workspace>/**` (trailing slash stripped, `/**` appended) appears in `file_scope`. If the workspace glob is missing from `file_scope`, add it automatically and warn that you widened the scope to cover the sandbox. `dirs`/`context`/`tools` (if present) are arrays; `env` (if present) is an object.
-- JSON is well-formed.
+## Validation before roster writes
 
-If validation fails, do not write. Print the specific failure and ask the user to fix.
+- `schema_version` is 2 for new writes.
+- `execution_mode` equals `.squad/goal.md` and is one of `one-time`, `multi-use`,
+  `evergreen`.
+- IDs are unique lowercase kebab-case; purpose/description are non-empty.
+- ownership includes at least one normalized project-relative path, no traversal.
+- capabilities are non-empty portable identifiers.
+- reasoning profile is `fast`, `balanced`, `deep`, or `inherit`; effort is `inherit`,
+  `low`, `medium`, `high`, `xhigh`, or `max`.
+- `active` is Boolean; environment/provider override shapes match schema.
+- JSON is well formed and has no unknown fields.
+
+If validation fails, do not write. Name the exact boundary failure.
 
 ## Refusals
 
-- **No goal:** refuse, point at `squad-onboard`.
-- **Add with collision:** refuse, ask for a different name.
-- **Hard-delete without exact confirmation phrase:** treat as cancel.
-- **Edit `.squad/roster.md` directly:** explain it's auto-generated; route the edit to `roster.json`.
+- No goal or roster: route to `squad-onboard`.
+- Collision or invalid contract: refuse until corrected.
+- Hard-delete without exact confirmation: cancel.
+- Direct `.squad/roster.md` edit: route to canonical JSON.
+- Stale/mismatched plan: plan again.
+- User export without global confirmation: refuse.
+- Plugin generation request phrased as installation: generate only, then explain the
+  separate activation step.

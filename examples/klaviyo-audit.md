@@ -1,5 +1,9 @@
 # Worked Example: Klaviyo Lifecycle Audit
 
+> This example follows the established Claude authoring lifecycle and uses its legacy
+> roster vocabulary. Version 1.1 accepts it through deterministic in-memory migration;
+> see [portable-export.md](portable-export.md) for a provider-neutral v2 export.
+
 A walkthrough of using **cheeky-squad-os** to spin up a bespoke three-role squad for a one-week Klaviyo audit. This is agentic business infrastructure work — not engineering — and the squad is generated specifically for this goal. No generic team applied. Section 2 also walks guided domain research end to end: both human gates, one question the human cuts and one they add, one finding that comes back unanswered, a grade the human downgrades and a finding they drop, and the delta line that changes the decomposition before a single role is proposed. Section 10 shows the founder's `.squad/partner.md` — on file since her very first session with the plugin — changing three decisions a role made in this same run, without adding a single new file or metric.
 
 ---

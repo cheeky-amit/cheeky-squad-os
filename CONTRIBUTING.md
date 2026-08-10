@@ -1,139 +1,171 @@
 # Contributing to cheeky-squad-os
 
-This is a small plugin with a clear shape. Contributions land in one of five places. Pick the one your change targets and follow the conventions for that surface.
+Contributions must preserve one shared squad contract while keeping provider syntax,
+discovery, permissions, and activation honest.
 
-## Repo layout (the actual files)
+## Repository layout
 
-```
-.claude-plugin/        plugin manifest + self-marketplace
-hooks/                 three bash scripts (SessionStart, UserPromptSubmit, PermissionRequest)
-skills/<name>/SKILL.md nine SKILL.md files (squad-onboard, squad-goal, squad-role, squad-env, squad-spawn, squad-roster, squad-verify, squad-world, squad-partner)
-skills/squad-spawn/scripts/spawn.sh  multi-use mode worktree pre-creation helper
-skills/squad-env/scripts/provision.sh  per-role sandbox provisioner
-skills/squad-verify/scripts/verify.sh  definition-of-done evidence scaffold
-commands/              squad-workflow.md (optional One-time Workflow dispatch)
-templates/             goal.md, role-goal.md, role-definition.md, role-plan.md, roster.json, squad-dispatch.workflow.js, verification.md, role-comm.md, world-claims.md, partner.md
-examples/              three walkthrough docs (one per mode)
-tests/                 smoke-test.md (manual) + permission-request.bats / spawn.bats / provision.bats / verify.bats / session-start.bats / world.bats + mermaid-lint.sh (automated)
-.github/workflows/     ci.yml — shellcheck + bats + mermaid lint + workflow-template syntax check + example-roster schema lint on push/PR
-ARCHITECTURE.md        full design doc
-```
-
-Almost everything is markdown and bash. The two exceptions: `templates/squad-dispatch.workflow.js` is the canonical dynamic-Workflow dispatch script (JavaScript, run by the Claude Code Workflow runtime), and the shell scripts are covered by a `bats` suite + `shellcheck` in CI. No Python, no build step.
-
-## What you can contribute
-
-### 1. A new skill
-
-**First, the count criterion: a new skill only when the human authors the artifact.** Nine skills is not a budget, it is the result of applying one test. If the content of the thing being written originates with the *human* — they dictate it, sentence by sentence — it earns a skill: `squad-goal` (the goal), `squad-role` (the role), `squad-world`'s `claims-user.md`, `squad-partner` (the partner model). If the content originates in the world or in a role's work and the human merely *gates, approves, or edits* it, that is a **verb on an existing skill**, not a new one — which is why guided domain research shipped as a fifth verb on `squad-world` and added zero skills. Apply the test before you write a `SKILL.md`; a verb on the skill that already owns the file is almost always the right answer.
-
-Then add a directory under `skills/<your-skill-name>/` containing a single `SKILL.md`. Follow the YAML frontmatter conventions used by the existing nine skills:
-
-```yaml
----
-name: <kebab-case>
-description: <when Claude should auto-invoke — include trigger phrases across domains>
-version: 0.1.0
-author: <your handle>
-license: MIT
-compatible-with: [claude-code, agentskills-1.0]
----
+```text
+schemas/                         manifest, roster, role, and export-plan JSON Schemas
+src/cheeky_squad_portability/   frozen contracts, migration, plans, receipts, exporter
+src/.../adapters/               pure Claude and Codex byte compilers
+.claude-plugin/                 source Claude lifecycle plugin manifest
+.codex-plugin/                  source Codex plugin manifest
+skills/                         nine lifecycle/authoring skills
+hooks/                          Claude SessionStart, UserPromptSubmit, PermissionRequest
+templates/                      lifecycle and dispatch templates
+examples/                       cadence examples and portable export walkthrough
+tests/python/                   contracts, adapters, exporter, receipts, hardening
+tests/*.bats                    Bash runtime tests
+tests/fixtures/                 canonical contracts and provider goldens
+docs/                           ADRs, provider guides, compatibility/security
 ```
 
-`version`, `author`, `license`, and `compatible-with` are **intentional** and sit outside Claude Code's own documented SKILL.md field list. Claude Code ignores unrecognized frontmatter keys, and these four carry the agentskills.io portability claim — keep them on any new skill; don't strip them as "unsupported".
+## Architecture rules
 
-Constraints:
-- Body under 200 lines. Bundle longer content in a `references/` subfolder if needed.
-- `description` field is what determines auto-invocation. Include phrases users would actually say, across the four domains (engineering, ops, business infra, knowledge work).
-- Skill body must not contain Claude-Code-specific orchestration logic. That lives in scripts under `scripts/` (see `squad-spawn` for the pattern). This keeps skills cross-tool portable per agentskills.io.
-- If your skill spawns workers, you must respect hard rule #4: bake `.squad/goal.md` and the relevant role goal text into every spawn prompt. The SessionStart hook does not fire for subagents.
+### Shared contract, provider-owned syntax
 
-Skills that touch `.squad/` state should hand off to the existing CRUD skill rather than rewriting it:
-- Read/write `.squad/goal.md` → use `squad-goal`
-- Read/write `.squad/roster.json` → use `squad-roster`
-- Generate a role → use `squad-role`
+Provider-neutral dataclasses and schemas own purpose, description, ownership,
+capabilities, reasoning, environment, and overrides. Claude and Codex adapters own their
+own file formats and mappings. Do not put `.claude`, `.codex`, TOML, or plugin layout
+decisions in the neutral contract.
 
-### 2. Modifying a hook
+Adapters are pure: they validate inputs and return a deterministic path-to-bytes map.
+They do not choose a destination or write to disk.
 
-The three hooks live at `hooks/session-start.sh`, `hooks/user-prompt-submit.sh`, `hooks/permission-request.sh`. Constraints:
+### Cadence is not destination
 
-- **Bash.** POSIX-compatible where possible, but bash extensions are allowed (the shebang is `#!/usr/bin/env bash`).
-- **Always exit 0.** Any error path must fail open. Hooks must not block agent execution.
-- **No `set -e`.** Use `set -u` if you want strict variable checking, but never let a sub-shell failure propagate as an exit code.
-- **Defer rather than deny.** PermissionRequest must never silently deny. Omit the decision and let normal permission flow handle out-of-scope calls — the user decides.
-- **jq is preferred but not required.** If jq is missing, fail open (defer to user for security decisions; emit a static fallback notice for context injection).
+`one-time`, `multi-use`, and `evergreen` control execution. `session`, `project`, `user`,
+and `plugin` control discovery/write scope. A new destination is not a new mode. A new
+mode must justify a genuinely different cadence and dispatch primitive.
 
-Hook changes need to be smoke-tested against the input JSON shapes documented at <https://code.claude.com/docs/en/hooks>. The existing hooks have a working test pattern in `tests/smoke-test.md` — extend or mimic that.
+### Export is a lifecycle verb
 
-### 3. The role-definition template
+The human authors goals and roles through the existing skills. Export belongs to
+`squad-roster`, which owns the canonical role collection. Do not add another
+provider-specific role-authoring skill.
 
-`templates/role-definition.md` is the schema every generated role derives from. If you want every future generated role to behave differently, change the template — don't change individual role files (those are user-generated and user-owned).
+### Vendored snapshots
 
-Constraints:
-- Keep the YAML frontmatter compatible with Claude Code's subagent fields (see <https://code.claude.com/docs/en/sub-agents#supported-frontmatter-fields>). The frontmatter the template emits is `name`, `description`, `tools`, `model`, optionally `effort`, optionally `isolation`. `model` accepts `sonnet` | `opus` | `haiku` | `fable` | `inherit`, or a full model ID (e.g. `claude-opus-5`); `effort` accepts `low` | `medium` | `high` | `xhigh` | `max` and must stay **optional** — a role without it inherits the session's effort, which is today's behavior. Role names are kebab-case and must not contain `:` (reserved for plugin-scoped ids).
-- All `{{placeholder}}` values must be substitutable by `squad-role` from its interactive Q&A.
-- Document every new placeholder in the comment block at the top of the file.
-- The body becomes a subagent system prompt AND, in Multi-use mode, gets appended to an Agent Teams teammate's system prompt. Per Claude Code's agent-teams doc, `skills` and `mcpServers` frontmatter fields do not propagate when used as a teammate; `tools` and `model` do. `hooks:` would not fire for a teammate either — so never put enforcement in role frontmatter; it belongs in the plugin's project-level hooks, which do fire because a teammate is a full session. A teammate inherits the lead session's `effort`, not the role file's. Reflect these constraints in any frontmatter additions.
+Generated output must work without importing this repository. Plugin generation and
+plugin installation are separate actions. No command may auto-enable, auto-install,
+publish, or submit an exported package.
 
-### 4. Proposing a new mode
+## Python standards
 
-cheeky-squad-os ships three modes — One-time, Multi-use, Evergreen — because those are the three cadences observed across engineering, ops, business infrastructure, and knowledge work. A new mode needs to justify itself:
+- Python 3.11+ and PEP 8.
+- Type annotations for public and internal functions.
+- Frozen dataclasses for contracts and value objects.
+- Prefer immutable tuples/mappings and deterministic sorting.
+- Validate at boundaries and raise a specific contract/export error.
+- Do not mix filesystem I/O into compilers.
+- Use standard-library TOML parsing in tests; do not hand-wave generated syntax.
+- Format/lint with `ruff`; test with `pytest`.
 
-- What cadence/persistence does it cover that the existing three don't?
-- What Claude Code primitive backs it?
-- How does it interact with the SessionStart hook (i.e., does the goal load via hook injection or via prompt-baking)?
-- How does `squad-spawn` branch on it?
+When a contract changes, update its Python parser/serializer, JSON Schema, canonical
+fixtures, round-trip tests, adapter goldens, and docs in the same change.
 
-Open an issue first with a proposed mode definition. A proposed mode should arrive with at least one concrete example goal that needs it. Don't add modes that subdivide the existing three.
+## Export safety rules
 
-### 5. Examples and docs
+A plan must enumerate the complete write/delete/executable set and hash all generated
+bytes. Apply only an exact, freshly recomputed matching plan. Preserve these invariants:
 
-The three example walkthroughs in `examples/` should each cover one mode AND one domain — and the domains must stay diverse. If you contribute another example, make sure it adds a domain that isn't already represented (e.g., a knowledge-work audit, a content-production pipeline, a CI babysitter).
+- session produces no discovery/global writes;
+- project writes only inside an explicit selected Git repository;
+- user writes only to an explicit matching home after a second confirmation;
+- plugin writes only to an explicit non-root, non-home selected directory;
+- root targets, traversal, symlink components/escapes, ambiguous paths, and unowned
+  collisions fail closed;
+- re-export/uninstall operates only on receipt-owned files whose hashes still match;
+- interrupted apply restores prior owned files;
+- `.squad/partner.md`, `.env*`, workspaces, engagement/hand-off records, credentials,
+  and live/private state stay excluded by default.
 
-When you add a new example, use role names that don't collide with any of the existing examples. The point of the framework is that role names are bespoke per goal — example files should reinforce that, not erode it.
+Never broaden a failure into “best effort.” A stale plan or uncertain ownership requires
+a new preview or human decision.
 
-## Style
+## Provider rules
 
-- Markdown is GitHub-flavoured CommonMark.
-- Bash scripts get a header comment block explaining what the script does, what it expects on stdin, what it emits on stdout, and its fail-mode contract.
-- Skill bodies address the model in second person ("you do X"), since they become system-prompt context.
-- Role-template body addresses the role in second person too. The role IS the reader.
-- No emoji in plugin-shipped files.
+### Claude
 
-## Local testing
+Generated agents are squad-namespaced Markdown. Generated plugins are self-contained and
+register shared hooks only when Claude is the manifest-selected runtime owner. Exact
+provider-only capabilities require explicit overrides.
 
-Two layers:
+Keep hook behavior fail-open: defer to normal user permission flow rather than silently
+deny. Run the existing Bats allow/defer matrix for any hook-related documentation or
+behavior change.
 
-**Automated** — a `bats` suite over the shell scripts, gated in CI (`.github/workflows/ci.yml`) alongside `shellcheck`:
+Official contracts:
+[subagents](https://code.claude.com/docs/en/sub-agents) and
+[plugins](https://code.claude.com/docs/en/plugins-reference).
 
-```
-shellcheck hooks/*.sh skills/**/scripts/*.sh
+### Codex
+
+Project/user agents are namespaced TOML with `name`, `description`, and
+`developer_instructions`. Standalone plugins carry native manifests and prompt-baked
+role skills because plugin custom-agent discovery is not assumed.
+
+Codex v1 ownership is instructional. Mutating roles dispatch sequentially. Do not add a
+claim of mechanical file-scope enforcement unless a tested Codex runtime mechanism is
+actually implemented. Sandbox restrictions are accurately labeled sandbox-enforced.
+
+Official plugin contract:
+[Build plugins](https://developers.openai.com/plugins/build/plugins).
+
+## Documentation rules
+
+- Label major behavior `mechanically enforced`, `sandbox-enforced`, `instructional`, or
+  `unsupported` when the distinction affects user trust.
+- Keep project and plugin output distinct; keep generation and installation distinct.
+- User/global is never the default.
+- Preserve legacy behavior claims only when migration tests prove them.
+- Update README, architecture/logic, compatibility, provider guide, smoke test, and
+  changelog alongside behavior.
+- Use GitHub-flavored CommonMark and valid Mermaid syntax.
+
+## Full local gate
+
+Install Python development dependencies plus `bats-core` and `shellcheck`, then run:
+
+```bash
+ruff check src tests/python
+ruff format --check src tests/python
+PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -q -p no:cacheprovider tests
+shellcheck hooks/*.sh skills/**/scripts/*.sh tests/*.sh
 bats tests/*.bats
+bash tests/mermaid-lint.sh
+node --check templates/squad-dispatch.workflow.js
 ```
 
-`permission-request.bats` covers the hook's allow/defer matrix (in-scope Edit/Write allow, in-sandbox Bash scaffolding allow, out-of-scope/main-session/unknown-role defer, single-segment and mid-path glob semantics — `*` never crosses `/`, `..` traversal defer, metacharacter/verb/operand-escape defer, missing-jq fail-open). `spawn.bats` covers `spawn.sh` preflight refusals and idempotent worktree creation. `provision.bats` covers `provision.sh` sandbox materialization (dirs, sourced env file, local context copy, tool verification, local-install vs global-needs classification). `verify.bats` covers `verify.sh` (preflight refusals, Definition-of-done parsing incl. frontmatter/HTML-comment exclusion, per-role scope counting, JSON-lines validity). CI additionally lints every example roster JSON block against the canonical `roster.json` schema — invented keys silently disable the permission hook, so they fail the build. Install the tools with `brew install bats-core shellcheck` (macOS) or `apt-get install bats shellcheck` (Linux). These run automatically on every push/PR.
+The test suite must additionally cover JSON Schema validation, TOML parsing, provider
+goldens, path boundaries, version consistency, generated-package validation, and secret
+scanning. CI must run supported validation on Ubuntu and macOS.
 
-**Manual end-to-end** — the interactive surface (skills, SessionStart injection, real subagent dispatch) isn't covered by bats. Run the walkthrough at `tests/smoke-test.md` before opening a PR:
+Run the real manual walkthrough in [tests/smoke-test.md](tests/smoke-test.md) before a
+release. It covers Claude lifecycle/plugin behavior plus Codex project-agent,
+skill-discovery, plugin, and prompt-baked dispatch in temporary homes.
 
-```
-/plugin marketplace add ./
-/plugin install cheeky-squad-os@cheeky-squad-os
-```
+## Reviews and commits
 
-Then follow the steps in `tests/smoke-test.md`. It exercises every skill and every hook with a real (but tiny) goal. If your change breaks the smoke test, the PR isn't ready.
-
-For hook changes, you can also pipe synthetic JSON into the hook script directly and inspect the output — that's exactly what `tests/permission-request.bats` automates, and the manual pattern is shown in `tests/smoke-test.md`.
+- Use conventional commits: `feat|fix|refactor|docs|test|chore|perf|ci: description`.
+- Check `git status` before and after changes; preserve unrelated user work.
+- Never commit `.env`, credentials, caches, generated temp homes, or `node_modules`.
+- Code, security, and documentation reviews are separate release gates. A specialist
+  does not approve their own work.
+- Do not create a tag, GitHub release, or marketplace submission as part of a code PR
+  unless the task explicitly authorizes it.
 
 ## Issues
 
-When filing a bug, include:
-- Claude Code version (`claude --version`)
-- Plugin version (`/plugin list`)
-- The contents of `.squad/goal.md` and `.squad/roster.json` at the time of the bug (redact business-sensitive content)
-- What you ran and what happened vs what you expected
+Bug reports should include OS, Python/provider CLI versions, destination, selected
+providers, redacted manifest/roster, the plan ID, and expected versus observed behavior.
+Do not attach receipts or plans until checking them for private paths.
 
-When proposing a feature, lead with the goal that needs it. A feature without a goal it serves isn't ready to ship in this plugin — the plugin's whole shape is "goals first".
+Feature proposals should lead with the user outcome and name the enforcement category.
+“Provider parity” is not sufficient if the underlying runtimes expose different
+mechanisms.
 
 ## License
 
-By contributing, you agree your contribution is licensed under the MIT License.
+By contributing, you agree that your contribution is licensed under the MIT License.

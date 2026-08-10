@@ -3,6 +3,56 @@
 All notable changes to cheeky-squad-os are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [SemVer](https://semver.org/).
 
+## [1.1.0] - 2026-08-08
+
+The portability release. A squad can now be compiled as an immutable, self-contained
+snapshot for Claude Code, Codex, or both without changing its execution cadence or
+keeping this generator installed.
+
+### Added
+
+- `.squad/manifest.json` schema v2, recording namespaced squad identity, execution mode,
+  export destination, selected providers, one runtime owner, and export version.
+- A provider-neutral roster v2 with purpose, discovery description, file ownership,
+  capabilities, reasoning profile/effort, environment, and optional provider overrides.
+- Frozen Python contracts, deterministic in-memory legacy migration, content-addressed
+  export plans, and JSON Schemas/golden fixtures.
+- Claude compiler for namespaced Markdown agents and self-contained generated plugins.
+  Shared lifecycle hooks are included only when Claude is the selected runtime owner.
+- Codex compiler for project/user TOML agents, repo-local skills, and native standalone
+  plugins with prompt-baked roles plus a valid, nested local-marketplace install surface.
+- `squad-export plan|apply|validate|uninstall` and the `export` verb on the existing
+  `squad-roster` lifecycle skill.
+- Four destinations: session-only prompt baking, repository-local project discovery,
+  explicitly confirmed namespaced user discovery, and creator-selected standalone
+  plugin generation.
+- Receipt-owned re-export/uninstall, hash validation, atomic apply/rollback, collision
+  detection, path/symlink/root/home boundaries, and private/live-state exclusions.
+- macOS and Ubuntu validation, provider golden parsing, JSON Schema/TOML validation,
+  version consistency, secret scanning, and fresh-home generated-package coverage.
+
+### Changed
+
+- Execution cadence (`one-time`, `multi-use`, `evergreen`) is explicitly independent
+  from destination (`session`, `project`, `user`, `plugin`).
+- Claude and Codex are first-class outputs by default; creators may still select one.
+- Generated outputs are immutable vendored snapshots until explicit re-export.
+- Existing Claude rosters remain compatible through pure migration. No existing squad
+  is rewritten, relocated, or renamed without a complete preview and matching
+  confirmation.
+
+### Security and compatibility
+
+- User scope is never the default and requires a second global-write confirmation.
+- Plugin generation never installs, enables, publishes, or submits the result.
+- `.squad/partner.md`, `.env*`, workspaces, engagement/hand-off records, secrets, and
+  other live/private state are excluded by default.
+- Codex v1 file ownership is **instructional**, while generated sandbox settings are
+  enforced by the active Codex runtime. Mutating Codex roles dispatch sequentially;
+  this release does not register or claim a Codex file-scope blocking hook.
+- macOS and Linux are supported. Windows remains unsupported while runtime components
+  depend on Bash.
+
 ## [1.0.0] - 2026-07-30
 
 The partnership release. v0.x wrote the squad's obligations to the goal — bespoke

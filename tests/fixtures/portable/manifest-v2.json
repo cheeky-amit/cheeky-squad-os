@@ -1,0 +1,13 @@
+{
+  "schema_version": 2,
+  "squad": {
+    "id": "cheeky.portability-demo",
+    "name": "Portability demo",
+    "description": "Canonical dual-provider fixture"
+  },
+  "execution_mode": "one-time",
+  "destination": "project",
+  "providers": ["claude", "codex"],
+  "runtime_owner": "claude",
+  "export_version": "1.1.0"
+}

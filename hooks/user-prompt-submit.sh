@@ -19,6 +19,42 @@ GOAL="$PROJECT_DIR/.squad/goal.md"
 # detection; that work is deliberately out of scope here.
 cat >/dev/null 2>&1 || true
 
+# A present v2 export manifest is authoritative. Emit only for a Claude-owned
+# snapshot that actually selects Claude; malformed/unknown manifests defer.
+# Standalone plugins use their vendored goal snapshot and never substitute a
+# live project goal when the package context is missing.
+manifest_allows_claude_runtime() {
+  local manifest="$1"
+  command -v jq >/dev/null 2>&1 || return 1
+  jq -e '
+    type == "object" and
+    .schema_version == 2 and
+    .runtime_owner == "claude" and
+    (.providers | type == "array" and index("claude") != null)
+  ' "$manifest" >/dev/null 2>&1
+}
+
+PLUGIN_MANIFEST=''
+if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ]; then
+  PLUGIN_MANIFEST="$CLAUDE_PLUGIN_ROOT/.squad/manifest.json"
+fi
+PROJECT_MANIFEST="$PROJECT_DIR/.squad/manifest.json"
+
+if [ -n "$PLUGIN_MANIFEST" ] && [ -f "$PLUGIN_MANIFEST" ]; then
+  manifest_allows_claude_runtime "$PLUGIN_MANIFEST" || exit 0
+  CONTEXT_INDEX="$CLAUDE_PLUGIN_ROOT/.squad/context/index.json"
+  GOAL="$CLAUDE_PLUGIN_ROOT/.squad/context/squad-goal.md"
+  [ -f "$CONTEXT_INDEX" ] && [ -f "$GOAL" ] || exit 0
+  jq -e '
+    type == "object" and
+    .schema_version == 1 and
+    .squad_goal.status == "included" and
+    .squad_goal.snapshot == "context/squad-goal.md"
+  ' "$CONTEXT_INDEX" >/dev/null 2>&1 || exit 0
+elif [ -f "$PROJECT_MANIFEST" ]; then
+  manifest_allows_claude_runtime "$PROJECT_MANIFEST" || exit 0
+fi
+
 # Pass-through silently if no goal is set. The SessionStart hook already
 # nudged the user about setting one — no need to repeat per-turn.
 if [ ! -f "$GOAL" ]; then

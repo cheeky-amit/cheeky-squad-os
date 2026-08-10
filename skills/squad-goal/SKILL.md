@@ -1,10 +1,7 @@
 ---
 name: squad-goal
-description: Use when the user wants to set, change, view, or replace the squad's north-star goal, or manage multiple squads in one project — phrases like "set the squad goal", "change the goal", "what's our goal", "show the goal", "update the goal", "the goal is wrong", "we've shifted direction", "park this squad", "switch squads", "list squads", "bring back the <name> squad". Manages .squad/goal.md as the binding north-star constraint that every other skill and hook reads from, and .squad/squads/<name>/ as parked squads. This skill is read-write on goal/squad lifecycle files only; it does not generate roles or spawn workers.
-version: 0.1.0
-author: cheeky-squad-os
+description: Use when the user wants to set, change, view, or replace the squad's north-star goal, or manage multiple squads in one project — phrases like "set the squad goal", "change the goal", "what's our goal", "show the goal", "update the goal", "the goal is wrong", "we've shifted direction", "park this squad", "switch squads", "list squads", or "bring back the named squad". Manages .squad/goal.md as the binding north-star constraint that every other skill and hook reads from, and named directories under .squad/squads as parked squads. This skill is read-write on goal/squad lifecycle files only; it does not generate roles or spawn workers.
 license: MIT
-compatible-with: [claude-code, agentskills-1.0]
 ---
 
 # squad-goal
@@ -12,6 +9,29 @@ compatible-with: [claude-code, agentskills-1.0]
 You manage `.squad/goal.md` — the squad's binding north-star outcome. Every other skill in cheeky-squad-os reads this file; the `SessionStart` hook injects its contents into every session's context.
 
 Run the operation the user asked for. Operations are: **read**, **write**, **replace**, **show diff**, **park**, **switch**, **list squads**, **refuse**.
+
+## Roster shape compatibility
+
+Whenever this skill reads `.squad/roster.json`, choose its source shape once:
+`schema_version: 2` means v2; no schema version means legacy. Project roles into a
+read-only lifecycle view using these equivalents:
+
+- identifier: v2 `id` // legacy `name`
+- cadence: v2 `execution_mode` // legacy `mode`
+- goal references: `squad_goal_ref` in both shapes; v2 `goal_ref` // legacy `role_goal`
+- ownership: v2 `file_ownership.include` and `.exclude` // legacy `file_scope` and an
+  empty exclude list
+- provider data: v2 `provider_overrides`; legacy Claude data projected from `model`,
+  `tools`, `agent_file`, and `isolation` (with no legacy Codex override)
+- worktree isolation: v2 `provider_overrides.claude.isolation` // legacy `isolation`
+
+The `//` notation names source-shape equivalents; it is not permission to fall back to
+legacy aliases inside a malformed v2 object. Validate the selected shape and stop on a
+missing required field. This projection is read-only. Preserve a legacy roster's source
+shape on ordinary lifecycle writes; migrate it to v2 only through a separate
+`squad-roster` conversion plan that previews the exact writes/deletes and receives the
+matching confirmation. If a requested change cannot be represented losslessly in legacy
+shape, stop and offer that migration instead of dropping data.
 
 ## File schema
 
@@ -96,14 +116,24 @@ One project runs **one active squad** — `.squad/goal.md` + `.squad/roster.json
 
 **No cross-squad merge.** A parked squad's `world/` is its own. Nothing in this skill, or anywhere in the plugin, merges two squads' belief ledgers into one — park and switch move `.squad/world/` wholesale, they never combine it with another squad's. Switching back to a squad restores exactly the ledger it had when parked; whatever the squad that was active in the meantime came to believe stays with *that* squad when it, in turn, gets parked.
 
+**Export receipts are installation state, never parked squad state.** Before parking,
+inspect every `.squad/exports/*/export-receipt.json` with its matching `manifest.json`.
+A receipt-backed snapshot whose manifest declares `destination: project` is an active
+installed project export. Refuse to park while one exists: hand the user to
+`squad-roster`'s receipt-based uninstall, preview the exact uninstall plan, and require the
+matching plan confirmation. Do not move, rename, or delete `.squad/exports/`,
+`.squad/receipts/`, or any `export-receipt.json` as part of park/switch. Uninstall owns
+those receipts and removes only receipt-owned, unmodified files.
+
 ### Park
 
 1. Confirm no dispatch is mid-flight (workers running, or worktrees with uncommitted changes the user hasn't dealt with). If in doubt, ask — never park under a running squad.
-2. Pick the slug with the user. Refuse if `.squad/squads/<slug>/` already exists.
-3. Move `goal.md`, `roster.json`, `roster.md`, all `role-goal-*.md`, `verification.md`, and `world/` (if present — the whole directory, every `claims-<owner>.md` inside it) from `.squad/` into `.squad/squads/<slug>/`. **Never `partner.md`** — it stays at `.squad/partner.md`, untouched (see above).
-4. For each role in the parked roster, move its `agent_file` from `.claude/agents/` into `.squad/squads/<slug>/agents/`.
-5. Delete any `.squad/role-comm-*.md`.
-6. Report: *"Squad `<slug>` parked. No active squad — run `squad-onboard` for a new one, or `switch` to a parked squad."*
+2. Run the installed-export preflight above. If any receipt-backed project snapshot is active, refuse before moving a single file and require its receipt uninstall first. Never move a receipt into the parked directory.
+3. Pick the slug with the user. Refuse if `.squad/squads/<slug>/` already exists.
+4. Move `goal.md`, `roster.json`, `roster.md`, all `role-goal-*.md`, `verification.md`, and `world/` (if present — the whole directory, every `claims-<owner>.md` inside it) from `.squad/` into `.squad/squads/<slug>/`. **Never `partner.md`, `exports/`, `receipts/`, or an `export-receipt.json`** — they stay untouched (see above).
+5. For each role, use the projected Claude `agent_file`. Move that file from `.claude/agents/` into `.squad/squads/<slug>/agents/`; never derive a path when the selected roster shape omits it.
+6. Delete any `.squad/role-comm-*.md`.
+7. Report: *"Squad `<slug>` parked. No active squad — run `squad-onboard` for a new one, or `switch` to a parked squad."*
 
 ### Switch
 

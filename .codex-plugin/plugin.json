@@ -1,0 +1,29 @@
+{
+  "name": "cheeky-squad-os",
+  "description": "Structural metadata for provider-aware squad export compatibility.",
+  "version": "1.1.0",
+  "author": {
+    "name": "cheeky-amit"
+  },
+  "license": "MIT",
+  "keywords": [
+    "squad",
+    "portable-agents",
+    "claude-code",
+    "codex"
+  ],
+  "interface": {
+    "displayName": "cheeky-squad-os",
+    "shortDescription": "Validate Codex packaging for portable squad exports.",
+    "longDescription": "Structural Codex package metadata for the provider-aware squad export surface. This source checkout does not claim its Claude lifecycle as native Codex behavior.",
+    "developerName": "cheeky-amit",
+    "category": "Productivity",
+    "capabilities": [
+      "Read",
+      "Package validation"
+    ],
+    "defaultPrompt": [
+      "Inspect the portable squad export package"
+    ]
+  }
+}

@@ -1,0 +1,39 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "cheeky-squad-portability"
+version = "1.1.0"
+description = "Provider-neutral portability contracts for cheeky-squad-os"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [{ name = "cheeky-amit" }]
+dependencies = []
+
+[project.scripts]
+squad-export = "cheeky_squad_portability.cli:main"
+
+[project.optional-dependencies]
+dev = [
+  "jsonschema>=4.23,<5",
+  "pytest>=8,<10",
+  "ruff>=0.15,<0.16",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/cheeky_squad_portability"]
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+pythonpath = ["src"]
+testpaths = ["tests/python"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["src", "tests/python"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "C4", "RUF"]

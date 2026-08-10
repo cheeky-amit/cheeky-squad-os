@@ -1,0 +1,30 @@
+{
+  "author": {
+    "name": "cheeky-squad-os export"
+  },
+  "description": "Canonical dual-provider fixture",
+  "interface": {
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "category": "Productivity",
+    "defaultPrompt": [
+      "Dispatch the packaged Portability demo squad"
+    ],
+    "developerName": "cheeky-squad-os",
+    "displayName": "Portability demo",
+    "longDescription": "Canonical dual-provider fixture",
+    "shortDescription": "Canonical dual-provider fixture"
+  },
+  "keywords": [
+    "squad",
+    "portable-agents",
+    "prompt-baked-roles"
+  ],
+  "license": "MIT",
+  "name": "cheeky-dportability-hdemo",
+  "skills": "./skills/",
+  "version": "1.1.0"
+}

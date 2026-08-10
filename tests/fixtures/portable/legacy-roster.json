@@ -1,0 +1,37 @@
+{
+  "squad_goal_ref": ".squad/goal.md",
+  "mode": "one-time",
+  "created": "2026-08-08T00:00:00Z",
+  "roles": [
+    {
+      "name": "evidence-reader",
+      "purpose": "Read source material and produce cited findings",
+      "agent_file": ".claude/agents/evidence-reader.md",
+      "role_goal": ".squad/role-goal-evidence-reader.md",
+      "file_scope": ["reports/evidence/**"],
+      "tools": ["Read", "Glob", "Grep"],
+      "model": "haiku",
+      "active": true,
+      "created": "2026-08-08T00:00:01Z"
+    },
+    {
+      "name": "report-writer",
+      "purpose": "Write the verified final report",
+      "agent_file": ".claude/agents/report-writer.md",
+      "role_goal": ".squad/role-goal-report-writer.md",
+      "file_scope": ["reports/final/**", ".squad/workspaces/report-writer/**"],
+      "tools": ["Read", "Write", "Edit", "Bash"],
+      "model": "opus",
+      "effort": "high",
+      "environment": {
+        "workspace": ".squad/workspaces/report-writer/",
+        "dirs": ["inputs", "outputs"],
+        "env": {"REPORT_FORMAT": "markdown"},
+        "context": [],
+        "tools": [{"name": "jq", "kind": "system", "verify": "command -v jq"}]
+      },
+      "active": true,
+      "created": "2026-08-08T00:00:02Z"
+    }
+  ]
+}

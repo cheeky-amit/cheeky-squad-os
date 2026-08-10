@@ -11,10 +11,87 @@ backend).
 
 ---
 
+## 0. Portable export lifecycle (v1.1)
+
+The provider-neutral compiler runs beside the existing Claude authoring lifecycle. It
+does not replace goal/role authoring and does not reinterpret cadence as destination.
+
+```mermaid
+flowchart TD
+    U["Canonical manifest + roster<br/>or legacy roster"] --> V{"contracts valid?"}
+    V -- no --> FAIL["stop · no writes"]
+    V -- yes --> M["legacy migration in memory, if needed"]
+    M --> C["compile selected providers"]
+    C --> D{"destination"}
+    D -- session --> S["prompt-baked roles<br/>empty write/delete set"]
+    D -- project --> P["selected Git repository"]
+    D -- user --> H["explicit home + namespace"]
+    D -- plugin --> G["selected package directory"]
+    P --> PLAN["complete hash-bound plan"]
+    H --> PLAN
+    G --> PLAN
+    S --> PLAN
+    PLAN --> CONFIRM{"plan ID matches?"}
+    CONFIRM -- no --> FAIL
+    CONFIRM -- yes --> GLOBAL{"user destination?"}
+    GLOBAL -- yes --> GC{"global write confirmed?"}
+    GC -- no --> FAIL
+    GC -- yes --> APPLY["atomic apply"]
+    GLOBAL -- no --> APPLY
+    APPLY --> R["receipt"]
+    R --> CHECK["validate hashes, contracts, artifacts"]
+    R --> REMOVE["uninstall owned + unmodified only"]
+```
+
+### Data transformations
+
+```mermaid
+flowchart LR
+    ROLE["neutral role"] --> CA["Claude adapter"]
+    ROLE --> CO["Codex adapter"]
+    CA --> CMD["namespaced Markdown agents"]
+    CA --> CP["self-contained Claude plugin"]
+    CO --> TOML["namespaced TOML agents"]
+    CO --> SK["repo/user skills"]
+    CO --> PKG["native Codex plugin<br/>prompt-baked roles"]
+```
+
+The neutral role carries purpose, discovery description, ownership, capabilities,
+reasoning, environment shape, and optional overrides. Adapters own every provider-native
+field. The export engine owns every destination, path, confirmation, receipt, and
+rollback decision.
+
+### State and ownership rules
+
+1. `plan` validates inputs and computes exact write/delete hashes plus `plan_id`.
+2. `apply` recompiles from the same inputs and requires byte-for-byte equality with the
+   saved plan and unchanged target state.
+3. User scope additionally requires a separate global-write confirmation.
+4. Filesystem application stages output and restores prior owned files on failure.
+5. The receipt lists individual owned paths and hashes; it does not own a directory.
+6. Re-export replaces/deletes only matching receipt-owned files. Unowned collisions or
+   modified owned files stop.
+7. `validate` checks receipt hashes, executable bits, contracts, placeholders, and
+   selected-provider artifacts.
+8. `uninstall` removes receipt-owned, unmodified files and preserves reported changes.
+
+Session takes the same plan/confirmation path but has no installed state: its plan has
+an empty mutation set and apply returns the prompt-baked role definition.
+
+### Provider dispatch truth
+
+Claude can compile project/user agent Markdown and a generated plugin. Shared lifecycle
+hooks appear only when Claude is selected as runtime owner. Codex can compile project or
+user TOML agents and skills. A Codex standalone plugin prompt-bakes packaged roles;
+mutating roles run sequentially. Codex ownership is instructional in v1.1, with no
+file-scope blocking hook claim.
+
+---
+
 ## 1. System map
 
-What ships in the plugin, what it generates in the user's project, and how the
-pieces talk.
+What ships in the source Claude lifecycle plugin, what it generates in the user's
+project, and how those pieces talk. Portable compilation is shown separately above.
 
 ```mermaid
 flowchart TB

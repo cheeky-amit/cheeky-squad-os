@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cheeky-squad-os.dev/schemas/manifest-v2.json",
+  "title": "Portable squad manifest v2",
+  "type": "object",
+  "additionalProperties": false,
+  "allOf": [
+    {"if": {"properties": {"runtime_owner": {"const": "claude"}}, "required": ["runtime_owner"]}, "then": {"properties": {"providers": {"contains": {"const": "claude"}}}}},
+    {"if": {"properties": {"runtime_owner": {"const": "codex"}}, "required": ["runtime_owner"]}, "then": {"properties": {"providers": {"contains": {"const": "codex"}}}}}
+  ],
+  "required": ["schema_version", "squad", "execution_mode", "destination", "providers", "runtime_owner", "export_version"],
+  "properties": {
+    "schema_version": {"const": 2},
+    "squad": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name"],
+      "properties": {
+        "id": {"type": "string", "maxLength": 63, "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)*$"},
+        "name": {"type": "string", "minLength": 1},
+        "description": {"type": "string", "minLength": 1}
+      }
+    },
+    "execution_mode": {"enum": ["one-time", "multi-use", "evergreen"]},
+    "destination": {"enum": ["session", "project", "user", "plugin"]},
+    "providers": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"enum": ["claude", "codex"]}
+    },
+    "runtime_owner": {"enum": ["claude", "codex"]},
+    "export_version": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"
+    }
+  }
+}

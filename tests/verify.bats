@@ -346,6 +346,44 @@ JSON
   printf '%s\n' "$output" | jq -se '[.[] | select(.role == "auditor")][0].role_goal_present == true'
 }
 
+@test "canonical v2 role IDs, goal refs, and ownership scopes are verified" {
+  write_goal "$THREE_SIGNALS"
+  cat > "$PROJECT_DIR/.squad/roster.json" <<'JSON'
+{
+  "schema_version": 2,
+  "squad_goal_ref": ".squad/goal.md",
+  "execution_mode": "one-time",
+  "roles": [
+    {
+      "id": "v2-auditor",
+      "purpose": "Audit v2 deliverables",
+      "description": "Use when v2 deliverables need an audit",
+      "file_ownership": {"include": ["reports/**"], "exclude": []},
+      "capabilities": ["filesystem.read"],
+      "reasoning": {"profile": "balanced", "effort": "inherit"},
+      "active": true,
+      "goal_ref": ".squad/custom-v2-goal.md",
+      "provider_overrides": {
+        "claude": {
+          "model": "sonnet",
+          "tools": ["Read"],
+          "agent_file": ".claude/agents/v2-auditor.md"
+        }
+      }
+    }
+  ]
+}
+JSON
+  mkdir -p "$PROJECT_DIR/reports"
+  touch "$PROJECT_DIR/reports/report.md" "$PROJECT_DIR/.squad/custom-v2-goal.md"
+
+  run_verify
+  [ "$status" -eq 0 ]
+  printf '%s\n' "$output" | jq -se \
+    '[.[] | select(.role == "v2-auditor")][0]
+       | .scope == ["reports/**"] and .files_found == 1 and .role_goal_present == true'
+}
+
 # --- output contract -------------------------------------------------------------
 
 @test "summary line carries correct counts and every line is valid JSON" {
