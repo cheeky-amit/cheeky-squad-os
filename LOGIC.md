@@ -84,7 +84,7 @@ Claude can compile project/user agent Markdown and a generated plugin. Shared li
 hooks appear only when Claude is selected as runtime owner. Codex can compile project or
 user TOML agents and skills. A Codex standalone plugin prompt-bakes packaged roles;
 mutating roles run sequentially. Codex ownership is instructional in v1.1, with no
-file-scope blocking hook claim.
+file-scope auto-approval gate claim.
 
 ---
 
@@ -422,8 +422,10 @@ flowchart TD
 
 ## 5. Hook logic
 
-The three hooks are the **mechanical enforcement** layer (skill rules are
-aspirational; hooks are real). All fail **open** — they never block on error.
+The three hooks are the **mechanical context and auto-approval** layer (skill rules are
+aspirational; hooks make concrete decisions). All fail **open** — they never block on
+error. In particular, `PermissionRequest` can grant automatic approval or defer to the
+normal human permission flow; it never denies a human-approved operation.
 
 ### 5.1 SessionStart & UserPromptSubmit (goal-in-scope)
 
@@ -442,13 +444,14 @@ flowchart LR
 > Subagents do **not** fire SessionStart — their goal arrives via prompt-baking
 > (rule #4). See §7.
 
-### 5.2 PermissionRequest (file-scope + sandbox enforcement)
+### 5.2 PermissionRequest (file-scope + sandbox auto-approval)
 
 Two narrow auto-approve surfaces; everything else defers. Surface 1 is in-scope
 Edit/Write (rule #5); Surface 2 is in-sandbox Bash scaffolding (rule #8).
-Ahead of both sits the **`.squad/` structural reservation** (rule #7, v0.4.1):
-squad *state* never consults `file_scope`, so a broad scope cannot reach another
-role's state. Both surfaces are further gated on the **plan gate** (rule #11,
+Ahead of both sits the **`.squad/` auto-approval reservation** (rule #7, v0.4.1):
+squad *state* never consults `file_scope`, so a broad scope cannot automatically
+approve access to another role's state. Both surfaces are further gated on the
+**plan gate** (rule #11,
 v1.0): a role's engagement record must exist at
 `.squad/role-plan-<agent_type>.md` before either auto-approves — and so must the
 role's own outbox grant, since publishing a hand-off is acting. Exactly two
@@ -503,11 +506,13 @@ traversal, fail closed on doubt. Installs / network / global mutations are **not
 on the Bash list — they are the provisioner's *propose* path (rule #9), not the
 running role's.
 
-**The `.squad/` reservation (v0.4.1).** Every grant under `.squad/` is *derived
-from the role's own `agent_type`*, never from what its `file_scope` declares —
-which is what makes it unforgeable. A role gets its own outbox and its own
-sandbox; the squad goal, the roster, `verification.md`, and every other role's
-goal, outbox, and sandbox all defer to the human, at any scope. Before v0.4.1
+**The `.squad/` reservation (v0.4.1).** Every automatic grant under `.squad/` is
+*derived from the role's own `agent_type`*, never from what its `file_scope`
+declares. That prevents a role from minting an automatic grant to someone else's
+state; it does not prevent the human from approving a deferred request. A role gets
+automatic approval eligibility for its own outbox and its own sandbox; the squad goal,
+the roster, `verification.md`, and every other role's goal, outbox, and sandbox all
+defer to the human, at any scope. Before v0.4.1
 these were matched against `file_scope`, so a role scoped `**` auto-approved all
 of them — see the CHANGELOG's v0.4.1 security note.
 
@@ -673,10 +678,10 @@ flowchart LR
 > ⚠️ **Safety:** workflow subagents always run in `acceptEdits` and inherit
 > the invoking session's tool allowlist, regardless of the session's own mode
 > — file edits are auto-approved and therefore **not gated by `file_scope`**.
-> Do not rely on file-scope enforcement (§5.2) on this path. So this path
+> Do not rely on the file-scope auto-approval gate (§5.2) on this path. So this path
 > fans out **read/analyze** roles whose writes are confined to their own
 > `file_scope` *by instruction in the baked prompt*. Code-mutating roles stay on
-> the hook-gated `squad-spawn` path, or run as their own write-stage workflow
+> the `PermissionRequest`-eligible `squad-spawn` path, or run as their own write-stage workflow
 > with a sign-off gate.
 
 ---
@@ -755,7 +760,7 @@ The invariants every diagram above upholds (full text in
 | 4 | Prompt-baking is the only reliable parent→worker channel. |
 | 5 | Explicit `file_scope`; hook auto-approves in-scope Edit/Write. |
 | 6 | Mode controls cadence, not squad size. |
-| 7 | Per-role file isolation via disjoint `file_scope`. |
+| 7 | Per-role write coordination via disjoint `file_scope`; actual isolation requires a provider worktree or sandbox. |
 | 8 | Sandbox-scoped autonomy — hook auto-approves in-sandbox scaffolding inside `environment.workspace`. |
 | 9 | Propose what can't be contained — system/MCP/network/global needs go to the user, never auto-run. |
 | 10 | Synthesis summarizes, verification decides — `.squad/verification.md` is the only authority for "goal met". |

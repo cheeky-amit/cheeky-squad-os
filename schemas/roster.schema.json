@@ -19,6 +19,11 @@
       "minLength": 1,
       "pattern": "^(?!/)(?!~)(?!.*(?:^|/)\\.\\.?(/|$))(?!.*//)(?!.*\\\\)(?!.*\\/$)[^\\u0000-\\u001f]+$"
     },
+    "literalRelativePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!~)(?!.*(?:^|/)\\.\\.?(/|$))(?!.*//)(?!.*\\\\)(?!.*\\/$)(?!.*[?*\\[\\]])[^\\u0000-\\u001f]+$"
+    },
     "relativeTarget": {
       "anyOf": [{"const": "."}, {"$ref": "#/$defs/relativePath"}]
     },
@@ -60,7 +65,7 @@
             "workspace": {"$ref": "#/$defs/relativePath"},
             "directories": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/relativePath"}},
             "variables": {"type": "object", "propertyNames": {"pattern": "^[A-Za-z_][A-Za-z0-9_]*$"}, "additionalProperties": {"type": "string"}},
-            "context": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["source", "target", "kind"], "properties": {"source": {"type": "string", "minLength": 1}, "target": {"$ref": "#/$defs/relativeTarget"}, "kind": {"enum": ["copy", "link", "fetch"]}}, "allOf": [{"if": {"properties": {"kind": {"enum": ["copy", "link"]}}, "required": ["kind"]}, "then": {"properties": {"source": {"$ref": "#/$defs/relativePath"}}}}]}},
+            "context": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["source", "target", "kind"], "properties": {"source": {"type": "string", "minLength": 1}, "target": {"$ref": "#/$defs/relativeTarget"}, "kind": {"enum": ["copy", "link", "fetch"]}}, "allOf": [{"if": {"properties": {"kind": {"enum": ["copy", "link"]}}, "required": ["kind"]}, "then": {"properties": {"source": {"$ref": "#/$defs/literalRelativePath"}}}}]}},
             "tools": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["name", "kind"], "properties": {"name": {"type": "string", "minLength": 1}, "kind": {"enum": ["local", "system", "mcp"]}, "verify": {"type": "string", "minLength": 1}, "install": {"type": "string", "minLength": 1}}}}
           }
         },

@@ -59,16 +59,20 @@ squad-export apply \
   --confirm-plan-id '<reviewed plan_id>'
 ```
 
-Expected project discovery artifacts include:
+The plan is the authority for exact generated paths. Expected project discovery
+artifact classes include:
 
 ```text
-.claude/agents/cheeky-portability-demo--evidence-reader.md
-.claude/agents/cheeky-portability-demo--report-writer.md
-.codex/agents/cheeky-portability-demo--evidence-reader.toml
-.codex/agents/cheeky-portability-demo--report-writer.toml
-.agents/skills/cheeky-portability-demo-role-evidence-hreader/SKILL.md
-.agents/skills/cheeky-portability-demo-role-report-hwriter/SKILL.md
+.claude/agents/<generated-provider-role-id>.md
+.codex/agents/<generated-provider-role-id>.toml
+.agents/skills/<generated-collision-safe-skill-id>/SKILL.md
+.squad/exports/<generated-squad-namespace>/provider-role-map.json
 ```
+
+There is one Claude agent, Codex agent, and role skill per selected role. Use the exact
+paths printed by `plan` and the canonical-to-provider mapping in
+`provider-role-map.json`; do not hand-derive collision-safe IDs from the squad or role
+names.
 
 The Codex report writer declares `workspace-write` and instructs sequential dispatch.
 Its ownership list remains instructional. The Claude package may use the selected
@@ -123,6 +127,6 @@ namespaced filename, and it refuses an apply if the saved preview is stale.
   `--home`, the exact home target, and `--confirm-global-write`.
 - Change destination to `plugin` and target a chosen package directory to generate both
   standalone packages. Then stop and inspect. For Codex, enter the generated directory,
-  run `codex plugin marketplace add "$(pwd -P)"`, then run the exact namespaced
-  `codex plugin add <plugin>@<marketplace>` command from `ACTIVATION.md`. The exporter
+  run `codex plugin marketplace add "$(pwd -P)"`, then copy the exact namespaced
+  `codex plugin add ...` command from `ACTIVATION.md`. The exporter
   does not run either activation command.

@@ -28,9 +28,18 @@ manifest_allows_claude_runtime() {
   command -v jq >/dev/null 2>&1 || return 1
   jq -e '
     type == "object" and
+    ((keys_unsorted - ["schema_version","squad","execution_mode","destination","providers","runtime_owner","export_version"]) | length == 0) and
     .schema_version == 2 and
+    (.squad | type == "object") and
+    ((.squad | keys_unsorted) - ["id","name","description"] | length == 0) and
+    (.squad.id | type == "string" and length <= 63 and test("^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)*$")) and
+    (.squad.name | type == "string" and length > 0) and
+    (.execution_mode == "one-time" or .execution_mode == "multi-use" or .execution_mode == "evergreen") and
+    (.destination == "session" or .destination == "project" or .destination == "user" or .destination == "plugin") and
+    (.providers | type == "array" and length > 0 and all(. == "claude" or . == "codex") and length == (unique | length)) and
     .runtime_owner == "claude" and
-    (.providers | type == "array" and index("claude") != null)
+    (.providers | index("claude") != null) and
+    (.export_version | type == "string" and test("^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"))
   ' "$manifest" >/dev/null 2>&1
 }
 

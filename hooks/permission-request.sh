@@ -136,7 +136,7 @@ validate_manifest() {
     .schema_version == 2 and
     (.squad | type == "object") and
     ((.squad | keys_unsorted) - ["id","name","description"] | length == 0) and
-    (.squad.id | type == "string" and test("^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)*$")) and
+    (.squad.id | type == "string" and length <= 63 and test("^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)*$")) and
     (.squad.name | type == "string" and length > 0) and
     (.execution_mode == "one-time" or .execution_mode == "multi-use" or .execution_mode == "evergreen") and
     (.destination == "session" or .destination == "project" or .destination == "user" or .destination == "plugin") and
@@ -637,10 +637,13 @@ case "$TOOL_NAME" in
     WS="${WS%/}"
 
     # Reject any shell metacharacter: substitution, chaining, redirection,
-    # subshell, brace expansion, escapes, newline. We can only reason about a
-    # plain "verb operand operand …" line; anything else defers (fail closed).
+    # subshell, brace expansion, glob expansion, escapes, newline. We can only
+    # reason about a plain "verb operand operand …" line; anything else defers
+    # (fail closed). Globs are especially unsafe here: a textual `*` can pass
+    # the workspace-prefix check, then expand at execution time to a symlink
+    # whose target is outside the workspace.
     case "$COMMAND" in
-      *';'*|*'&'*|*'|'*|*'<'*|*'>'*|*'`'*|*'$'*|*\\*|*'('*|*')'*|*'{'*|*'}'*) exit 0 ;;
+      *';'*|*'&'*|*'|'*|*'<'*|*'>'*|*'`'*|*'$'*|*\\*|*'('*|*')'*|*'{'*|*'}'*|*'*'*|*'?'*|*'['*|*']'*) exit 0 ;;
     esac
     case "$COMMAND" in
       *"

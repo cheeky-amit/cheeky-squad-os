@@ -83,6 +83,20 @@ ws_is_safe() {
   return 0
 }
 
+# Local context sources are interpreted as exactly one project-relative path,
+# never as shell syntax or an option. Keep this stricter than a general
+# workspace path: wildcard characters would turn one reviewed source into an
+# execution-time set, and a leading hyphen is option-shaped even though every
+# copy/link call also uses `--` as defense in depth.
+context_source_is_safe() {
+  local source="$1"
+  ws_is_safe "$source" || return 1
+  case "$source" in
+    -*|~*|*'*'*|*'?'*|*'['*|*']'*) return 1 ;;
+  esac
+  return 0
+}
+
 # Existing symlink components can redirect a textually safe path outside the
 # project. Return success when any component of a project-relative path is a
 # symlink so callers can refuse before mkdir, copy, or write follows it.
@@ -214,6 +228,19 @@ while IFS= read -r ROLE_JSON; do
     KIND=$(printf '%s' "$ROLE_JSON" | jq -r ".environment.context[$i].kind // \"copy\"")
     i=$((i + 1))
     [ -z "$FROM" ] && continue
+
+    # copy/link operate only on one normalized, in-project source. Refuse
+    # traversal, absolute/option/glob spellings, and every existing symlink
+    # component before a filesystem command can read through it. `fetch` is a
+    # proposal only and deliberately retains its URL-like source string.
+    if [ "$KIND" != "fetch" ]; then
+      if ! context_source_is_safe "$FROM" || path_has_symlink "$FROM"; then
+        err "role '$NAME': unsafe or symlinked context source '$FROM'"
+        ERRORS=$((ERRORS + 1))
+        continue
+      fi
+    fi
+
     # The destination must stay inside the sandbox without following an
     # existing symlink component.
     if [ -z "$INTO" ] || [ "$INTO" = "." ]; then
@@ -234,14 +261,12 @@ while IFS= read -r ROLE_JSON; do
         continue
         ;;
       link)
-        mkdir -p "$DEST"
-        # shellcheck disable=SC2086
-        if ln -s $FROM "$DEST"/ 2>/dev/null; then CTX_SEEDED=$((CTX_SEEDED + 1)); fi
+        mkdir -p -- "$DEST"
+        if ln -s -- "$PROJECT_ABS/$FROM" "$DEST"/ 2>/dev/null; then CTX_SEEDED=$((CTX_SEEDED + 1)); fi
         ;;
       *)  # copy (default)
-        mkdir -p "$DEST"
-        # shellcheck disable=SC2086
-        if cp -R $FROM "$DEST"/ 2>/dev/null; then CTX_SEEDED=$((CTX_SEEDED + 1)); fi
+        mkdir -p -- "$DEST"
+        if cp -R -- "$PROJECT_ABS/$FROM" "$DEST"/ 2>/dev/null; then CTX_SEEDED=$((CTX_SEEDED + 1)); fi
         ;;
     esac
   done

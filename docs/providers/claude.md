@@ -54,11 +54,12 @@ Official package fields and component layout:
 
 ## Enforcement boundary
 
-The Claude lifecycle runtime can mechanically gate the specific Edit/Write and narrow
-scaffolding surfaces documented in [ARCHITECTURE.md](../../ARCHITECTURE.md). That claim
-holds only while the generated Claude package owns and runs the hooks. An agent file by
-itself is instructional; it does not become a file-scope firewall merely because its
-prompt lists ownership paths.
+The Claude lifecycle runtime can mechanically gate **automatic approval eligibility**
+for the specific Edit/Write and narrow scaffolding surfaces documented in
+[ARCHITECTURE.md](../../ARCHITECTURE.md). That claim holds only while the generated
+Claude package owns and runs the hooks. An out-of-scope request is deferred to Claude's
+normal permission flow, where the human can approve it; the hook is not a file-scope
+firewall. An agent file by itself is instructional.
 
 Project, user, and plugin exports remain subject to Claude Code’s active permission and
 tool policies. Unsupported or unavailable provider capabilities fail compilation rather

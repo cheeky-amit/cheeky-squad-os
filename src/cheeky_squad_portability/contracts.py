@@ -145,7 +145,13 @@ def _reject_unknown(data: Mapping[str, object], allowed: set[str], path: str) ->
         raise ContractError(f"{path} has unknown fields: {', '.join(unknown)}")
 
 
-def _relative_path(value: object, path: str, *, allow_dot: bool = False) -> str:
+def _relative_path(
+    value: object,
+    path: str,
+    *,
+    allow_dot: bool = False,
+    allow_glob: bool = True,
+) -> str:
     """Validate a normalized project-relative POSIX path or glob."""
 
     text = _string(value, path)
@@ -159,6 +165,8 @@ def _relative_path(value: object, path: str, *, allow_dot: bool = False) -> str:
         or any(part in {"", ".", ".."} for part in text.split("/"))
     ):
         raise ContractError(f"{path} must be a normalized project-relative path without traversal")
+    if not allow_glob and any(character in text for character in "*?[]"):
+        raise ContractError(f"{path} must be a literal project-relative path without globs")
     return text
 
 
@@ -336,7 +344,7 @@ class EnvironmentContext:
         if self.kind == "fetch":
             _string(self.source, "environment.context.source")
         else:
-            _relative_path(self.source, "environment.context.source")
+            _relative_path(self.source, "environment.context.source", allow_glob=False)
         _relative_path(self.target, "environment.context.target", allow_dot=True)
 
     @classmethod

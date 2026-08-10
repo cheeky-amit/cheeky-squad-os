@@ -27,7 +27,6 @@ Prompt-bake the squad goal and this role goal verbatim into the task context. If
 Requested capabilities: filesystem.glob, filesystem.read, filesystem.search.
 File ownership is an instructional coordination boundary in Codex v1; it is not mechanically enforced.
 Work only within these instructed paths: reports/evidence/**.
-Read the role goal from .squad/role-goal-evidence-reader.md when that file is available.
 This role is read-only and may run concurrently with other read-only roles.
 Capabilities and ownership remain subject to the active Codex sandbox and tool policy.
 
@@ -43,7 +42,6 @@ Prompt-bake the squad goal and this role goal verbatim into the task context. If
 Requested capabilities: filesystem.edit, filesystem.read, filesystem.write, shell.execute.
 File ownership is an instructional coordination boundary in Codex v1; it is not mechanically enforced.
 Work only within these instructed paths: reports/final/**, .squad/workspaces/report-writer/**.
-Read the role goal from .squad/role-goal-report-writer.md when that file is available.
 Workspace hint: .squad/workspaces/report-writer
 Expected workspace directories: inputs, outputs.
 Expected environment variable names: REPORT_FORMAT. Values are intentionally not embedded.

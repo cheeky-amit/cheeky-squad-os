@@ -193,6 +193,10 @@ def load_roster(value: object) -> Roster:
     """Load v2 directly or deterministically migrate a schema-less legacy roster."""
 
     data = _mapping(value, "roster")
-    if data.get("schema_version") == 2:
+    if "schema_version" not in data:
+        return migrate_legacy_roster(data)
+    if data["schema_version"] == 2:
         return Roster.from_dict(data)
-    return migrate_legacy_roster(data)
+    raise ContractError(
+        "roster.schema_version is unsupported; only schema-less legacy rosters or v2 are accepted"
+    )

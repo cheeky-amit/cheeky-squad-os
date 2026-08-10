@@ -250,8 +250,6 @@ def _developer_instructions(manifest: SquadManifest, role: Role) -> str:
     ]
     if role.file_ownership.exclude:
         lines.append("Do not modify these paths: " + ", ".join(role.file_ownership.exclude) + ".")
-    if role.goal_ref is not None:
-        lines.append(f"Read the role goal from {role.goal_ref} when that file is available.")
     if role.environment is not None:
         lines.extend(_environment_instructions(role))
     if _is_mutating(role):
@@ -362,7 +360,7 @@ def _snapshot_prefix(manifest: SquadManifest) -> str:
     if manifest.destination is Destination.PROJECT:
         return f".squad/exports/{namespace}"
     if manifest.destination is Destination.USER:
-        return f".squad/squads/{namespace}"
+        return f"${{HOME}}/.squad/squads/{namespace}"
     return ".squad"
 
 

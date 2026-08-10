@@ -9,6 +9,7 @@ from pathlib import PurePosixPath
 from cheeky_squad_portability.contracts import (
     Capability,
     ClaudeOverride,
+    Destination,
     Provider,
     ReasoningEffort,
     ReasoningProfile,
@@ -143,6 +144,48 @@ def _environment_lines(role: Role) -> list[str]:
     return lines
 
 
+def _snapshot_root(manifest: SquadManifest) -> str:
+    namespace = provider_namespace(manifest.squad.id)
+    if manifest.destination is Destination.PROJECT:
+        return f"${{CLAUDE_PROJECT_DIR}}/.squad/exports/{namespace}"
+    if manifest.destination is Destination.USER:
+        return f"${{HOME}}/.squad/squads/{namespace}"
+    if manifest.destination is Destination.PLUGIN:
+        return "${CLAUDE_PLUGIN_ROOT}/.squad"
+    raise ContractError("session exports do not compile discoverable Claude agents")
+
+
+def _context_lines(manifest: SquadManifest, role: Role) -> list[str]:
+    snapshot_root = _snapshot_root(manifest)
+    context_index = f"{snapshot_root}/context/index.json"
+    return [
+        "## Required vendored context",
+        "",
+        "Resolve the snapshot root from the provider anchor shown below, independently",
+        "of the current working directory. Do not replace the anchor with the current",
+        "repository or another live squad directory.",
+        "",
+        f"- Snapshot root: `{snapshot_root}`",
+        f"- Context index: `{context_index}`",
+        "",
+        "Before doing any role work, read and validate the context index. Require",
+        "`schema_version: 1`, require `squad_goal.status` to be `included`, and require",
+        "its declared snapshot body to exist under the snapshot root.",
+        "",
+        f"Require exactly one `role_goals` entry whose `role_id` is `{role.id}`. It must",
+        "declare its canonical source, have `status: included`, and name an existing",
+        "snapshot body under the snapshot root. Resolve every recorded snapshot path",
+        "relative to that root and reject absolute paths or traversal.",
+        "",
+        "Load the squad-goal and matching role-goal bodies and include them verbatim in",
+        "the task context. If the index is missing or malformed, either entry is absent",
+        "or unavailable, or either body cannot be loaded safely, stop before working and",
+        "report the exact failure. Never fall back to live `.squad/goal.md` or role-goal",
+        "files.",
+        "",
+    ]
+
+
 def _render_agent(manifest: SquadManifest, role: Role) -> bytes:
     role_id = claude_role_id(manifest, role)
     tools = _tools(role)
@@ -174,6 +217,7 @@ def _render_agent(manifest: SquadManifest, role: Role) -> bytes:
             "",
             role.description,
             "",
+            *_context_lines(manifest, role),
             "## File ownership",
             "",
             "Treat these paths as a hard working boundary:",
@@ -197,8 +241,6 @@ def _render_agent(manifest: SquadManifest, role: Role) -> bytes:
             f"- Execution cadence: `{manifest.execution_mode.value}`",
         ]
     )
-    if role.goal_ref is not None:
-        lines.append(f"- Source role-goal reference: `{role.goal_ref}`")
     if _MUTATING_TOOLS.isdisjoint(tools):
         lines.extend(
             [

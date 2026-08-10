@@ -187,6 +187,30 @@ run_hook() {
   [ -z "$output" ]
 }
 
+@test "Bash wildcard hiding an in-workspace symlink defers before expansion" {
+  mkdir -p "$PROJECT_DIR/.squad/workspaces/builder/outputs"
+  outside="$(mktemp -d)"
+  printf '%s\n' 'outside' > "$outside/secret.txt"
+  ln -s "$outside" "$PROJECT_DIR/.squad/workspaces/builder/external"
+
+  run_hook '{"agent_type":"builder","tool_name":"Bash","tool_input":{"command":"cp -R .squad/workspaces/builder/* .squad/workspaces/builder/outputs"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  [ ! -e "$PROJECT_DIR/.squad/workspaces/builder/outputs/secret.txt" ]
+  rm -rf "$outside"
+}
+
+@test "Bash rejects every glob metacharacter before auto-approval" {
+  for command in \
+    'touch .squad/workspaces/builder/file?' \
+    'touch .squad/workspaces/builder/[ab]' \
+    'touch .squad/workspaces/builder/file]'; do
+    run_hook '{"agent_type":"builder","tool_name":"Bash","tool_input":{"command":"'"$command"'"}}'
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+  done
+}
+
 @test "Bash with a '..' traversal inside the workspace defers" {
   run_hook '{"agent_type":"builder","tool_name":"Bash","tool_input":{"command":"mkdir -p .squad/workspaces/builder/../../../etc/x"}}'
   [ "$status" -eq 0 ]

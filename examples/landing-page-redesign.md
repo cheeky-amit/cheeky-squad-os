@@ -542,7 +542,7 @@ Zero conflicts. Each teammate's `file_scope` was non-overlapping by construction
 ## 9. What just happened
 
 - Four bespoke roles for one specific build. No generic `frontend-dev` or `designer` — the names match the workstreams the goal actually decomposed into.
-- Disjoint `file_scope` per role enforced file isolation. Each role declared its `file_scope` at generation time; `skills/squad-spawn/scripts/spawn.sh` pre-created a worktree per role as the working directory; the four branches merged without a conflict.
+- Disjoint `file_scope` per role coordinated writes. Each role declared its `file_scope` at generation time; `skills/squad-spawn/scripts/spawn.sh` pre-created a worktree per role as the working directory; the four branches merged without a conflict.
 - Agent Teams was enabled with explicit consent. `squad-spawn` checked the env var, explained what Agent Teams adds, proposed the settings change, and only wrote `~/.claude/settings.json` after the user said yes.
 - The goal traveled with the work. The SessionStart hook injected `.squad/goal.md` into the lead's session on restart, and `squad-spawn` baked the goal + per-role file into each teammate's spawn prompt — no teammate ever drifted off-mission.
 - The lead did not manually relay handoffs. Teammates messaged each other directly through the Agent Teams mailbox; the lead only stepped in to merge at the end.
