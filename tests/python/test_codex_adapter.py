@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import tomllib
 from dataclasses import replace
@@ -383,9 +384,35 @@ def test_destination_specific_context_paths_are_prompt_baked() -> None:
     dispatch = plugin[f"skills/{DISPATCH_SKILL_ID}/SKILL.md"].decode()
 
     assert f".squad/exports/{namespace}/context/index.json" in project
-    assert f".squad/squads/{namespace}/context/index.json" in user
+    assert f"${{HOME}}/.squad/squads/{namespace}/context/index.json" in user
     assert ".squad/context/index.json" in dispatch
     assert "status; do not work" in project
+
+
+def test_user_agent_resolves_snapshot_from_home_outside_current_repo(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    manifest, roster = load_contracts()
+    fake_home = tmp_path / "fresh-home"
+    unrelated = tmp_path / "unrelated-repository"
+    fake_home.mkdir()
+    unrelated.mkdir()
+    monkeypatch.setenv("HOME", str(fake_home))
+    monkeypatch.chdir(unrelated)
+    namespace = provider_namespace(manifest.squad.id)
+    anchor = f"${{HOME}}/.squad/squads/{namespace}"
+    context_root = Path(os.path.expandvars(anchor)) / "context"
+    context_root.mkdir(parents=True)
+    (context_root / "index.json").write_text("{}\n", encoding="utf-8")
+
+    user_manifest = replace(manifest, destination=Destination.USER)
+    user = next(iter(compile_codex_agents(user_manifest, roster).values())).decode()
+
+    assert f"{anchor}/context/index.json" in user
+    assert str(unrelated) not in user
+    assert "from .squad/squads/" not in user
+    assert "when that file is available" not in user
+    assert (Path(os.path.expandvars(anchor)) / "context/index.json").is_file()
 
 
 def test_root_codex_manifest_is_structural_and_does_not_claim_lifecycle_skills() -> None:

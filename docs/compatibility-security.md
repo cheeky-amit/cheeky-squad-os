@@ -5,7 +5,9 @@ their runtimes have identical control surfaces.
 
 ## Enforcement labels
 
-- **Mechanically enforced**: code rejects or blocks a violating operation.
+- **Mechanically enforced**: code rejects or blocks a violating operation. A hook that
+  only limits automatic approval is described separately and does not earn this label
+  for the underlying write.
 - **Sandbox-enforced**: the active provider sandbox/tool policy restricts the operation.
 - **Instructional**: the role or dispatcher is told the rule; there is no blocking
   mechanism proving compliance.
@@ -18,17 +20,17 @@ their runtimes have identical control surfaces.
 | Namespaced role discovery | Mechanically enforced by compiler/path validation | Mechanically enforced by compiler; plugin-scoped discovery | Mechanically enforced by compiler/path validation | Unsupported directly; roles are prompt-baked into skills |
 | Required role fields | Mechanically enforced; Markdown frontmatter | Mechanically enforced; Markdown frontmatter | Mechanically enforced; TOML `name`, `description`, `developer_instructions` | Mechanically enforced for native plugin manifest and skills |
 | Tool/capability mapping | Mechanically validated by adapter | Mechanically validated by adapter | Instructional plus active Codex tool policy | Instructional plus active Codex tool policy |
-| File ownership boundary | Mechanically gated only when the active Claude lifecycle hook owns the runtime; otherwise instructional | Mechanically gated when Claude is runtime owner and vendored hooks are active | **Instructional in v1** | **Instructional in v1** |
-| Workspace access | Provider permission policy; eligible writes may be hook-gated | Provider permission policy plus runtime-owner hook | Sandbox-enforced by generated `read-only` or `workspace-write` mode | Sandbox-enforced by the invoking Codex session |
+| File ownership boundary | Instructional for the write itself; the active runtime-owner hook mechanically limits **automatic approval eligibility** | Instructional for the write itself; vendored hooks mechanically limit **automatic approval eligibility** when Claude is runtime owner | **Instructional in v1** | **Instructional in v1** |
+| Workspace access | Provider permission policy; eligible writes may be auto-approved by the hook | Provider permission policy plus runtime-owner auto-approval hook | Sandbox-enforced by generated `read-only` or `workspace-write` mode | Sandbox-enforced by the invoking Codex session |
 | Concurrent read-only dispatch | Supported where dependencies allow | Supported where dependencies allow | Instructional, dependency-safe concurrency allowed | Instructional, dependency-safe concurrency allowed |
 | Concurrent mutating dispatch | Claude dispatch path plus hook/runtime policy | Claude dispatch path plus hook/runtime policy | Unsupported by squad policy; dispatched sequentially | Unsupported by squad policy; prompt-baked dispatcher is sequential |
-| File-scope blocking hook | Supported only by the active Claude lifecycle runtime | Supported only when Claude is runtime owner | Unsupported | Unsupported |
-| Shared lifecycle hooks | Runtime-owner only | Runtime-owner only | Unsupported as an equivalent file-scope hook | Unsupported as an equivalent file-scope hook |
+| File-scope auto-approval gate | Supported only by the active Claude lifecycle runtime; out-of-scope requests defer to the human | Supported only when Claude is runtime owner; out-of-scope requests defer to the human | Unsupported | Unsupported |
+| Shared lifecycle hooks | Runtime-owner only | Runtime-owner only | Unsupported as an equivalent file-scope auto-approval gate | Unsupported as an equivalent file-scope auto-approval gate |
 | Standalone vendored package | Supported | Supported | Supported through plugin skills/prompts | Supported |
 | Receipt-based removal | Mechanically enforced by exporter | Mechanically enforced by exporter | Mechanically enforced by exporter | Mechanically enforced by exporter |
 
-The important negative claim is explicit: Codex v1 has no registered file-scope blocking
-hook. `file_ownership` coordinates roles and is included in developer instructions, but
+The important negative claim is explicit: Codex v1 has no registered file-scope
+auto-approval hook. `file_ownership` coordinates roles and is included in developer instructions, but
 it is not a mechanical boundary. Mutating Codex roles run sequentially to avoid races;
 that policy is prompt-baked and tested, not represented as a nonexistent scope hook.
 
@@ -68,7 +70,8 @@ writes.
 
 Runtime ownership does not make provider permissions portable. A Claude hook cannot be
 claimed as Codex enforcement, and a Codex sandbox setting cannot be claimed as a Claude
-file-scope hook.
+file-scope firewall. Even on Claude, the hook gates automatic approval eligibility; a
+human can still approve a deferred out-of-scope operation.
 
 ## Private state and secrets
 

@@ -38,7 +38,7 @@
         },
         "context": [
           {
-            "source": "path/to/local/reference/**",
+            "source": "path/to/local/reference",
             "target": "inputs",
             "kind": "copy"
           }

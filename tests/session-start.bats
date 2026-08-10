@@ -33,6 +33,9 @@ setup() {
 
 teardown() {
   rm -rf "$PROJECT_DIR"
+  if [ -n "${PLUGIN_DIR:-}" ]; then
+    rm -rf "$PLUGIN_DIR"
+  fi
 }
 
 # run_hook → invoke the hook with an empty stdin payload (SessionStart's
@@ -122,17 +125,17 @@ Ship the thing.'
 
 @test "v2 project manifest emits only for a selected Claude runtime owner" {
   publish_goal 'Claude-owned project goal.'
-  publish_manifest '{"schema_version":2,"providers":["claude","codex"],"runtime_owner":"claude"}'
+  publish_manifest '{"schema_version":2,"squad":{"id":"portable.demo","name":"Demo"},"execution_mode":"one-time","destination":"project","providers":["claude","codex"],"runtime_owner":"claude","export_version":"1.1.0"}'
   run_hook
   [ "$status" -eq 0 ]
   [[ "$(ctx)" == *"Claude-owned project goal."* ]]
 
-  publish_manifest '{"schema_version":2,"providers":["claude","codex"],"runtime_owner":"codex"}'
+  publish_manifest '{"schema_version":2,"squad":{"id":"portable.demo","name":"Demo"},"execution_mode":"one-time","destination":"project","providers":["claude","codex"],"runtime_owner":"codex","export_version":"1.1.0"}'
   run_hook
   [ "$status" -eq 0 ]
   [ -z "$output" ]
 
-  publish_manifest '{"schema_version":2,"providers":["codex"],"runtime_owner":"claude"}'
+  publish_manifest '{"schema_version":2,"squad":{"id":"portable.demo","name":"Demo"},"execution_mode":"one-time","destination":"project","providers":["codex"],"runtime_owner":"claude","export_version":"1.1.0"}'
   run_hook
   [ "$status" -eq 0 ]
   [ -z "$output" ]
@@ -146,6 +149,11 @@ Ship the thing.'
   [ -z "$output" ]
 
   publish_manifest '{"schema_version":99,"providers":["claude"],"runtime_owner":"claude"}'
+  run_hook
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+
+  publish_manifest '{"schema_version":2,"providers":["claude"],"runtime_owner":"claude"}'
   run_hook
   [ "$status" -eq 0 ]
   [ -z "$output" ]

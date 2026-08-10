@@ -239,6 +239,79 @@ JSON
   [ ! -d ../escape ]
 }
 
+@test "rejects an absolute local context source without reading it" {
+  outside="$(mktemp -d)"
+  printf '%s\n' 'outside-secret' > "$outside/secret.txt"
+  jq --arg source "$outside/secret.txt" \
+    '.roles[0].environment.context[0].from = $source' \
+    .squad/roster.json > .squad/roster.next
+  mv .squad/roster.next .squad/roster.json
+
+  run "$PROVISION"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"unsafe or symlinked context source"* ]]
+  [ ! -e .squad/workspaces/puller/inputs/secret.txt ]
+  [ "$(<"$outside/secret.txt")" = "outside-secret" ]
+  rm -rf "$outside"
+}
+
+@test "rejects traversal in a local context source without reading outside" {
+  outside="$(mktemp)"
+  printf '%s\n' 'outside-secret' > "$outside"
+  source_path="../${outside##*/}"
+  jq --arg source "$source_path" \
+    '.roles[0].environment.context[0].from = $source' \
+    .squad/roster.json > .squad/roster.next
+  mv .squad/roster.next .squad/roster.json
+
+  run "$PROVISION"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"unsafe or symlinked context source '$source_path'"* ]]
+  [ ! -e ".squad/workspaces/puller/inputs/${outside##*/}" ]
+  [ "$(<"$outside")" = "outside-secret" ]
+  rm -f "$outside"
+}
+
+@test "rejects an option-shaped local context source" {
+  jq '.roles[0].environment.context[0].from = "-R"' \
+    .squad/roster.json > .squad/roster.next
+  mv .squad/roster.next .squad/roster.json
+
+  run "$PROVISION"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"unsafe or symlinked context source '-R'"* ]]
+  [ ! -e .squad/workspaces/puller/inputs/-R ]
+}
+
+@test "rejects a globbed local context source instead of expanding it" {
+  printf '%s\n' 'second reference' > ref-two.txt
+  jq '.roles[0].environment.context[0].from = "ref*.txt"' \
+    .squad/roster.json > .squad/roster.next
+  mv .squad/roster.next .squad/roster.json
+
+  run "$PROVISION"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"unsafe or symlinked context source 'ref*.txt'"* ]]
+  [ ! -e .squad/workspaces/puller/inputs/ref.txt ]
+  [ ! -e .squad/workspaces/puller/inputs/ref-two.txt ]
+}
+
+@test "rejects a symlinked local context source without reading outside" {
+  outside="$(mktemp -d)"
+  printf '%s\n' 'outside-secret' > "$outside/secret.txt"
+  ln -s "$outside/secret.txt" linked-ref.txt
+  jq '.roles[0].environment.context[0].from = "linked-ref.txt"' \
+    .squad/roster.json > .squad/roster.next
+  mv .squad/roster.next .squad/roster.json
+
+  run "$PROVISION"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"unsafe or symlinked context source 'linked-ref.txt'"* ]]
+  [ ! -e .squad/workspaces/puller/inputs/linked-ref.txt ]
+  [ "$(<"$outside/secret.txt")" = "outside-secret" ]
+  rm -rf "$outside"
+}
+
 @test "refuses a workspace symlink before writing outside the project" {
   outside="$(mktemp -d)"
   rm -rf .squad/workspaces

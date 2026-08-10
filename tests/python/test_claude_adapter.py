@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 from dataclasses import replace
 from pathlib import Path
 
@@ -13,6 +14,7 @@ from cheeky_squad_portability.adapters.claude import (
     compile_claude_plugin,
 )
 from cheeky_squad_portability.contracts import (
+    Destination,
     ExecutionMode,
     Provider,
     Roster,
@@ -90,6 +92,59 @@ def test_agents_match_goldens_and_map_read_write_boundaries(
         assert "hooks:" not in frontmatter
         assert "mcpServers:" not in frontmatter
         assert "permissionMode:" not in frontmatter
+
+
+def test_agents_load_vendored_context_from_destination_anchors_outside_cwd(
+    manifest: SquadManifest,
+    roster: Roster,
+    runtime_files: dict[str, bytes],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    unrelated = tmp_path / "unrelated-working-directory"
+    project_root = tmp_path / "selected-project"
+    fake_home = tmp_path / "fresh-home"
+    plugin_root = tmp_path / "portable-plugin"
+    for root in (unrelated, project_root, fake_home, plugin_root):
+        root.mkdir()
+    monkeypatch.chdir(unrelated)
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(project_root))
+    monkeypatch.setenv("HOME", str(fake_home))
+    monkeypatch.setenv("CLAUDE_PLUGIN_ROOT", str(plugin_root))
+
+    namespace = provider_namespace(manifest.squad.id)
+    cases = (
+        (
+            Destination.PROJECT,
+            f"${{CLAUDE_PROJECT_DIR}}/.squad/exports/{namespace}",
+            compile_claude_agents,
+        ),
+        (
+            Destination.USER,
+            f"${{HOME}}/.squad/squads/{namespace}",
+            compile_claude_agents,
+        ),
+        (Destination.PLUGIN, "${CLAUDE_PLUGIN_ROOT}/.squad", compile_claude_plugin),
+    )
+    for destination, anchor, compiler in cases:
+        context_root = Path(os.path.expandvars(anchor)) / "context"
+        (context_root / "roles").mkdir(parents=True)
+        (context_root / "index.json").write_text("{}\n", encoding="utf-8")
+        (context_root / "squad-goal.md").write_text("squad goal\n", encoding="utf-8")
+        (context_root / "roles/evidence-reader.md").write_text("reader goal\n", encoding="utf-8")
+        destination_manifest = replace(manifest, destination=destination)
+        if compiler is compile_claude_plugin:
+            artifacts = compiler(destination_manifest, roster, runtime_files)
+        else:
+            artifacts = compiler(destination_manifest, roster)
+        reader = artifacts[f"agents/{READER_ID}.md"].decode()
+
+        assert f"{anchor}/context/index.json" in reader
+        assert str(unrelated) not in reader
+        assert "Require exactly one `role_goals` entry" in reader
+        assert "stop before working" in reader
+        assert "Never fall back to live `.squad/goal.md`" in reader
+        assert (Path(os.path.expandvars(anchor)) / "context/index.json").is_file()
 
 
 def test_inactive_roles_are_not_discoverable(manifest: SquadManifest, roster: Roster) -> None:

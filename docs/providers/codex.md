@@ -8,7 +8,7 @@ project/user discovery and into prompt-baked skills for standalone plugin transp
 Each role TOML contains the required fields:
 
 ```toml
-name = "acme-release-readiness--report-writer"
+name = "<generated-provider-role-id>"
 description = "Write the verified release report"
 developer_instructions = "...provider-neutral purpose and boundaries..."
 sandbox_mode = "workspace-write"
@@ -43,12 +43,13 @@ The standalone dispatcher therefore prompt-bakes every packaged role. This is a 
 compatibility strategy, not an invisible substitute for custom-agent discovery.
 
 Inspect the selected directory, then activate it deliberately with the current two-step
-Codex CLI flow. Run these commands from the generated directory, substituting the exact
-namespace printed in `ACTIVATION.md`:
+Codex CLI flow. Run the first command from the generated directory, then copy the
+generated install command verbatim from `ACTIVATION.md`; collision-safe identifiers are
+not meant to be hand-derived from the squad ID:
 
 ```bash
 codex plugin marketplace add "$(pwd -P)"
-codex plugin add <squad-namespace>@<squad-namespace>
+# Then run the exact `codex plugin add ...` line from ACTIVATION.md.
 ```
 
 The first command registers the local marketplace; the second installs the plugin selected
@@ -56,6 +57,9 @@ from that marketplace. `codex plugin add /path` is not the plugin-install syntax
 runs neither command and never installs, enables, publishes, or submits the package. No
 public Codex marketplace submission is part of this release. Official package reference:
 [Build plugins](https://developers.openai.com/plugins/build/plugins).
+
+For project/user role identifiers, inspect the export plan and the generated
+`.squad/provider-role-map.json`; do not infer identifiers from canonical role names.
 
 The repository's base `.codex-plugin/plugin.json` is validated as a plugin manifest, but
 the source checkout is not itself advertised as a local marketplace: a marketplace source
@@ -82,7 +86,7 @@ In Codex v1:
 - `sandbox_mode` is sandbox-enforced by the active Codex runtime;
 - provider tool policy remains sandbox/tool-policy enforced;
 - `file_ownership` is instructional;
-- there is no exported file-scope blocking hook;
+- there is no exported file-scope auto-approval hook;
 - the exporter does not claim Claude’s `PermissionRequest` hook applies to Codex.
 
 If a mutating role writes outside its instructed ownership paths, the active sandbox may

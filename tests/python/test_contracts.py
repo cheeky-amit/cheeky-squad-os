@@ -12,6 +12,7 @@ from referencing import Registry, Resource
 from cheeky_squad_portability import (
     ContractError,
     Destination,
+    EnvironmentContext,
     Roster,
     SquadManifest,
     build_export_plan,
@@ -58,6 +59,18 @@ def test_legacy_migration_is_pure_and_matches_golden() -> None:
     assert load_roster(migrated.to_dict()) == migrated
 
 
+@pytest.mark.parametrize("schema_version", [1, 3, "1", "2", "3"])
+def test_present_unsupported_roster_schema_never_uses_legacy_migration(
+    schema_version: object,
+) -> None:
+    roster = load_json(FIXTURES / "legacy-roster.json")
+    assert isinstance(roster, dict)
+    roster["schema_version"] = schema_version
+
+    with pytest.raises(ContractError, match="schema_version is unsupported"):
+        load_roster(roster)
+
+
 def test_current_seed_template_is_canonical_v2() -> None:
     raw = load_json(ROOT / "templates" / "roster.json")
     assert isinstance(raw, dict)
@@ -71,6 +84,19 @@ def test_current_seed_template_is_canonical_v2() -> None:
     assert isinstance(migrated, Roster)
     assert migrated.roles[0].id == "example-role-delete-me"
     assert migrated.roles[0].active is False
+
+
+@pytest.mark.parametrize("source", ["inputs/*.md", "inputs/file?.md", "inputs/[ab].md"])
+def test_local_environment_context_rejects_glob_sources(source: str) -> None:
+    with pytest.raises(ContractError, match="without globs"):
+        EnvironmentContext(source=source, target="inputs", kind="copy")
+
+    raw = load_json(ROOT / "templates" / "roster.json")
+    assert isinstance(raw, dict)
+    raw["roles"][0]["environment"]["context"][0]["source"] = source  # type: ignore[index]
+    schema = load_json(SCHEMAS / "roster.schema.json")
+    validator = validator_for(schema)(schema, registry=schema_registry())
+    assert list(validator.iter_errors(raw))
 
 
 def test_contracts_are_frozen() -> None:

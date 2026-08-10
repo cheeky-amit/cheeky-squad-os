@@ -89,7 +89,9 @@ The Claude plugin still provides three lifecycle hooks: `SessionStart` loads the
 `UserPromptSubmit` makes drift visible, and `PermissionRequest` narrowly auto-approves
 eligible writes for registered Claude roles. Their exact behavior is documented in
 [ARCHITECTURE.md](ARCHITECTURE.md). Codex exports do not register an equivalent
-file-scope blocking hook in v1.1.
+file-scope auto-approval gate in v1.1. The Claude hook is not a firewall: an
+out-of-scope operation defers to the normal permission dialog, where the human can
+approve it.
 
 ## Quickstart
 
