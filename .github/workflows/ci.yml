@@ -94,21 +94,39 @@ jobs:
               printf '%s' "$block" | jq -e 'has("roles")' >/dev/null 2>&1 || continue
               n=$((n+1))
               if ! printf '%s' "$block" | jq -e '
-                  has("squad_goal_ref") and has("mode") and
-                  ((keys | map(select(startswith("_") | not)) | map(select(. != "squad_goal_ref" and . != "mode" and . != "roles" and . != "created")) | length) == 0) and
-                  (.roles | all(
-                    (has("name") and has("purpose") and has("agent_file") and
-                     has("role_goal") and has("file_scope") and has("tools") and
-                     has("model") and has("active")) and
-                    ((keys | map(select(. == "scope" or . == "allowed_paths" or
-                      . == "depends_on" or . == "goal_ref" or . == "role_goal_file" or
-                      . == "schema_version" or . == "version" or . == "file")) | length) == 0)
-                  ))' >/dev/null; then
+                  def only($allowed): ((keys_unsorted - $allowed) | length) == 0;
+                  def legacy:
+                    only(["squad_goal_ref","mode","created","roles"]) and
+                    has("squad_goal_ref") and has("mode") and
+                    (.roles | all(
+                      only(["name","purpose","agent_file","role_goal","file_scope","tools","model","effort","active","created","environment"]) and
+                      has("name") and has("purpose") and has("agent_file") and
+                      has("role_goal") and has("file_scope") and has("tools") and
+                      has("model") and has("active")));
+                  def v2:
+                    only(["schema_version","squad_goal_ref","execution_mode","created","roles"]) and
+                    .schema_version == 2 and has("squad_goal_ref") and has("execution_mode") and
+                    (.roles | all(
+                      only(["id","purpose","description","file_ownership","capabilities","reasoning","active","goal_ref","created","environment","provider_overrides"]) and
+                      has("id") and has("purpose") and has("description") and
+                      has("file_ownership") and has("capabilities") and has("reasoning") and
+                      has("active") and
+                      (.file_ownership | only(["include","exclude"])) and
+                      (.reasoning | only(["profile","effort"]))));
+                  legacy or v2' >/dev/null; then
                 echo "::error file=$f::roster block #$n does not conform to the canonical roster schema"
                 fail=1
               fi
             done < <(printf '%s\x1e' "$blocks")
           done
-          jq -e 'has("squad_goal_ref") and has("mode") and has("roles")' templates/roster.json >/dev/null \
-            || { echo "::error file=templates/roster.json::template missing required top-level keys"; fail=1; }
+          jq -e '
+            def only($allowed): ((keys_unsorted - $allowed) | length) == 0;
+            only(["schema_version","squad_goal_ref","execution_mode","created","roles"]) and
+            .schema_version == 2 and has("squad_goal_ref") and has("execution_mode") and
+            (.roles | all(
+              only(["id","purpose","description","file_ownership","capabilities","reasoning","active","goal_ref","created","environment","provider_overrides"]) and
+              (.file_ownership | only(["include","exclude"])) and
+              (.reasoning | only(["profile","effort"]))))' \
+            templates/roster.json >/dev/null \
+            || { echo "::error file=templates/roster.json::template is not canonical roster v2"; fail=1; }
           exit $fail

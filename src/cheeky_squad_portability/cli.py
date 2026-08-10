@@ -13,8 +13,9 @@ from cheeky_squad_portability.exporter import (
     ExportError,
     ProviderCompilers,
     apply_export,
+    apply_uninstall_export,
     plan_export,
-    uninstall_export,
+    plan_uninstall_export,
     validate_installed_export,
 )
 from cheeky_squad_portability.json_io import pretty_json
@@ -56,6 +57,7 @@ def _parser() -> argparse.ArgumentParser:
         command.add_argument("--target", type=Path)
         command.add_argument("--home", type=Path)
         command.add_argument("--runtime-root", type=Path)
+        command.add_argument("--source-root", type=Path)
 
     plan = subparsers.add_parser("plan")
     add_export_inputs(plan)
@@ -82,7 +84,8 @@ def _parser() -> argparse.ArgumentParser:
         "--destination", choices=[item.value for item in Destination], required=True
     )
     uninstall.add_argument("--squad-id", required=True)
-    uninstall.add_argument("--confirm", action="store_true")
+    uninstall.add_argument("--plan-file", type=Path)
+    uninstall.add_argument("--confirm-plan-id")
     uninstall.add_argument("--confirm-global-write", action="store_true")
     return parser
 
@@ -106,6 +109,15 @@ def _runtime_bundle(runtime_root: Path | None) -> tuple[dict[str, bytes], set[st
     return files, executables
 
 
+def _source_root(explicit: Path | None, roster_path: Path) -> Path | None:
+    if explicit is not None:
+        return explicit.resolve(strict=False)
+    resolved = roster_path.resolve(strict=False)
+    if resolved.parent.name == ".squad":
+        return resolved.parent.parent
+    return None
+
+
 def run_cli(argv: Sequence[str], *, compilers: ProviderCompilers | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
@@ -125,6 +137,7 @@ def run_cli(argv: Sequence[str], *, compilers: ProviderCompilers | None = None) 
                 compilers=selected_compilers,
                 target_root=args.target,
                 home=args.home,
+                source_root=_source_root(args.source_root, args.roster),
                 vendored_files=runtime_files,
                 executable_paths=executable_paths,
             )
@@ -175,12 +188,26 @@ def run_cli(argv: Sequence[str], *, compilers: ProviderCompilers | None = None) 
             )
             return 0
 
-        result = uninstall_export(
+        prepared = plan_uninstall_export(
             target_root=args.target,
             destination=destination,
             squad_id=args.squad_id,
-            confirmed=args.confirm,
             home=args.home,
+        )
+        plan_dict = prepared.plan.to_dict()
+        if args.confirm_plan_id is None:
+            if args.plan_file is not None:
+                args.plan_file.write_text(pretty_json(plan_dict), encoding="utf-8")
+            sys.stdout.write(pretty_json(plan_dict))
+            return 0
+        if args.plan_file is None:
+            raise ExportError("uninstall apply requires --plan-file from a reviewed preview")
+        saved_plan = json.loads(args.plan_file.read_text(encoding="utf-8"))
+        if saved_plan != plan_dict:
+            raise ExportError("saved uninstall preview does not match the current plan")
+        result = apply_uninstall_export(
+            prepared,
+            confirmed_plan_id=args.confirm_plan_id,
             global_write_confirmed=args.confirm_global_write,
         )
         sys.stdout.write(

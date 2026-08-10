@@ -145,6 +145,23 @@ def _reject_unknown(data: Mapping[str, object], allowed: set[str], path: str) ->
         raise ContractError(f"{path} has unknown fields: {', '.join(unknown)}")
 
 
+def _relative_path(value: object, path: str, *, allow_dot: bool = False) -> str:
+    """Validate a normalized project-relative POSIX path or glob."""
+
+    text = _string(value, path)
+    if text == "." and allow_dot:
+        return text
+    if (
+        text.startswith(("/", "~"))
+        or "\\" in text
+        or "//" in text
+        or any(ord(character) < 32 for character in text)
+        or any(part in {"", ".", ".."} for part in text.split("/"))
+    ):
+        raise ContractError(f"{path} must be a normalized project-relative path without traversal")
+    return text
+
+
 @dataclass(frozen=True)
 class SquadIdentity:
     id: str
@@ -266,7 +283,7 @@ class FileOwnership:
             if len(paths) != len(set(paths)):
                 raise ContractError(f"file_ownership.{field_name} must not contain duplicates")
             for index, path in enumerate(paths):
-                _string(path, f"file_ownership.{field_name}[{index}]")
+                _relative_path(path, f"file_ownership.{field_name}[{index}]")
 
     @classmethod
     def from_dict(cls, value: object, path: str) -> FileOwnership:
@@ -314,10 +331,13 @@ class EnvironmentContext:
     kind: str
 
     def __post_init__(self) -> None:
-        _string(self.source, "environment.context.source")
-        _string(self.target, "environment.context.target")
         if self.kind not in {"copy", "link", "fetch"}:
             raise ContractError("environment.context.kind must be copy, link, or fetch")
+        if self.kind == "fetch":
+            _string(self.source, "environment.context.source")
+        else:
+            _relative_path(self.source, "environment.context.source")
+        _relative_path(self.target, "environment.context.target", allow_dot=True)
 
     @classmethod
     def from_dict(cls, value: object, path: str) -> EnvironmentContext:
@@ -378,11 +398,16 @@ class Environment:
     tools: tuple[EnvironmentTool, ...] = ()
 
     def __post_init__(self) -> None:
-        _string(self.workspace, "environment.workspace")
+        _relative_path(self.workspace, "environment.workspace")
         if len(self.directories) != len(set(self.directories)):
             raise ContractError("environment.directories must not contain duplicates")
+        for index, directory in enumerate(self.directories):
+            _relative_path(directory, f"environment.directories[{index}]")
         if len(self.variables) != len({key for key, _ in self.variables}):
             raise ContractError("environment.variables must not contain duplicate keys")
+        for key, _ in self.variables:
+            if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key):
+                raise ContractError("environment.variables keys must be valid shell identifiers")
 
     @classmethod
     def from_dict(cls, value: object, path: str) -> Environment:
@@ -429,25 +454,34 @@ class ClaudeOverride:
     model: str | None = None
     tools: tuple[str, ...] = ()
     agent_file: str | None = None
+    isolation: str | None = None
 
     def __post_init__(self) -> None:
         if self.model is not None:
             _string(self.model, "provider_overrides.claude.model")
         if self.agent_file is not None:
-            _string(self.agent_file, "provider_overrides.claude.agent_file")
+            _relative_path(self.agent_file, "provider_overrides.claude.agent_file")
+        if self.isolation is not None and self.isolation != "worktree":
+            raise ContractError("provider_overrides.claude.isolation must be worktree")
         for index, tool in enumerate(self.tools):
             _string(tool, f"provider_overrides.claude.tools[{index}]")
 
     @classmethod
     def from_dict(cls, value: object, path: str) -> ClaudeOverride:
         data = _object(value, path)
-        _reject_unknown(data, {"model", "tools", "agent_file"}, path)
+        _reject_unknown(data, {"model", "tools", "agent_file", "isolation"}, path)
         result = cls(
             model=_optional_string(data.get("model"), f"{path}.model"),
             tools=_string_tuple(data.get("tools", []), f"{path}.tools", allow_empty=True),
             agent_file=_optional_string(data.get("agent_file"), f"{path}.agent_file"),
+            isolation=_optional_string(data.get("isolation"), f"{path}.isolation"),
         )
-        if result.model is None and not result.tools and result.agent_file is None:
+        if (
+            result.model is None
+            and not result.tools
+            and result.agent_file is None
+            and result.isolation is None
+        ):
             raise ContractError(f"{path} must contain at least one override")
         return result
 
@@ -459,6 +493,8 @@ class ClaudeOverride:
             result["tools"] = list(self.tools)
         if self.agent_file is not None:
             result["agent_file"] = self.agent_file
+        if self.isolation is not None:
+            result["isolation"] = self.isolation
         return result
 
 
@@ -570,7 +606,7 @@ class Role:
             if not re.fullmatch(r"^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$", capability):
                 raise ContractError(f"role.capabilities[{index}] is not a portable capability name")
         if self.goal_ref is not None:
-            _string(self.goal_ref, "role.goal_ref")
+            _relative_path(self.goal_ref, "role.goal_ref")
         if self.created is not None:
             _string(self.created, "role.created")
 
@@ -650,7 +686,7 @@ class Roster:
     schema_version: int = field(default=2, init=False)
 
     def __post_init__(self) -> None:
-        _string(self.squad_goal_ref, "roster.squad_goal_ref")
+        _relative_path(self.squad_goal_ref, "roster.squad_goal_ref")
         role_ids = [role.id for role in self.roles]
         if len(role_ids) != len(set(role_ids)):
             raise ContractError("roster.roles must have unique ids")

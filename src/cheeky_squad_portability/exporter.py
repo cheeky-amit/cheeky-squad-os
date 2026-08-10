@@ -8,6 +8,7 @@ import os
 import re
 import shutil
 import stat
+import subprocess
 import tempfile
 import tomllib
 from collections.abc import Callable, Iterable, Mapping
@@ -22,7 +23,10 @@ from cheeky_squad_portability.contracts import (
 )
 from cheeky_squad_portability.json_io import canonical_json_bytes, pretty_json, sha256_bytes
 from cheeky_squad_portability.migration import load_roster
-from cheeky_squad_portability.namespace import provider_namespace
+from cheeky_squad_portability.namespace import (
+    provider_namespace,
+    provider_role_id,
+)
 from cheeky_squad_portability.plan import ExportPlan, build_export_plan
 from cheeky_squad_portability.receipt import (
     ExportReceipt,
@@ -52,12 +56,20 @@ _TEXT_SUFFIXES = {
     ".yml",
 }
 _PRIVATE_COMPONENTS = {
+    ".git",
+    "credentials",
     "engagement-records",
     "engagements",
+    "env",
+    "environments",
     "private-state",
+    "secret",
     "secrets",
+    "worktrees",
     "workspaces",
+    "world",
 }
+_TRANSACTION_PREFIX = ".squad-export-txn-"
 _MIT_LICENSE = b"""MIT License
 
 Copyright (c) 2026 amit-cheeky
@@ -139,6 +151,32 @@ class PreparedExport:
 
 
 @dataclass(frozen=True)
+class PreparedUninstall:
+    """Exact receipt-authorized removal plan and its filesystem preconditions."""
+
+    plan: ExportPlan
+    writes: tuple[PreparedWrite, ...]
+    preconditions: tuple[PathState, ...]
+    preserved_modified: tuple[str, ...]
+    receipt_path: str
+    home_root: str | None = None
+
+    def write_map(self) -> dict[str, bytes]:
+        return {item.path: item.content for item in self.writes}
+
+
+@dataclass(frozen=True)
+class ContextSnapshot:
+    """Safe, explicit export of authored goal context."""
+
+    index: bytes
+    files: tuple[tuple[str, bytes], ...]
+
+    def file_map(self) -> dict[str, bytes]:
+        return dict(self.files)
+
+
+@dataclass(frozen=True)
 class ApplyResult:
     plan_id: str
     written: tuple[str, ...]
@@ -179,6 +217,7 @@ def _private_path(path: str) -> bool:
     return (
         path == ".squad/partner.md"
         or name.startswith(".env")
+        or name.startswith(("role-plan-", "role-comm-", "claims-"))
         or any(part.lower() in _PRIVATE_COMPONENTS for part in parts)
     )
 
@@ -240,32 +279,53 @@ def _json_bytes(value: object) -> bytes:
     return pretty_json(value).encode("utf-8")  # type: ignore[arg-type]
 
 
-def _canonical_paths(destination: Destination, namespace: str) -> tuple[str, str, str]:
+def _snapshot_prefix(destination: Destination, namespace: str) -> str:
+    if destination is Destination.PROJECT:
+        return f".squad/exports/{namespace}"
     if destination is Destination.USER:
-        prefix = f".squad/squads/{namespace}"
-        return (
-            f"{prefix}/manifest.json",
-            f"{prefix}/roster.json",
-            f".squad/receipts/{namespace}.json",
-        )
-    return ".squad/manifest.json", ".squad/roster.json", ".squad/export-receipt.json"
+        return f".squad/squads/{namespace}"
+    return ".squad"
+
+
+def _canonical_paths(destination: Destination, namespace: str) -> tuple[str, str, str]:
+    prefix = _snapshot_prefix(destination, namespace)
+    receipt = (
+        f".squad/receipts/{namespace}.json"
+        if destination is Destination.USER
+        else f"{prefix}/export-receipt.json"
+    )
+    return f"{prefix}/manifest.json", f"{prefix}/roster.json", receipt
 
 
 def _activation_bytes(manifest: SquadManifest) -> bytes:
-    providers = ", ".join(sorted(item.value for item in manifest.providers))
-    return (
+    namespace = squad_namespace(manifest.squad.id)
+    sections = [
         "# Activate this portable squad\n\n"
         "This directory is a generated, vendored snapshot. It does not require the "
         "squad generator at runtime. Generation does not install or enable it.\n\n"
-        f"Included providers: {providers}.\n\n"
-        "- Claude: add this directory as a plugin and explicitly enable it.\n"
-        "- Codex: add this directory as a plugin. Packaged custom roles are dispatched "
-        "from the vendored prompts because plugin custom-agent discovery is not assumed.\n"
-    ).encode()
+        f"Included providers: {', '.join(sorted(item.value for item in manifest.providers))}.\n"
+    ]
+    if Provider.CLAUDE in manifest.providers:
+        sections.append(
+            "\n## Claude\n\nAdd this directory as a Claude plugin and explicitly enable it.\n"
+        )
+    if Provider.CODEX in manifest.providers:
+        sections.append(
+            "\n## Codex\n\nFrom this generated directory, register its local marketplace, "
+            "then install the namespaced plugin explicitly:\n\n"
+            "```sh\n"
+            'codex plugin marketplace add "$(pwd -P)"\n'
+            f"codex plugin add {namespace}@{namespace}\n"
+            "```\n\n"
+            "Packaged custom roles are dispatched from the vendored prompts because plugin "
+            "custom-agent discovery is not assumed.\n"
+        )
+    sections.append("\nThese commands are activation steps; the exporter does not run them.\n")
+    return "".join(sections).encode()
 
 
 def _portable_roster_dict(roster: Roster) -> dict[str, object]:
-    """Return canonical roles with environment values stripped from the snapshot."""
+    """Return canonical roles without live environment provisioning details."""
 
     portable: dict[str, object] = roster.to_dict()
     roles = portable.get("roles")
@@ -280,10 +340,102 @@ def _portable_roster_dict(roster: Roster) -> dict[str, object]:
         variables = environment.get("variables")
         if isinstance(variables, dict):
             environment["variables"] = dict.fromkeys(variables, "")
+        environment["context"] = []
+        tools = environment.get("tools")
+        if isinstance(tools, list):
+            for tool in tools:
+                if not isinstance(tool, dict):
+                    raise ExportError("canonical roster environment tool must be an object")
+                tool.pop("verify", None)
+                tool.pop("install", None)
     return portable
 
 
-def _session_prompt(manifest: SquadManifest, roster: Roster) -> str:
+def _context_source_path(value: str, *, role_id: str | None) -> str:
+    path = _relative(value, "context source path")
+    expected = ".squad/goal.md" if role_id is None else f".squad/role-goal-{role_id}.md"
+    if path != expected or _private_path(path):
+        raise ExportError(f"context source must be the canonical authored file: {expected}")
+    return path
+
+
+def _read_context_file(root: Path | None, source: str) -> tuple[str, bytes | None]:
+    if root is None:
+        return "source-unavailable", None
+    candidate = root.joinpath(*PurePosixPath(source).parts)
+    _reject_symlink_components(candidate)
+    try:
+        mode = candidate.lstat().st_mode
+    except FileNotFoundError:
+        return "missing", None
+    if not stat.S_ISREG(mode):
+        raise ExportError(f"context source must be a regular file: {source}")
+    content = candidate.read_bytes()
+    try:
+        content.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise ExportError(f"context source must be UTF-8 text: {source}") from error
+    return "included", content
+
+
+def _context_snapshot(roster: Roster, source_root: Path | None) -> ContextSnapshot:
+    root: Path | None = None
+    if source_root is not None:
+        if not source_root.is_absolute():
+            raise ExportError("context source root must be an explicit absolute path")
+        _reject_symlink_components(source_root)
+        root = source_root.resolve(strict=False)
+        if root != source_root or not root.is_dir():
+            raise ExportError("context source root must be an existing directory without symlinks")
+
+    files: dict[str, bytes] = {}
+    goal_source = _context_source_path(roster.squad_goal_ref, role_id=None)
+    goal_status, goal_content = _read_context_file(root, goal_source)
+    goal_snapshot = "context/squad-goal.md" if goal_content is not None else None
+    if goal_snapshot is not None:
+        files[goal_snapshot] = goal_content
+
+    role_entries: list[dict[str, object]] = []
+    for role in sorted(roster.roles, key=lambda item: item.id):
+        if role.goal_ref is None:
+            role_entries.append(
+                {
+                    "role_id": role.id,
+                    "source": None,
+                    "status": "not-declared",
+                    "snapshot": None,
+                }
+            )
+            continue
+        source = _context_source_path(role.goal_ref, role_id=role.id)
+        status, content = _read_context_file(root, source)
+        snapshot = f"context/roles/{role.id}.md" if content is not None else None
+        if snapshot is not None:
+            files[snapshot] = content
+        role_entries.append(
+            {
+                "role_id": role.id,
+                "source": source,
+                "status": status,
+                "snapshot": snapshot,
+            }
+        )
+
+    index = _json_bytes(
+        {
+            "schema_version": 1,
+            "squad_goal": {
+                "source": goal_source,
+                "status": goal_status,
+                "snapshot": goal_snapshot,
+            },
+            "role_goals": role_entries,
+        }
+    )
+    return ContextSnapshot(index=index, files=tuple(sorted(files.items())))
+
+
+def _session_prompt(manifest: SquadManifest, roster: Roster, context: ContextSnapshot) -> str:
     portable = _portable_roster_dict(roster)
     active_roles = [
         role
@@ -294,6 +446,8 @@ def _session_prompt(manifest: SquadManifest, roster: Roster) -> str:
         {
             "manifest": manifest.to_dict(),
             "roles": active_roles,
+            "context_index": json.loads(context.index),
+            "context_bodies": {path: content.decode("utf-8") for path, content in context.files},
             "dispatch_policy": (
                 "Run mutating roles sequentially. File ownership is instructional; "
                 "respect it, but do not claim mechanical enforcement."
@@ -313,17 +467,28 @@ def _source_hash(
     desired_files: Mapping[str, bytes],
     session_prompt: str | None,
 ) -> str:
+    file_hashes = {path: sha256_bytes(content) for path, content in sorted(desired_files.items())}
+    return _source_hash_from_hashes(
+        manifest,
+        roster,
+        file_hashes,
+        None if session_prompt is None else sha256_bytes(session_prompt.encode()),
+    )
+
+
+def _source_hash_from_hashes(
+    manifest: SquadManifest,
+    roster: Roster,
+    file_hashes: Mapping[str, str],
+    session_prompt_sha256: str | None,
+) -> str:
     return sha256_bytes(
         canonical_json_bytes(
             {
                 "manifest": manifest.to_dict(),
-                "roster": roster.to_dict(),
-                "files": {
-                    path: sha256_bytes(content) for path, content in sorted(desired_files.items())
-                },
-                "session_prompt_sha256": (
-                    None if session_prompt is None else sha256_bytes(session_prompt.encode())
-                ),
+                "roster": _portable_roster_dict(roster),
+                "files": dict(sorted(file_hashes.items())),
+                "session_prompt_sha256": session_prompt_sha256,
             }
         )
     )
@@ -362,9 +527,35 @@ def _target_path(
 
     if not resolved.exists() or not resolved.is_dir():
         raise ExportError("export target must be an existing directory")
-    if destination is Destination.PROJECT and not (resolved / ".git").exists():
-        raise ExportError("project export target must be a selected Git repository root")
+    if destination is Destination.PROJECT:
+        _validate_git_root(resolved)
     return resolved
+
+
+def _validate_git_root(root: Path) -> None:
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "--show-toplevel"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except OSError as error:
+        raise ExportError("Git is required to validate a project export target") from error
+    if result.returncode != 0:
+        raise ExportError("project export target must be an existing Git repository root")
+    reported = Path(result.stdout.strip()).resolve(strict=False)
+    if reported != root:
+        raise ExportError("project export target must be the selected Git repository root")
+
+
+def _reject_abandoned_transactions(root: Path) -> None:
+    abandoned = sorted(path.name for path in root.glob(f"{_TRANSACTION_PREFIX}*"))
+    if abandoned:
+        raise ExportError(
+            "abandoned export transaction requires manual review before continuing: "
+            + ", ".join(abandoned)
+        )
 
 
 def _reject_symlink_components(path: Path) -> None:
@@ -396,19 +587,18 @@ def _validate_user_namespaces(paths: Iterable[str], namespace: str) -> None:
     canonical_prefix = f".squad/squads/{namespace}/"
     receipt = f".squad/receipts/{namespace}.json"
     direct_roots = {
-        ".agents/skills": 2,
-        ".claude/agents": 2,
-        ".claude/skills": 2,
-        ".codex/agents": 2,
-        ".codex/skills": 2,
+        ".agents/skills": (2, f"{namespace}-"),
+        ".claude/agents": (2, f"{namespace}--"),
+        ".claude/skills": (2, f"{namespace}--"),
+        ".codex/agents": (2, f"{namespace}--"),
+        ".codex/skills": (2, f"{namespace}-"),
     }
-    expected = f"{namespace}--"
     for path in paths:
         if path.startswith(canonical_prefix) or path == receipt:
             continue
         parts = PurePosixPath(path).parts
         matched = False
-        for root, index in direct_roots.items():
+        for root, (index, expected) in direct_roots.items():
             if path.startswith(f"{root}/") and len(parts) > index:
                 matched = parts[index].startswith(expected)
                 break
@@ -416,18 +606,22 @@ def _validate_user_namespaces(paths: Iterable[str], namespace: str) -> None:
             raise ExportError(f"user artifact is not namespaced for {namespace}: {path}")
 
 
-def _validate_text(path: str, content: bytes, *, plugin: bool) -> None:
+def _validate_text(path: str, content: bytes, *, plugin: bool, namespace: str) -> None:
     if PurePosixPath(path).suffix.lower() not in _TEXT_SUFFIXES:
         return
     try:
         text = content.decode("utf-8")
     except UnicodeDecodeError as error:
         raise ExportError(f"text artifact is not UTF-8: {path}") from error
-    authored_template = (
+    generated_skill = path.startswith(f"skills/{namespace}-") or (
+        f"/skills/{namespace}-" in f"/{path}"
+    )
+    authored_template = not generated_skill and (
         "templates" in PurePosixPath(path).parts
         or path.startswith("skills/")
         or path.startswith("runtime/skills/")
         or path.startswith("shared/runtime/skills/")
+        or "/runtime/skills/" in f"/{path}"
     )
     if not authored_template and any(pattern.search(text) for pattern in _PLACEHOLDERS):
         raise ExportError(f"unresolved placeholder in generated artifact: {path}")
@@ -447,6 +641,7 @@ def _validate_text(path: str, content: bytes, *, plugin: bool) -> None:
 
 def _validate_artifacts(
     manifest: SquadManifest,
+    roster: Roster,
     destination: Destination,
     files: Mapping[str, bytes],
     namespace: str,
@@ -455,14 +650,26 @@ def _validate_artifacts(
     if destination is Destination.USER:
         _validate_user_namespaces(paths, namespace)
     for path in paths:
-        _validate_text(path, files[path], plugin=destination is Destination.PLUGIN)
+        _validate_text(
+            path,
+            files[path],
+            plugin=destination is Destination.PLUGIN,
+            namespace=namespace,
+        )
+
+    context_index = f"{_snapshot_prefix(destination, namespace)}/context/index.json"
+    if context_index not in files:
+        raise ExportError("export output is missing its authored-context index")
+    _validate_context_index(files[context_index], files, roster, destination, namespace)
 
     if Provider.CLAUDE in manifest.providers:
         if destination is Destination.PLUGIN:
             required = ".claude-plugin/plugin.json"
             if required not in files:
                 raise ExportError(f"Claude plugin output is missing {required}")
-            _validate_provider_manifest(required, files[required], manifest.export_version)
+            _validate_provider_manifest(
+                required, files[required], manifest.export_version, namespace
+            )
         elif destination is not Destination.SESSION and not any(
             path.startswith(".claude/agents/") and path.endswith(".md") for path in paths
         ):
@@ -473,13 +680,28 @@ def _validate_artifacts(
             if path.endswith(".md") and path.startswith(("agents/", ".claude/agents/"))
         )
         for path in claude_agents:
-            _validate_claude_agent(path, files[path])
+            _validate_claude_agent(path, files[path], namespace)
     if Provider.CODEX in manifest.providers:
         if destination is Destination.PLUGIN:
             required = ".codex-plugin/plugin.json"
             if required not in files:
                 raise ExportError(f"Codex plugin output is missing {required}")
-            _validate_provider_manifest(required, files[required], manifest.export_version)
+            _validate_provider_manifest(
+                required, files[required], manifest.export_version, namespace
+            )
+            marketplace_path = ".agents/plugins/marketplace.json"
+            nested_manifest = f"plugins/{namespace}/.codex-plugin/plugin.json"
+            if marketplace_path not in files or nested_manifest not in files:
+                raise ExportError("Codex plugin output is missing its local marketplace wrapper")
+            _validate_codex_marketplace(
+                files[marketplace_path], namespace=namespace, nested_manifest=nested_manifest
+            )
+            _validate_provider_manifest(
+                nested_manifest,
+                files[nested_manifest],
+                manifest.export_version,
+                namespace,
+            )
         elif destination is not Destination.SESSION and not any(
             path.startswith(".codex/agents/") and path.endswith(".toml") for path in paths
         ):
@@ -487,7 +709,13 @@ def _validate_artifacts(
         for path in (
             path for path in paths if path.startswith(".codex/agents/") and path.endswith(".toml")
         ):
-            _validate_codex_agent(path, files[path])
+            _validate_codex_agent(path, files[path], namespace)
+
+    if destination in {Destination.PROJECT, Destination.USER}:
+        role_map = f"{_snapshot_prefix(destination, namespace)}/provider-role-map.json"
+        if role_map not in files:
+            raise ExportError("installed output is missing its provider role map")
+        _validate_provider_role_map(files[role_map], manifest, roster, namespace)
 
     if destination is Destination.PLUGIN:
         required_common = {
@@ -503,17 +731,95 @@ def _validate_artifacts(
             raise ExportError(f"plugin output is missing required artifacts: {', '.join(missing)}")
 
 
-def _validate_provider_manifest(path: str, content: bytes, export_version: str) -> None:
+def _validate_provider_manifest(
+    path: str, content: bytes, export_version: str, namespace: str
+) -> None:
     value = json.loads(content)
     if not isinstance(value, dict):
         raise ExportError(f"provider manifest must be a JSON object: {path}")
-    if not isinstance(value.get("name"), str) or not value["name"]:
-        raise ExportError(f"provider manifest is missing name: {path}")
+    if value.get("name") != namespace:
+        raise ExportError(f"provider manifest name does not match squad namespace: {path}")
     if value.get("version") != export_version:
         raise ExportError(f"provider manifest version does not match export version: {path}")
 
 
-def _validate_claude_agent(path: str, content: bytes) -> None:
+def _validate_codex_marketplace(content: bytes, *, namespace: str, nested_manifest: str) -> None:
+    value = json.loads(content)
+    if not isinstance(value, dict) or value.get("name") != namespace:
+        raise ExportError("Codex marketplace name does not match the squad namespace")
+    plugins = value.get("plugins")
+    if not isinstance(plugins, list) or len(plugins) != 1 or not isinstance(plugins[0], dict):
+        raise ExportError("Codex marketplace must contain exactly one generated plugin")
+    entry = plugins[0]
+    source = entry.get("source")
+    expected_root = str(PurePosixPath(nested_manifest).parents[1])
+    expected_path = f"./{expected_root}"
+    if (
+        entry.get("name") != namespace
+        or not isinstance(source, dict)
+        or source.get("source") != "local"
+        or source.get("path") != expected_path
+    ):
+        raise ExportError("Codex marketplace source does not match the generated plugin")
+
+
+def _validate_provider_role_map(
+    content: bytes, manifest: SquadManifest, roster: Roster, namespace: str
+) -> None:
+    value = json.loads(content)
+    expected = json.loads(_provider_role_map(manifest, roster))
+    if value != expected:
+        raise ExportError("provider role map does not match the canonical active roles")
+    roles = value.get("roles") if isinstance(value, dict) else None
+    if not isinstance(roles, dict) or any(
+        not isinstance(key, str)
+        or not key.startswith(f"{namespace}--")
+        or not isinstance(role_id, str)
+        for key, role_id in roles.items()
+    ):
+        raise ExportError("provider role map contains an invalid provider role ID")
+
+
+def _validate_context_index(
+    content: bytes,
+    files: Mapping[str, bytes],
+    roster: Roster,
+    destination: Destination,
+    namespace: str,
+) -> None:
+    value = json.loads(content)
+    if not isinstance(value, dict) or value.get("schema_version") != 1:
+        raise ExportError("context index must be a schema-version 1 object")
+    squad_goal = value.get("squad_goal")
+    role_goals = value.get("role_goals")
+    if not isinstance(squad_goal, dict) or not isinstance(role_goals, list):
+        raise ExportError("context index is missing squad or role goal entries")
+    if squad_goal.get("source") != roster.squad_goal_ref:
+        raise ExportError("context index squad goal source does not match the roster")
+    entries = {
+        item.get("role_id"): item
+        for item in role_goals
+        if isinstance(item, dict) and isinstance(item.get("role_id"), str)
+    }
+    if set(entries) != {role.id for role in roster.roles}:
+        raise ExportError("context index role entries do not match the roster")
+
+    prefix = _snapshot_prefix(destination, namespace)
+    records = [squad_goal, *entries.values()]
+    allowed_statuses = {"included", "missing", "not-declared", "source-unavailable"}
+    for record in records:
+        status = record.get("status")
+        snapshot = record.get("snapshot")
+        if status not in allowed_statuses:
+            raise ExportError("context index contains an invalid status")
+        if status == "included":
+            if not isinstance(snapshot, str) or f"{prefix}/{snapshot}" not in files:
+                raise ExportError("included context is missing its snapshot body")
+        elif snapshot is not None:
+            raise ExportError("unavailable context must not claim a snapshot body")
+
+
+def _validate_claude_agent(path: str, content: bytes, namespace: str) -> None:
     text = content.decode("utf-8")
     if not text.startswith("---\n"):
         raise ExportError(f"Claude agent is missing frontmatter: {path}")
@@ -524,13 +830,46 @@ def _validate_claude_agent(path: str, content: bytes) -> None:
     for field in ("name:", "description:"):
         if not any(line.startswith(field) for line in frontmatter.splitlines()):
             raise ExportError(f"Claude agent frontmatter is missing {field[:-1]}: {path}")
+    names = [
+        line.removeprefix("name:").strip().strip('"')
+        for line in frontmatter.splitlines()
+        if line.startswith("name:")
+    ]
+    expected = PurePosixPath(path).stem
+    if names != [expected] or not expected.startswith(f"{namespace}--"):
+        raise ExportError(f"Claude agent name does not match its namespaced path: {path}")
 
 
-def _validate_codex_agent(path: str, content: bytes) -> None:
+def _validate_codex_agent(path: str, content: bytes, namespace: str) -> None:
     value = tomllib.loads(content.decode("utf-8"))
     for field in ("name", "description", "developer_instructions"):
         if not isinstance(value.get(field), str) or not value[field]:
             raise ExportError(f"Codex agent TOML is missing {field}: {path}")
+    expected = PurePosixPath(path).stem
+    if value["name"] != expected or not expected.startswith(f"{namespace}--"):
+        raise ExportError(f"Codex agent name does not match its namespaced path: {path}")
+
+
+def _provider_role_map(manifest: SquadManifest, roster: Roster) -> bytes:
+    roles = {
+        provider_role_id(manifest.squad.id, role.id): role.id
+        for role in sorted((item for item in roster.roles if item.active), key=lambda item: item.id)
+    }
+    return _json_bytes(
+        {
+            "schema_version": 1,
+            "roles": roles,
+        }
+    )
+
+
+def _mount_context(
+    target: dict[str, bytes], destination: Destination, namespace: str, context: ContextSnapshot
+) -> None:
+    prefix = _snapshot_prefix(destination, namespace)
+    _add_engine_output(target, f"{prefix}/context/index.json", context.index)
+    for path, content in context.files:
+        _add_engine_output(target, f"{prefix}/{path}", content)
 
 
 def _render_desired_files(
@@ -539,10 +878,12 @@ def _render_desired_files(
     compilers: ProviderCompilers,
     vendored_files: Mapping[str, bytes],
     license_bytes: bytes,
+    context: ContextSnapshot,
 ) -> tuple[dict[str, bytes], str, str, str]:
     namespace = squad_namespace(manifest.squad.id)
     manifest_path, roster_path, receipt_path = _canonical_paths(manifest.destination, namespace)
     rendered: dict[str, bytes] = {}
+    portable_roster = load_roster(_portable_roster_dict(roster))
     plugin_runtime = dict(vendored_files)
     if "LICENSE" in plugin_runtime and plugin_runtime["LICENSE"] != license_bytes:
         raise ExportError("vendored LICENSE conflicts with the selected export license")
@@ -554,25 +895,31 @@ def _render_desired_files(
             )
             if plugin_compiler is None:
                 raise ExportError(f"no {provider.value} plugin compiler was provided")
-            _merge_outputs(rendered, plugin_compiler(manifest, roster, plugin_runtime))
+            _merge_outputs(rendered, plugin_compiler(manifest, portable_roster, plugin_runtime))
             continue
         agent_compiler = (
             compilers.claude_agents if provider is Provider.CLAUDE else compilers.codex_agents
         )
         if agent_compiler is None:
             raise ExportError(f"no {provider.value} agent compiler was provided")
-        _mount_agent_outputs(rendered, provider, agent_compiler(manifest, roster))
+        _mount_agent_outputs(rendered, provider, agent_compiler(manifest, portable_roster))
         if provider is Provider.CODEX and compilers.codex_skills is not None:
             _mount_agent_outputs(
                 rendered,
                 provider,
-                compilers.codex_skills(manifest, roster),
+                compilers.codex_skills(manifest, portable_roster),
             )
 
     manifest_bytes = _json_bytes(manifest.to_dict())
     roster_bytes = _json_bytes(_portable_roster_dict(roster))
     _add_engine_output(rendered, manifest_path, manifest_bytes)
     _add_engine_output(rendered, roster_path, roster_bytes)
+    _mount_context(rendered, manifest.destination, namespace, context)
+    if manifest.destination in {Destination.PROJECT, Destination.USER}:
+        role_map_path = (
+            f"{_snapshot_prefix(manifest.destination, namespace)}/provider-role-map.json"
+        )
+        _add_engine_output(rendered, role_map_path, _provider_role_map(manifest, roster))
     if manifest.destination is Destination.PLUGIN:
         for path, content in {
             "ACTIVATION.md": _activation_bytes(manifest),
@@ -593,7 +940,7 @@ def _render_desired_files(
         _merge_outputs(rendered, vendored_files)
     if receipt_path in rendered:
         raise ExportError("provider output cannot replace the engine-owned export receipt")
-    _validate_artifacts(manifest, manifest.destination, rendered, namespace)
+    _validate_artifacts(manifest, roster, manifest.destination, rendered, namespace)
     return rendered, manifest_path, roster_path, receipt_path
 
 
@@ -618,7 +965,21 @@ def _load_receipt(
     expected_destination = manifest.destination if manifest is not None else destination
     if receipt.squad_id != expected_squad or receipt.destination is not expected_destination:
         raise ExportError("existing receipt belongs to a different squad or destination")
+    _validate_path_set(item.path for item in receipt.files)
     return receipt, state
+
+
+def _validate_receipt_source(
+    receipt: ExportReceipt, manifest: SquadManifest, roster: Roster
+) -> None:
+    expected = _source_hash_from_hashes(
+        manifest,
+        roster,
+        {item.path: item.sha256 for item in receipt.files},
+        None,
+    )
+    if not hmac.compare_digest(receipt.source_sha256, expected):
+        raise ExportError("export receipt source hash does not match its owned file ledger")
 
 
 def plan_export(
@@ -628,6 +989,7 @@ def plan_export(
     compilers: ProviderCompilers | None = None,
     target_root: Path | None = None,
     home: Path | None = None,
+    source_root: Path | None = None,
     vendored_files: Mapping[str, bytes] | None = None,
     executable_paths: Iterable[str] = (),
     license_bytes: bytes = _MIT_LICENSE,
@@ -639,9 +1001,10 @@ def plan_export(
     root = _target_path(manifest.destination, target_root, home)
     selected_compilers = ProviderCompilers() if compilers is None else compilers
     vendored = {} if vendored_files is None else dict(vendored_files)
+    context = _context_snapshot(roster, source_root)
 
     if manifest.destination is Destination.SESSION:
-        prompt = _session_prompt(manifest, roster)
+        prompt = _session_prompt(manifest, roster, context)
         source_hash = _source_hash(manifest, roster, {}, prompt)
         plan = build_export_plan(
             manifest=manifest,
@@ -659,8 +1022,9 @@ def plan_export(
         )
 
     assert root is not None
+    _reject_abandoned_transactions(root)
     desired, _, _, receipt_path = _render_desired_files(
-        manifest, roster, selected_compilers, vendored, license_bytes
+        manifest, roster, selected_compilers, vendored, license_bytes, context
     )
     requested_executables = {_relative(path, "executable path") for path in executable_paths}
     executable: set[str] = set()
@@ -774,17 +1138,6 @@ def _assert_preconditions(root: Path, states: Iterable[PathState]) -> None:
             )
 
 
-def _remove_empty_parents(root: Path, paths: Iterable[str]) -> None:
-    for relative in sorted(paths, reverse=True):
-        parent = root.joinpath(*PurePosixPath(relative).parts).parent
-        while parent != root:
-            try:
-                parent.rmdir()
-            except OSError:
-                break
-            parent = parent.parent
-
-
 def _atomic_apply(
     root: Path,
     writes: Mapping[str, bytes],
@@ -841,11 +1194,9 @@ def _atomic_apply(
                 target = root.joinpath(*PurePosixPath(path).parts)
                 target.parent.mkdir(parents=True, exist_ok=True)
                 os.replace(saved, target)
-        _remove_empty_parents(root, paths)
         shutil.rmtree(transaction, ignore_errors=True)
         raise
     shutil.rmtree(transaction)
-    _remove_empty_parents(root, deletes)
 
 
 def apply_export(
@@ -877,6 +1228,7 @@ def apply_export(
         None if prepared.home_root is None else Path(prepared.home_root),
     )
     assert root is not None
+    _reject_abandoned_transactions(root)
     _assert_preconditions(root, prepared.preconditions)
     writes = prepared.write_map()
     deletes = tuple(item.path for item in prepared.plan.deletes)
@@ -932,7 +1284,8 @@ def validate_installed_export(
         raise ExportError("installed manifest does not match the requested squad and destination")
     if manifest.execution_mode is not roster.execution_mode:
         raise ExportError("installed manifest and roster execution modes do not match")
-    _validate_artifacts(manifest, destination, files, squad_namespace(squad_id))
+    _validate_receipt_source(receipt, manifest, roster)
+    _validate_artifacts(manifest, roster, destination, files, squad_namespace(squad_id))
     return ValidationReport(
         squad_id=squad_id,
         destination=destination,
@@ -940,32 +1293,42 @@ def validate_installed_export(
     )
 
 
-def uninstall_export(
+def plan_uninstall_export(
     *,
     target_root: Path,
     destination: Destination,
     squad_id: str,
-    confirmed: bool,
     home: Path | None = None,
-    global_write_confirmed: bool = False,
-    fault_hook: FaultHook | None = None,
-) -> UninstallResult:
-    """Remove only unmodified receipt-owned files and retain modified entries."""
+) -> PreparedUninstall:
+    """Preview the exact receipt-authorized removal without changing the filesystem."""
 
-    if not confirmed:
-        raise ExportError("uninstall requires explicit confirmation")
     if destination is Destination.SESSION:
         raise ExportError("session exports create nothing to uninstall")
-    if destination is Destination.USER and not global_write_confirmed:
-        raise ExportError("user uninstall requires separate explicit global-write confirmation")
     root = _target_path(destination, target_root, home)
     assert root is not None
-    _, _, receipt_path = _installed_common_paths(destination, squad_id)
+    _reject_abandoned_transactions(root)
+    manifest_path, _, receipt_path = _installed_common_paths(destination, squad_id)
     receipt, receipt_state = _load_receipt(
         root, receipt_path, squad_id=squad_id, destination=destination
     )
     if receipt is None:
         raise ExportError("export receipt is missing; no files can be safely uninstalled")
+
+    owned = {item.path: item for item in receipt.files}
+    manifest_file = owned.get(manifest_path)
+    if manifest_file is None:
+        raise ExportError("export receipt does not own its canonical manifest")
+    manifest_state = _capture_state(root, manifest_path)
+    if manifest_state.kind != "file" or manifest_state.sha256 != manifest_file.sha256:
+        raise ExportError("canonical manifest was modified; uninstall cannot be authorized")
+    try:
+        manifest = SquadManifest.from_dict(
+            json.loads(root.joinpath(*PurePosixPath(manifest_path).parts).read_bytes())
+        )
+    except (ValueError, TypeError, UnicodeDecodeError) as error:
+        raise ExportError(f"installed canonical manifest is invalid: {error}") from error
+    if manifest.squad.id != squad_id or manifest.destination is not destination:
+        raise ExportError("installed manifest does not match the requested uninstall")
 
     deletes: list[str] = []
     preserved: list[ReceiptFile] = []
@@ -992,10 +1355,88 @@ def uninstall_export(
         writes[receipt_path] = reduced.to_bytes()
     else:
         deletes.append(receipt_path)
-    _assert_preconditions(root, preconditions)
+
+    plan = build_export_plan(
+        manifest=manifest,
+        target_root=str(root),
+        source_sha256=sha256_bytes(receipt.to_bytes()),
+        writes=writes,
+        deletes=deletes,
+    )
+    return PreparedUninstall(
+        plan=plan,
+        writes=tuple(
+            PreparedWrite(path=path, content=content) for path, content in sorted(writes.items())
+        ),
+        preconditions=tuple(sorted(preconditions, key=lambda item: item.path)),
+        preserved_modified=tuple(item.path for item in preserved),
+        receipt_path=receipt_path,
+        home_root=None if home is None else str(home.resolve(strict=False)),
+    )
+
+
+def apply_uninstall_export(
+    prepared: PreparedUninstall,
+    *,
+    confirmed_plan_id: str,
+    global_write_confirmed: bool = False,
+    fault_hook: FaultHook | None = None,
+) -> UninstallResult:
+    """Apply only an exact, matching uninstall preview."""
+
+    rebuilt = build_export_plan(
+        manifest=prepared.plan.manifest,
+        target_root=prepared.plan.target_root,
+        source_sha256=prepared.plan.source_sha256,
+        writes=prepared.write_map(),
+        deletes=(item.path for item in prepared.plan.deletes),
+    )
+    if rebuilt != prepared.plan:
+        raise ExportError("prepared uninstall bytes do not match the confirmed plan")
+    if not hmac.compare_digest(confirmed_plan_id, prepared.plan.plan_id):
+        raise ExportError("confirmed plan ID does not match the prepared uninstall")
+    destination = prepared.plan.manifest.destination
+    if destination is Destination.USER and not global_write_confirmed:
+        raise ExportError("user uninstall requires separate explicit global-write confirmation")
+    root = _target_path(
+        destination,
+        Path(prepared.plan.target_root),
+        None if prepared.home_root is None else Path(prepared.home_root),
+    )
+    assert root is not None
+    _reject_abandoned_transactions(root)
+    _assert_preconditions(root, prepared.preconditions)
+    deletes = tuple(item.path for item in prepared.plan.deletes)
+    writes = prepared.write_map()
     _atomic_apply(root, writes, deletes, set(), fault_hook)
     return UninstallResult(
         deleted=tuple(sorted(deletes)),
-        preserved_modified=tuple(item.path for item in preserved),
-        receipt_retained=bool(preserved),
+        preserved_modified=prepared.preserved_modified,
+        receipt_retained=bool(writes),
+    )
+
+
+def uninstall_export(
+    *,
+    target_root: Path,
+    destination: Destination,
+    squad_id: str,
+    confirmed_plan_id: str,
+    home: Path | None = None,
+    global_write_confirmed: bool = False,
+    fault_hook: FaultHook | None = None,
+) -> UninstallResult:
+    """Compatibility wrapper that still requires an exact uninstall plan ID."""
+
+    prepared = plan_uninstall_export(
+        target_root=target_root,
+        destination=destination,
+        squad_id=squad_id,
+        home=home,
+    )
+    return apply_uninstall_export(
+        prepared,
+        confirmed_plan_id=confirmed_plan_id,
+        global_write_confirmed=global_write_confirmed,
+        fault_hook=fault_hook,
     )

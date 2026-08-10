@@ -8,6 +8,7 @@ from pathlib import PurePosixPath
 
 from cheeky_squad_portability.contracts import (
     Capability,
+    ClaudeOverride,
     Provider,
     ReasoningEffort,
     ReasoningProfile,
@@ -44,7 +45,7 @@ _REQUIRED_HOOKS = (
     "hooks/session-start.sh",
     "hooks/user-prompt-submit.sh",
 )
-_RUNTIME_PREFIXES = ("hooks/", "scripts/", "skills/", "templates/")
+_RUNTIME_PREFIXES = ("commands/", "hooks/", "scripts/", "skills/", "templates/")
 
 
 def _require_claude(manifest: SquadManifest) -> None:
@@ -71,7 +72,7 @@ def _safe_artifact_path(path: str) -> str:
     return normalized
 
 
-def _claude_override(role: Role) -> object | None:
+def _claude_override(role: Role) -> ClaudeOverride | None:
     if role.provider_overrides is None:
         return None
     return role.provider_overrides.claude
@@ -155,6 +156,9 @@ def _render_agent(manifest: SquadManifest, role: Role) -> bytes:
     ]
     if role.reasoning.effort is not ReasoningEffort.INHERIT:
         lines.append(f"effort: {_yaml_string(role.reasoning.effort.value)}")
+    override = _claude_override(role)
+    if override is not None and override.isolation is not None:
+        lines.append(f"isolation: {_yaml_string(override.isolation)}")
     lines.extend(
         [
             "---",
@@ -221,8 +225,8 @@ def _render_agent(manifest: SquadManifest, role: Role) -> bytes:
     lines.extend(
         [
             "",
-            "Do not claim mechanical file-scope enforcement unless the runtime actually blocked",
-            "an attempted out-of-scope write.",
+            "The runtime gates auto-approval eligibility; it does not block a human-approved",
+            "out-of-scope write. Report that distinction exactly.",
             "",
         ]
     )
@@ -328,6 +332,16 @@ def _activation_readme(manifest: SquadManifest, roster: Roster) -> bytes:
     return "\n".join(lines).encode("utf-8")
 
 
+def _provider_role_map(manifest: SquadManifest, roster: Roster) -> bytes:
+    """Map provider discovery IDs back to canonical role IDs for vendored hooks."""
+
+    roles = {
+        claude_role_id(manifest, role): role.id
+        for role in sorted((item for item in roster.roles if item.active), key=lambda item: item.id)
+    }
+    return pretty_json({"schema_version": 1, "roles": roles}).encode("utf-8")
+
+
 def _vendored_runtime(
     manifest: SquadManifest, runtime_files: Mapping[str, bytes]
 ) -> dict[str, bytes]:
@@ -364,6 +378,7 @@ def compile_claude_plugin(
     artifacts = _vendored_runtime(manifest, runtime_files)
     generated = {
         ".claude-plugin/plugin.json": _plugin_manifest(manifest),
+        ".squad/provider-role-map.json": _provider_role_map(manifest, canonical),
         "README.md": _activation_readme(manifest, canonical),
         **compile_claude_agents(manifest, canonical),
     }

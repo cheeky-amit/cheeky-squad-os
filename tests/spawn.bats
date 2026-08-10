@@ -32,6 +32,35 @@ teardown() {
   rm -rf "$REPO"
 }
 
+write_v2_roster() {
+  cat > .squad/roster.json <<'JSON'
+{
+  "schema_version": 2,
+  "squad_goal_ref": ".squad/goal.md",
+  "execution_mode": "multi-use",
+  "roles": [
+    {
+      "id": "v2-alpha",
+      "purpose": "Produce the v2 artifact",
+      "description": "Use when the v2 artifact is needed",
+      "file_ownership": {"include": ["artifacts/**"], "exclude": []},
+      "capabilities": ["filesystem.read"],
+      "reasoning": {"profile": "balanced", "effort": "inherit"},
+      "active": true,
+      "goal_ref": ".squad/role-goal-v2-alpha.md",
+      "provider_overrides": {
+        "claude": {
+          "model": "sonnet",
+          "tools": ["Read"],
+          "agent_file": ".claude/agents/v2-alpha.md"
+        }
+      }
+    }
+  ]
+}
+JSON
+}
+
 # --- happy path --------------------------------------------------------------
 
 @test "creates one worktree per ACTIVE role (inactive excluded)" {
@@ -53,6 +82,15 @@ teardown() {
   [[ "$output" == *'"status":"exists"'* ]]
   [[ "$output" == *'"created":0'* ]]
   [[ "$output" == *'"existed":2'* ]]
+}
+
+@test "canonical v2 roster IDs drive worktree creation" {
+  write_v2_roster
+  run "$SPAWN"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"role":"v2-alpha"'* ]]
+  [[ "$output" == *'"branch":"squad-v2-alpha"'* ]]
+  [ -d .claude/worktrees/v2-alpha ]
 }
 
 # --- preflight refusals ------------------------------------------------------
@@ -131,6 +169,18 @@ teardown() {
   [[ "$output" == *'"collected":1'* ]]
   [ -f .squad/role-plan-alpha.md ]
   grep -q "role: alpha" .squad/role-plan-alpha.md
+}
+
+@test "collect: canonical v2 roster IDs locate role artifacts" {
+  write_v2_roster
+  run "$SPAWN"; [ "$status" -eq 0 ]
+  mkdir -p .claude/worktrees/v2-alpha/.squad
+  printf 'v2 record\n' > .claude/worktrees/v2-alpha/.squad/role-plan-v2-alpha.md
+
+  run "$SPAWN" collect
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"role":"v2-alpha","artifact":".squad/role-plan-v2-alpha.md","status":"copied"'* ]]
+  [ "$(cat .squad/role-plan-v2-alpha.md)" = "v2 record" ]
 }
 
 @test "collect: leaves a newer root record alone" {

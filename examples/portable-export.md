@@ -66,8 +66,8 @@ Expected project discovery artifacts include:
 .claude/agents/cheeky-portability-demo--report-writer.md
 .codex/agents/cheeky-portability-demo--evidence-reader.toml
 .codex/agents/cheeky-portability-demo--report-writer.toml
-.agents/skills/cheeky-portability-demo--evidence-reader/SKILL.md
-.agents/skills/cheeky-portability-demo--report-writer/SKILL.md
+.agents/skills/cheeky-portability-demo-role-evidence-hreader/SKILL.md
+.agents/skills/cheeky-portability-demo-role-report-hwriter/SKILL.md
 ```
 
 The Codex report writer declares `workspace-write` and instructs sequential dispatch.
@@ -92,18 +92,29 @@ Change canonical inputs, run `plan` again, and review the new writes/deletes. Re
 will not replace a receipt-owned file that someone modified after generation, and it
 will not overwrite an unowned collision.
 
-To remove the unmodified snapshot:
+To remove the unmodified snapshot, preview and save the exact removal plan:
 
 ```bash
 squad-export uninstall \
   --target "$PWD" \
   --destination project \
   --squad-id cheeky-portability-demo \
-  --confirm
+  --plan-file /tmp/cheeky-portability-uninstall.json
+```
+
+Then review that file and apply only its exact plan ID:
+
+```bash
+squad-export uninstall \
+  --target "$PWD" \
+  --destination project \
+  --squad-id cheeky-portability-demo \
+  --plan-file /tmp/cheeky-portability-uninstall.json \
+  --confirm-plan-id '<reviewed plan_id>'
 ```
 
 Uninstall preserves modified files and reports them. It never guesses ownership from a
-namespaced filename.
+namespaced filename, and it refuses an apply if the saved preview is stale.
 
 ## Variations
 
@@ -111,4 +122,7 @@ namespaced filename.
 - Change destination to `user` only when global discovery is intended; apply requires
   `--home`, the exact home target, and `--confirm-global-write`.
 - Change destination to `plugin` and target a chosen package directory to generate both
-  standalone packages. Then stop, inspect, and activate each provider deliberately.
+  standalone packages. Then stop and inspect. For Codex, enter the generated directory,
+  run `codex plugin marketplace add "$(pwd -P)"`, then run the exact namespaced
+  `codex plugin add <plugin>@<marketplace>` command from `ACTIVATION.md`. The exporter
+  does not run either activation command.

@@ -169,12 +169,14 @@ filesystem root nor the home directory. The package contains:
 - canonical manifest and roster;
 - activation instructions, license, and receipt;
 - Claude agents and a self-contained Claude plugin when Claude is selected;
-- a native Codex plugin, role prompts, and prompt-baked dispatch skills when Codex is
-  selected;
+- a native Codex plugin, local marketplace wrapper, role prompts, and prompt-baked dispatch
+  skills when Codex is selected;
 - vendored shared runtime selected by the manifest’s one runtime owner.
 
 The command stops after generation. It never registers, installs, enables, publishes,
-or submits the package. See the provider guides for deliberate activation.
+or submits the package. Codex activation is explicitly two steps: register the generated
+directory with `codex plugin marketplace add`, then install the namespaced selector with
+`codex plugin add <plugin>@<marketplace>`. See the provider guides for exact commands.
 
 ## Validate
 
@@ -198,18 +200,31 @@ delete a receipt-owned file only while its current hash still matches the previo
 receipt. An unowned collision or modified owned file stops the plan so the creator can
 decide what to preserve.
 
+Preview the exact receipt-authorized delete/write set first:
+
 ```bash
 squad-export uninstall \
   --target "$PWD" \
   --destination project \
   --squad-id acme-release-readiness \
-  --confirm
+  --plan-file /tmp/acme-uninstall-plan.json
+```
+
+After reviewing the saved preview, apply only its exact plan ID:
+
+```bash
+squad-export uninstall \
+  --target "$PWD" \
+  --destination project \
+  --squad-id acme-release-readiness \
+  --plan-file /tmp/acme-uninstall-plan.json \
+  --confirm-plan-id '<reviewed plan_id>'
 ```
 
 Uninstall removes only receipt-owned, unmodified files. Modified files are preserved and
 reported, and the receipt remains when preservation means ownership cannot be fully
-released. User uninstall additionally requires `--home "$HOME"` and
-`--confirm-global-write`.
+released. A changed receipt or filesystem invalidates the saved preview. User uninstall
+additionally requires `--home "$HOME"` and `--confirm-global-write` on apply.
 
 ## Snapshot exclusions
 
@@ -223,5 +238,8 @@ contracts may be vendored; live/private state is excluded by default:
 - role engagement/communication records;
 - secrets and unrelated live squad state.
 
-These exclusions prevent a portable package from becoming an accidental archive of a
-person, an engagement, or a local machine.
+Portable roster copies retain environment structure and expected variable names, but
+redact variable values, context-source locations, and tool install/verification commands.
+Only canonical authored squad and role goals enter the dedicated context snapshot. These
+exclusions prevent a portable package from becoming an accidental archive of a person, an
+engagement, or a local machine.

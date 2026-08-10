@@ -1,15 +1,35 @@
 ---
 name: squad-role
 description: Use when the user wants to add a teammate to the squad — phrases like "generate a role", "add a teammate", "we need someone who…", "add a researcher/auditor/writer/analyst/scraper to the squad", "create a role for X". Also invoked by squad-onboard once per proposed role. Asks what the role does, owns, needs, and how deeply it reasons; writes the provider-neutral roster v2 entry and the current Claude role artifact.
-version: 1.1.0
-author: cheeky-squad-os
 license: MIT
-compatible-with: [claude-code, codex, agentskills-1.0]
 ---
 
 # squad-role
 
 You generate one bespoke role per invocation. Roles are tailored to the squad's goal — never generic. The provider-neutral role is registered in `.squad/roster.json` schema v2 by `squad-roster`. For the active Claude lifecycle, also render `templates/role-definition.md` to `.claude/agents/<role-name>.md`. Codex artifacts are compiled from the same canonical role during export; do not author a second Codex-specific roster.
+
+## Roster shape compatibility
+
+Whenever this skill reads `.squad/roster.json`, choose its source shape once:
+`schema_version: 2` means v2; no schema version means legacy. Project roles into a
+read-only lifecycle view using these equivalents:
+
+- identifier: v2 `id` // legacy `name`
+- cadence: v2 `execution_mode` // legacy `mode`
+- goal references: `squad_goal_ref` in both shapes; v2 `goal_ref` // legacy `role_goal`
+- ownership: v2 `file_ownership.include` and `.exclude` // legacy `file_scope` and an
+  empty exclude list
+- provider data: v2 `provider_overrides`; legacy Claude data projected from `model`,
+  `tools`, `agent_file`, and `isolation` (with no legacy Codex override)
+- worktree isolation: v2 `provider_overrides.claude.isolation` // legacy `isolation`
+
+The `//` notation names source-shape equivalents; it is not permission to fall back to
+legacy aliases inside a malformed v2 object. Validate the selected shape and stop on a
+missing required field. This projection is read-only. Preserve a legacy roster's source
+shape on ordinary lifecycle writes; migrate it to v2 only through a separate
+`squad-roster` conversion plan that previews the exact writes/deletes and receives the
+matching confirmation. If a requested change cannot be represented losslessly in legacy
+shape, stop and offer that migration instead of dropping data.
 
 ## Preflight
 
@@ -113,8 +133,9 @@ still produces a Claude agent. Before registration, map them into roster v2:
   `provider_overrides.claude.tools`. Never guess an `external.mcp` mapping.
 - Q5 model/effort → neutral reasoning profile/effort plus a Claude model override when
   the choice is provider-specific.
-- Q7 sandbox → canonical `environment` (`dirs` becomes `directories`, `env` becomes
-  `variables`).
+- Q7 sandbox → canonical `environment` (`dirs` becomes `directories`; `env` becomes
+  `variables`). Values may contain non-secret provisioning configuration; credentials never
+  belong in the roster, and export redacts all values from the portable snapshot.
 
 The Claude agent path goes in `provider_overrides.claude.agent_file`. Do not add Codex
 syntax here; the Codex adapter compiles from the canonical role at export time.
@@ -326,11 +347,14 @@ Write the composed system prompt to `.claude/agents/<name>.md`. Use the YAML fro
 
 ## Register in roster
 
-Call into `squad-roster` to add a schema-v2 entry for this role. It includes `id`,
+Call into `squad-roster` to add the canonical role. It includes `id`,
 `purpose`, `description`, `file_ownership`, `capabilities`, `reasoning`, `active: true`,
 `goal_ref`, the created timestamp, optional canonical `environment`, and the exact
-Claude choices under `provider_overrides.claude`. New writes are provider-neutral even
-though the current lifecycle also writes a Claude agent artifact.
+Claude choices under `provider_overrides.claude`. A v2 roster stores that object directly.
+For a legacy roster, `squad-roster` must preserve the legacy source shape with its
+documented reverse projection and forward-projection check. If this role uses exclusions,
+Codex overrides, or other v2-only semantics, stop and separately preview/confirm migration
+before registration; never silently convert the whole roster or discard those semantics.
 
 **Do not register `.squad/` contract paths in `file_scope`.** Since v0.4.1's `.squad/` structural reservation, the `PermissionRequest` hook grants a role three of its `.squad/` contract paths structurally, derived from its own `agent_type`, checked *before* `file_scope` is ever consulted for a `.squad/` path: its own engagement record, `.squad/role-plan-<name>.md` (hard rule #11, always granted — it's the bootstrap); its own hand-off outbox, `.squad/role-comm-<name>--*` (`templates/role-comm.md`, granted once the record exists); and its own belief-ledger claims file, `.squad/world/claims-<name>.md` (hard rule #13, granted the same way, once the record exists — asserting a belief is acting too). Registering any of these yourself in `file_scope` was the forgery hole v0.4.1 closed: a broad scope (`**`, `.squad/**`) would otherwise have matched them and auto-approved writes to another role's record, outbox, or claims file. So leave all three paths out of the `file_scope` you write to the roster entry — don't ask the user about them either; it's not a generation choice, it's how the hook derives the grant.
 

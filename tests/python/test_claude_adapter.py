@@ -51,6 +51,7 @@ def runtime_files() -> dict[str, bytes]:
         "hooks/session-start.sh": b"#!/bin/sh\n",
         "hooks/user-prompt-submit.sh": b"#!/bin/sh\n",
         "hooks/permission-request.sh": b"#!/bin/sh\n",
+        "commands/squad-workflow.md": b"# Workflow\n",
         "skills/squad-spawn/SKILL.md": b"# Spawn\n",
         "skills/squad-spawn/scripts/spawn.sh": b"#!/bin/sh\n",
         "templates/goal.md": b"# Goal\n",
@@ -115,9 +116,17 @@ def test_plugin_is_self_contained_and_matches_goldens(
     artifacts = compile_claude_plugin(manifest, roster, runtime_files)
 
     assert artifacts[".claude-plugin/plugin.json"] == (GOLDEN / "plugin.json").read_bytes()
+    assert json.loads(artifacts[".squad/provider-role-map.json"]) == {
+        "schema_version": 1,
+        "roles": {
+            READER_ID: "evidence-reader",
+            WRITER_ID: "report-writer",
+        },
+    }
     assert artifacts["README.md"] == (GOLDEN / "README.md").read_bytes()
     assert artifacts["skills/squad-spawn/SKILL.md"] == b"# Spawn\n"
     assert artifacts["skills/squad-spawn/scripts/spawn.sh"] == b"#!/bin/sh\n"
+    assert artifacts["commands/squad-workflow.md"] == b"# Workflow\n"
     assert artifacts["hooks/permission-request.sh"] == b"#!/bin/sh\n"
     assert artifacts["templates/goal.md"] == b"# Goal\n"
     assert ".env" not in artifacts
@@ -200,3 +209,20 @@ def test_generated_agents_never_embed_environment_values(
 
     assert b"API_TOKEN" in content
     assert sentinel.encode() not in content
+
+
+def test_claude_worktree_isolation_compiles_to_agent_frontmatter(
+    manifest: SquadManifest, roster: Roster
+) -> None:
+    role = roster.roles[0]
+    assert role.provider_overrides is not None
+    assert role.provider_overrides.claude is not None
+    override = replace(role.provider_overrides.claude, isolation="worktree")
+    providers = replace(role.provider_overrides, claude=override)
+    isolated = replace(role, provider_overrides=providers)
+
+    compiled = compile_claude_agents(manifest, replace(roster, roles=(isolated,)))
+    content = next(iter(compiled.values()))
+    frontmatter = content.decode().split("---", 2)[1]
+
+    assert 'isolation: "worktree"' in frontmatter

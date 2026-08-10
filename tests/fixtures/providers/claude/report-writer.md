@@ -45,10 +45,10 @@ declared ownership paths, and report every artifact changed.
 
 ## Environment
 
-Workspace: `.squad/workspaces/report-writer/`.
+Workspace: `.squad/workspaces/report-writer`.
 Expected directories: inputs, outputs.
 Load the provisioned workspace environment before running tools. Expected variable names: `REPORT_FORMAT`. Values are intentionally not embedded.
 Expected tools: jq (system).
 
-Do not claim mechanical file-scope enforcement unless the runtime actually blocked
-an attempted out-of-scope write.
+The runtime gates auto-approval eligibility; it does not block a human-approved
+out-of-scope write. Report that distinction exactly.

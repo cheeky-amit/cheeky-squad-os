@@ -7,13 +7,21 @@
   "required": ["schema_version", "squad_goal_ref", "execution_mode", "roles"],
   "properties": {
     "schema_version": {"const": 2},
-    "squad_goal_ref": {"type": "string", "minLength": 1},
+    "squad_goal_ref": {"$ref": "#/$defs/relativePath"},
     "execution_mode": {"enum": ["one-time", "multi-use", "evergreen"]},
     "created": {"type": "string", "minLength": 1},
     "roles": {"type": "array", "items": {"$ref": "#/$defs/role"}}
   },
   "$defs": {
     "reasoningEffort": {"enum": ["inherit", "low", "medium", "high", "xhigh", "max"]},
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!~)(?!.*(?:^|/)\\.\\.?(/|$))(?!.*//)(?!.*\\\\)(?!.*\\/$)[^\\u0000-\\u001f]+$"
+    },
+    "relativeTarget": {
+      "anyOf": [{"const": "."}, {"$ref": "#/$defs/relativePath"}]
+    },
     "role": {
       "type": "object",
       "additionalProperties": false,
@@ -27,8 +35,8 @@
           "additionalProperties": false,
           "required": ["include", "exclude"],
           "properties": {
-            "include": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
-            "exclude": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
+            "include": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/relativePath"}},
+            "exclude": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/relativePath"}}
           }
         },
         "capabilities": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$"}},
@@ -42,17 +50,17 @@
           }
         },
         "active": {"type": "boolean"},
-        "goal_ref": {"type": "string", "minLength": 1},
+        "goal_ref": {"$ref": "#/$defs/relativePath"},
         "created": {"type": "string", "minLength": 1},
         "environment": {
           "type": "object",
           "additionalProperties": false,
           "required": ["workspace", "directories", "variables", "context", "tools"],
           "properties": {
-            "workspace": {"type": "string", "minLength": 1},
-            "directories": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
-            "variables": {"type": "object", "additionalProperties": {"type": "string"}},
-            "context": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["source", "target", "kind"], "properties": {"source": {"type": "string", "minLength": 1}, "target": {"type": "string", "minLength": 1}, "kind": {"enum": ["copy", "link", "fetch"]}}}},
+            "workspace": {"$ref": "#/$defs/relativePath"},
+            "directories": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/relativePath"}},
+            "variables": {"type": "object", "propertyNames": {"pattern": "^[A-Za-z_][A-Za-z0-9_]*$"}, "additionalProperties": {"type": "string"}},
+            "context": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["source", "target", "kind"], "properties": {"source": {"type": "string", "minLength": 1}, "target": {"$ref": "#/$defs/relativeTarget"}, "kind": {"enum": ["copy", "link", "fetch"]}}, "allOf": [{"if": {"properties": {"kind": {"enum": ["copy", "link"]}}, "required": ["kind"]}, "then": {"properties": {"source": {"$ref": "#/$defs/relativePath"}}}}]}},
             "tools": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["name", "kind"], "properties": {"name": {"type": "string", "minLength": 1}, "kind": {"enum": ["local", "system", "mcp"]}, "verify": {"type": "string", "minLength": 1}, "install": {"type": "string", "minLength": 1}}}}
           }
         },
@@ -61,7 +69,7 @@
           "additionalProperties": false,
           "minProperties": 1,
           "properties": {
-            "claude": {"type": "object", "additionalProperties": false, "minProperties": 1, "properties": {"model": {"type": "string", "minLength": 1}, "tools": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}}, "agent_file": {"type": "string", "minLength": 1}}},
+            "claude": {"type": "object", "additionalProperties": false, "minProperties": 1, "properties": {"model": {"type": "string", "minLength": 1}, "tools": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}}, "agent_file": {"$ref": "#/$defs/relativePath"}, "isolation": {"const": "worktree"}}},
             "codex": {"type": "object", "additionalProperties": false, "minProperties": 1, "properties": {"model": {"type": "string", "minLength": 1}, "reasoning_effort": {"$ref": "#/$defs/reasoningEffort"}, "sandbox_mode": {"enum": ["read-only", "workspace-write"]}}}
           }
         }

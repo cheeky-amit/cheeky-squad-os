@@ -67,6 +67,7 @@ Preview using the canonical v2 fixtures:
 squad-export plan \
   --manifest "$SQUAD_REPO/tests/fixtures/portable/manifest-v2.json" \
   --roster "$SQUAD_REPO/tests/fixtures/portable/roster-v2.json" \
+  --source-root "$SQUAD_REPO/tests/fixtures/portable" \
   --target "$SQUAD_SMOKE_ROOT/project" \
   --plan-file "$SQUAD_SMOKE_ROOT/project-plan.json"
 ```
@@ -77,6 +78,7 @@ Review the complete output and copy its `plan_id`. Apply with the same inputs:
 squad-export apply \
   --manifest "$SQUAD_REPO/tests/fixtures/portable/manifest-v2.json" \
   --roster "$SQUAD_REPO/tests/fixtures/portable/roster-v2.json" \
+  --source-root "$SQUAD_REPO/tests/fixtures/portable" \
   --target "$SQUAD_SMOKE_ROOT/project" \
   --plan-file "$SQUAD_SMOKE_ROOT/project-plan.json" \
   --confirm-plan-id '<reviewed plan_id>'
@@ -126,7 +128,8 @@ global-write confirmation and no files written. Then repeat with
 remain under the fake home, and a namespaced uninstall receipt exists.
 
 Validate with the same fake home. Uninstall once without global confirmation (must
-refuse), then with `--confirm --confirm-global-write`. Confirm it removes only
+refuse), then save and review an uninstall preview and apply it with the matching
+`--plan-file`, `--confirm-plan-id`, and `--confirm-global-write`. Confirm it removes only
 receipt-owned, unmodified files.
 
 ### 4. Standalone plugin — generate, validate, do not install
@@ -135,7 +138,9 @@ Create `"$SQUAD_SMOKE_ROOT/plugin"`, copy the manifest with `destination: plugin
 plan/apply to that exact directory. Expected package contents:
 
 - `.claude-plugin/plugin.json` and namespaced Claude agents;
-- `.codex-plugin/plugin.json`, packaged role skills/prompts, and sequential dispatcher;
+- `.codex-plugin/plugin.json`, `.agents/plugins/marketplace.json`, a matching installable
+  `plugins/cheeky-dportability-hdemo/` package, packaged role skills/prompts, and sequential
+  dispatcher;
 - canonical manifest/roster, activation instructions, license, shared runtime, receipt;
 - no dependency importing `cheeky_squad_portability` from generated runtime.
 
@@ -144,10 +149,33 @@ the installed Claude CLI, then launch it from the package using Claude’s tempo
 plugin-directory option. Confirm both packaged role IDs are visible and the selected
 runtime owner registers the lifecycle hooks once.
 
-Add the same directory as a temporary Codex plugin in a fake home. Confirm plugin skill
-discovery and invoke its prompt-baked dispatcher with a read-only request. Inspect the
-dispatch prompt and prove the report writer is labeled mutating/sequential. Do not run
-mutating roles concurrently.
+Register and install the same directory in a temporary Codex home using the current CLI's
+two separate operations:
+
+```bash
+mkdir -p "$SQUAD_SMOKE_ROOT/codex-home"
+env CODEX_HOME="$SQUAD_SMOKE_ROOT/codex-home" \
+  codex plugin marketplace add "$SQUAD_SMOKE_ROOT/plugin" --json
+env CODEX_HOME="$SQUAD_SMOKE_ROOT/codex-home" \
+  codex plugin add \
+  cheeky-dportability-hdemo@cheeky-dportability-hdemo --json
+```
+
+Expected: the first result names marketplace `cheeky-dportability-hdemo`; the second
+reports the same namespaced plugin ID and an installed path under the temporary Codex home.
+Confirm plugin skill discovery and invoke its prompt-baked dispatcher with a read-only
+request. Inspect the dispatch prompt and prove the report writer is labeled
+mutating/sequential. Do not run mutating roles concurrently.
+
+Remove both isolated activation records before leaving the smoke:
+
+```bash
+env CODEX_HOME="$SQUAD_SMOKE_ROOT/codex-home" \
+  codex plugin remove \
+  cheeky-dportability-hdemo@cheeky-dportability-hdemo --json
+env CODEX_HOME="$SQUAD_SMOKE_ROOT/codex-home" \
+  codex plugin marketplace remove cheeky-dportability-hdemo --json
+```
 
 Stop after local activation. This release smoke must not publish, submit, globally
 install, or leave the plugin enabled.

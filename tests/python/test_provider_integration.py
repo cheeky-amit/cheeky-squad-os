@@ -56,5 +56,5 @@ def test_both_standalone_packages_vendor_the_required_runtime() -> None:
     assert codex["LICENSE"] == runtime["LICENSE"]
     assert "hooks" in json.loads(claude[".claude-plugin/plugin.json"])
     assert b"mutating role sequentially" in next(
-        content for path, content in codex.items() if path.endswith("--dispatch/SKILL.md")
+        content for path, content in codex.items() if path.endswith("-squad-dispatch/SKILL.md")
     )

@@ -19,8 +19,10 @@ or an explicit Codex override. Read-only roles default to `read-only`; roles wit
 mutating capability use `workspace-write`. Repo-local role skills are generated under
 `.agents/skills/`.
 
-Environment requirements may identify variable names, directories, context, or tools;
-generated instructions do not embed environment variable values.
+Environment requirements may identify variable names, directories, or tool names;
+generated instructions do not embed environment variable values, live context locations,
+or tool install/verification commands. Canonical authored goals arrive through the
+vendored context snapshot instead.
 
 The exporter mounts project agents under `.codex/agents/`. User output uses the
 corresponding namespaced user discovery surface and requires a separate global-write
@@ -28,17 +30,38 @@ confirmation.
 
 ## Standalone plugin
 
-The generated package has a native `.codex-plugin/plugin.json`, packaged role prompts,
-role skills, a squad dispatch skill, canonical contracts, runtime snapshot, activation
-instructions, license, and receipt.
+The generated directory has a native top-level `.codex-plugin/plugin.json` for the
+dual-provider package contract. Its installable Codex surface is a matching vendored copy
+under `plugins/<squad-namespace>/`, cataloged by
+`.agents/plugins/marketplace.json` with the local source
+`./plugins/<squad-namespace>`. It also includes packaged role prompts, role skills, a
+squad dispatch skill, canonical contracts, runtime snapshot, activation instructions,
+license, and receipt.
 
 Codex plugins do not directly package custom-agent discovery for these generated roles.
 The standalone dispatcher therefore prompt-bakes every packaged role. This is a stated
 compatibility strategy, not an invisible substitute for custom-agent discovery.
 
-Inspect the selected directory and add the plugin deliberately using the active Codex
-plugin flow. Generation stops before installation or enablement. Official package
-reference: [Build plugins](https://developers.openai.com/plugins/build/plugins).
+Inspect the selected directory, then activate it deliberately with the current two-step
+Codex CLI flow. Run these commands from the generated directory, substituting the exact
+namespace printed in `ACTIVATION.md`:
+
+```bash
+codex plugin marketplace add "$(pwd -P)"
+codex plugin add <squad-namespace>@<squad-namespace>
+```
+
+The first command registers the local marketplace; the second installs the plugin selected
+from that marketplace. `codex plugin add /path` is not the plugin-install syntax. Generation
+runs neither command and never installs, enables, publishes, or submits the package. No
+public Codex marketplace submission is part of this release. Official package reference:
+[Build plugins](https://developers.openai.com/plugins/build/plugins).
+
+The repository's base `.codex-plugin/plugin.json` is validated as a plugin manifest, but
+the source checkout is not itself advertised as a local marketplace: a marketplace source
+must point to `./plugins/<plugin-name>`, not back to `./`. Generate a standalone export or
+place a copied checkout at `plugins/cheeky-squad-os` in a deliberately managed personal
+marketplace when testing the base plugin.
 
 ## Sequential mutation policy
 

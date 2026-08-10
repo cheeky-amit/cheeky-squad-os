@@ -14,6 +14,7 @@ from pathlib import PurePosixPath
 from cheeky_squad_portability.contracts import (
     Capability,
     CodexOverride,
+    Destination,
     Provider,
     ReasoningEffort,
     ReasoningProfile,
@@ -24,7 +25,12 @@ from cheeky_squad_portability.contracts import (
 from cheeky_squad_portability.errors import ContractError
 from cheeky_squad_portability.json_io import pretty_json
 from cheeky_squad_portability.migration import load_roster
-from cheeky_squad_portability.namespace import provider_namespace, provider_role_id
+from cheeky_squad_portability.namespace import (
+    provider_dispatch_skill_id,
+    provider_namespace,
+    provider_role_id,
+    provider_role_skill_id,
+)
 from cheeky_squad_portability.runtime import is_private_runtime_path
 
 _MUTATING_CAPABILITIES = frozenset(
@@ -64,7 +70,9 @@ def compile_codex_skills(manifest: SquadManifest, roster: Roster | object) -> di
 
     canonical = _canonical_roster(manifest, roster)
     return {
-        f"skills/{codex_role_id(manifest, role)}/SKILL.md": _role_skill(manifest, role)
+        f"skills/{provider_role_skill_id(manifest.squad.id, role.id)}/SKILL.md": (
+            _role_skill(manifest, role)
+        )
         for role in _active_roles(canonical)
     }
 
@@ -85,22 +93,60 @@ def compile_codex_plugin(
     canonical = _canonical_roster(manifest, roster)
     roles = _active_roles(canonical)
     plugin_name = provider_namespace(manifest.squad.id)
+    mutating = any(_is_mutating(role) for role in roles)
+    source_description = manifest.squad.description or (
+        f"Portable Codex squad snapshot for {manifest.squad.name}"
+    )
+    description = _bounded_text(source_description, 512)
     plugin_manifest = {
-        "description": manifest.squad.description
-        or f"Portable Codex squad snapshot for {manifest.squad.name}",
+        "author": {"name": "cheeky-squad-os export"},
+        "description": description,
+        "interface": {
+            "capabilities": ["Interactive", "Read", *(["Write"] if mutating else [])],
+            "category": "Productivity",
+            "defaultPrompt": [
+                _bounded_text(f"Dispatch the packaged {manifest.squad.name} squad", 128)
+            ],
+            "developerName": "cheeky-squad-os",
+            "displayName": _bounded_text(manifest.squad.name, 64),
+            "longDescription": _bounded_text(source_description, 1024),
+            "shortDescription": _bounded_text(description, 96),
+        },
+        "keywords": ["squad", "portable-agents", "prompt-baked-roles"],
+        "license": "MIT",
         "name": plugin_name,
         "skills": "./skills/",
         "version": manifest.export_version,
     }
+    marketplace = {
+        "interface": {"displayName": _bounded_text(f"{manifest.squad.name} portable squad", 64)},
+        "name": plugin_name,
+        "plugins": [
+            {
+                "category": "Productivity",
+                "name": plugin_name,
+                "policy": {
+                    "authentication": "ON_INSTALL",
+                    "installation": "AVAILABLE",
+                },
+                "source": {
+                    "path": f"./plugins/{plugin_name}",
+                    "source": "local",
+                },
+            }
+        ],
+    }
     if "LICENSE" not in runtime_files:
         raise ContractError("a self-contained Codex plugin requires LICENSE in runtime_files")
-    output: dict[str, bytes] = {
+    plugin_files: dict[str, bytes] = {
         ".codex-plugin/plugin.json": pretty_json(plugin_manifest).encode("utf-8"),
         "LICENSE": runtime_files["LICENSE"],
-        f"skills/{plugin_name}--dispatch/SKILL.md": _dispatch_skill(manifest, roles),
+        f"skills/{provider_dispatch_skill_id(manifest.squad.id)}/SKILL.md": (
+            _dispatch_skill(manifest, roles)
+        ),
     }
-    output.update(compile_codex_skills(manifest, canonical))
-    output.update(
+    plugin_files.update(compile_codex_skills(manifest, canonical))
+    plugin_files.update(
         {
             f"roles/{codex_role_id(manifest, role)}.md": _role_prompt(manifest, role)
             for role in roles
@@ -114,7 +160,14 @@ def compile_codex_plugin(
             raise ContractError(f"runtime_files[{path!r}] must be bytes")
         if path == "LICENSE":
             continue
-        output[f"runtime/{path}"] = content
+        plugin_files[f"runtime/{path}"] = content
+    output: dict[str, bytes] = {
+        ".agents/plugins/marketplace.json": pretty_json(marketplace).encode("utf-8"),
+        **plugin_files,
+    }
+    output.update(
+        {f"plugins/{plugin_name}/{path}": content for path, content in plugin_files.items()}
+    )
     return dict(sorted(output.items()))
 
 
@@ -189,6 +242,7 @@ def _developer_instructions(manifest: SquadManifest, role: Role) -> str:
         f"You are the {role.id} role in the {manifest.squad.name} squad.",
         f"Purpose: {role.purpose}",
         f"Execution cadence: {manifest.execution_mode.value}.",
+        *_role_context_instructions(manifest, role),
         "Requested capabilities: " + ", ".join(sorted(role.capabilities)) + ".",
         "File ownership is an instructional coordination boundary in Codex v1; "
         "it is not mechanically enforced.",
@@ -243,11 +297,11 @@ def _role_prompt(manifest: SquadManifest, role: Role) -> bytes:
 
 
 def _role_skill(manifest: SquadManifest, role: Role) -> bytes:
-    role_id = codex_role_id(manifest, role)
+    role_id = provider_role_skill_id(manifest.squad.id, role.id)
     body = (
         "---\n"
         f"name: {role_id}\n"
-        f"description: {_yaml_string(role.description)}\n"
+        f"description: {_yaml_string(_skill_description(role.description))}\n"
         "---\n\n"
         f"# {role_id}\n\n"
         "Apply the following packaged role instructions to the current task.\n\n"
@@ -258,11 +312,12 @@ def _role_skill(manifest: SquadManifest, role: Role) -> bytes:
 
 
 def _dispatch_skill(manifest: SquadManifest, roles: tuple[Role, ...]) -> bytes:
-    plugin_name = provider_namespace(manifest.squad.id)
+    skill_name = provider_dispatch_skill_id(manifest.squad.id)
     sections = [
         "---",
-        f"name: {plugin_name}--dispatch",
-        f"description: {_yaml_string(f'Dispatch the packaged {manifest.squad.name} squad')}",
+        f"name: {skill_name}",
+        "description: "
+        + _yaml_string(_skill_description(f"Dispatch the packaged {manifest.squad.name} squad")),
         "---",
         "",
         f"# Dispatch {manifest.squad.name}",
@@ -272,6 +327,8 @@ def _dispatch_skill(manifest: SquadManifest, roles: tuple[Role, ...]) -> bytes:
         "",
         "Run read-only roles in any dependency-safe order. Run every mutating role "
         "sequentially, never concurrently with another mutating role.",
+        "",
+        *_dispatch_context_instructions(manifest),
     ]
     for role in roles:
         mode = "mutating, sequential" if _is_mutating(role) else "read-only"
@@ -288,6 +345,59 @@ def _dispatch_skill(manifest: SquadManifest, roles: tuple[Role, ...]) -> bytes:
 
 def _yaml_string(value: str) -> str:
     return json.dumps(value, ensure_ascii=False)
+
+
+def _bounded_text(value: str, limit: int) -> str:
+    if len(value) <= limit:
+        return value
+    return value[: limit - 1].rstrip() + "…"
+
+
+def _skill_description(value: str) -> str:
+    return _bounded_text(value.replace("<", "[").replace(">", "]"), 1024)
+
+
+def _snapshot_prefix(manifest: SquadManifest) -> str:
+    namespace = provider_namespace(manifest.squad.id)
+    if manifest.destination is Destination.PROJECT:
+        return f".squad/exports/{namespace}"
+    if manifest.destination is Destination.USER:
+        return f".squad/squads/{namespace}"
+    return ".squad"
+
+
+def _role_context_instructions(manifest: SquadManifest, role: Role) -> list[str]:
+    prefix = _snapshot_prefix(manifest)
+    context_root = f"{prefix}/context"
+    return [
+        f"Load the vendored context index from {context_root}/index.json before working.",
+        "Require squad_goal.status to be included and its snapshot body to exist. "
+        f"Resolve snapshot paths relative to {prefix}.",
+        f"Require the role_goals entry for {role.id} to declare a source, have status "
+        "included, and have its snapshot body present.",
+        "Prompt-bake the squad goal and this role goal verbatim into the task context. "
+        "If any declared context is absent or unavailable, stop and report the exact "
+        "status; do not work or reconstruct it from live source files.",
+    ]
+
+
+def _dispatch_context_instructions(manifest: SquadManifest) -> list[str]:
+    prefix = _snapshot_prefix(manifest)
+    context_root = f"{prefix}/context"
+    return [
+        "## Required vendored context",
+        "",
+        f"Before dispatch, read `{context_root}/index.json`. Require the squad goal to "
+        "have `status: included` and load its snapshot body, resolving the recorded "
+        f"`snapshot` path relative to `{prefix}`.",
+        "For every selected role, require exactly one matching `role_goals` entry with a "
+        "declared source, `status: included`, and an existing snapshot body. Load that "
+        "body and prompt-bake the squad goal plus role goal verbatim into the role task.",
+        "If the index, squad goal, selected role entry, or any declared snapshot body is "
+        "missing or unavailable, stop before dispatch and report the exact recorded "
+        "status. Never substitute live `.squad/goal.md` or role-goal files for the "
+        "vendored snapshot.",
+    ]
 
 
 def _validate_runtime_path(path: str) -> None:

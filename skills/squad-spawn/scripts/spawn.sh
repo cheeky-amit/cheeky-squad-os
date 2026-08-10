@@ -140,7 +140,7 @@ cmd_collect() {
   COLLECT_ERRORS=0
 
   local roles
-  roles=$(jq -r '.roles[] | select(.active == true) | .name' "$roster")
+  roles=$(jq -r '.roles[] | select(.active == true) | (.id // .name)' "$roster")
 
   if [ -n "$roles" ]; then
     while IFS= read -r role; do
@@ -215,8 +215,8 @@ cmd_spawn() {
   EXISTED=0
   ERRORS=0
 
-  # Read active role names from roster.json
-  ROLES=$(jq -r '.roles[] | select(.active == true) | .name' "$ROSTER")
+  # Canonical v2 uses `id`; schema-less legacy rosters use `name`.
+  ROLES=$(jq -r '.roles[] | select(.active == true) | (.id // .name)' "$ROSTER")
 
   if [ -z "$ROLES" ]; then
     err "no active roles in roster — nothing to spawn"

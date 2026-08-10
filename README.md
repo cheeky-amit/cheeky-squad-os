@@ -124,6 +124,24 @@ The Python package supports Python 3.11 or newer. `plan`, `apply`, `validate`, a
 `uninstall` are deterministic commands; provider artifacts are plain Markdown, JSON,
 and TOML plus vendored Bash runtime where required.
 
+### Test a standalone Codex export locally
+
+A `plugin` destination includes a valid local marketplace at
+`.agents/plugins/marketplace.json` and an installable package under
+`plugins/<squad-namespace>/`. Generation stops before either activation command:
+
+```bash
+cd /absolute/path/to/generated-squad
+codex plugin marketplace add "$(pwd -P)"
+codex plugin add <squad-namespace>@<squad-namespace>
+```
+
+Read the exact namespaced command from the generated `ACTIVATION.md`. The source checkout's
+root `.codex-plugin/plugin.json` is structurally valid, but the checkout is deliberately
+not presented as a marketplace with a misleading `./` source. Use a generated plugin export
+or a personal marketplace laid out as `plugins/cheeky-squad-os` for local development. No
+public Codex marketplace submission has been made.
+
 ## Export a squad
 
 Create `.squad/manifest.json` using schema v2. This example exports both providers to
@@ -216,8 +234,8 @@ Provider adapters own syntax:
   Claude plugin with the selected runtime owner’s hooks, skills, scripts, and templates.
 - Codex project/user output compiles namespaced TOML agents (`name`, `description`,
   `developer_instructions`) and repository-local skills. The standalone package has a
-  native `.codex-plugin/plugin.json` and prompt-baked roles because Codex plugins do not
-  directly package custom-agent discovery.
+  native `.codex-plugin/plugin.json`, a local marketplace wrapper, and prompt-baked roles
+  because Codex plugins do not directly package custom-agent discovery.
 
 ## Safety and truthful governance
 

@@ -1,0 +1,20 @@
+{
+  "interface": {
+    "displayName": "Portability demo portable squad"
+  },
+  "name": "cheeky-dportability-hdemo",
+  "plugins": [
+    {
+      "category": "Productivity",
+      "name": "cheeky-dportability-hdemo",
+      "policy": {
+        "authentication": "ON_INSTALL",
+        "installation": "AVAILABLE"
+      },
+      "source": {
+        "path": "./plugins/cheeky-dportability-hdemo",
+        "source": "local"
+      }
+    }
+  ]
+}

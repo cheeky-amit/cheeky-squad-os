@@ -21,7 +21,6 @@
     "thought-partner",
     "human-in-the-loop"
   ],
-  "category": "productivity",
   "hooks": {
     "SessionStart": [
       {

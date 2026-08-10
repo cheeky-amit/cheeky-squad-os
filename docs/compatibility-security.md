@@ -78,8 +78,10 @@ directories and rejects symlinks. Snapshot planning excludes `.squad/partner.md`
 other live/private material by default.
 
 Generated provider instructions strip environment variable values; at most they identify
-the variable names a role expects. A canonical environment entry is not permission to
-copy its value into a prompt or package.
+the variable names a role expects. They also omit live context-source locations and tool
+install/verification commands. Authored squad and role goals are copied only through the
+canonical `.squad/goal.md` and `.squad/role-goal-<id>.md` context snapshots. A canonical
+environment entry is not permission to copy its live details into a prompt or package.
 
 Before release, run a secret scan over tracked changes and generated fixtures. Generated
 packages should contain only the canonical roles, provider artifacts, selected static
@@ -104,3 +106,8 @@ CLIs may impose their own platform, authentication, model, or feature availabili
   [Plugins reference](https://code.claude.com/docs/en/plugins-reference)
 - Codex standalone plugin structure:
   [Build plugins](https://developers.openai.com/plugins/build/plugins)
+
+Generated Codex packages include a local marketplace whose source is constrained to the
+vendored `./plugins/<squad-namespace>` directory. Export validation checks that path and the
+nested manifest name/version before activation. Generation never runs the marketplace-add
+or plugin-add commands, and this release made no public marketplace submission.

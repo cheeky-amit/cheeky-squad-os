@@ -464,24 +464,24 @@ ROLES_JSON=$(jq -c '.roles[]? | select(.active == true)' "$ROSTER" 2>/dev/null)
 while IFS= read -r ROLE_JSON; do
   [ -z "$ROLE_JSON" ] && continue
 
-  NAME=$(printf '%s' "$ROLE_JSON" | jq -r '.name // empty')
+  NAME=$(printf '%s' "$ROLE_JSON" | jq -r '.id // .name // empty')
   if [ -z "$NAME" ]; then
     err "active role with no name in roster — skipping"
     ERRORS=$((ERRORS + 1))
     continue
   fi
 
-  RG=$(printf '%s' "$ROLE_JSON" | jq -r '.role_goal // empty')
+  RG=$(printf '%s' "$ROLE_JSON" | jq -r '.goal_ref // .role_goal // empty')
   [ -z "$RG" ] && RG=".squad/role-goal-$NAME.md"
   RG_PRESENT=false
   [ -f "$RG" ] && RG_PRESENT=true
 
-  SCOPE_JSON=$(printf '%s' "$ROLE_JSON" | jq -c '.file_scope // []')
+  SCOPE_JSON=$(printf '%s' "$ROLE_JSON" | jq -c '.file_ownership.include // .file_scope // []')
   FILES=0
   while IFS= read -r G; do
     [ -z "$G" ] && continue
     FILES=$((FILES + $(count_glob "$G")))
-  done < <(printf '%s' "$ROLE_JSON" | jq -r '.file_scope[]? // empty')
+  done < <(printf '%s' "$ROLE_JSON" | jq -r '(.file_ownership.include // .file_scope // [])[]? // empty')
 
   # --- Engagement record (hard rule #11) — absence contract in force ---------
   # PLAN is looked up by the roster's own role name, i.e. by the FILENAME this

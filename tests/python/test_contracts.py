@@ -58,8 +58,15 @@ def test_legacy_migration_is_pure_and_matches_golden() -> None:
     assert load_roster(migrated.to_dict()) == migrated
 
 
-def test_current_seed_template_remains_migratable() -> None:
-    migrated = load_roster(load_json(ROOT / "templates" / "roster.json"))
+def test_current_seed_template_is_canonical_v2() -> None:
+    raw = load_json(ROOT / "templates" / "roster.json")
+    assert isinstance(raw, dict)
+    assert raw["schema_version"] == 2
+    validator_for(load_json(SCHEMAS / "roster.schema.json"))(
+        load_json(SCHEMAS / "roster.schema.json"), registry=schema_registry()
+    ).validate(raw)
+
+    migrated = load_roster(raw)
 
     assert isinstance(migrated, Roster)
     assert migrated.roles[0].id == "example-role-delete-me"
@@ -194,3 +201,108 @@ def test_export_plan_schema_rejects_traversal_paths() -> None:
     schema = load_json(SCHEMAS / "export-plan.schema.json")
 
     assert list(validator_for(schema)(schema, registry=schema_registry()).iter_errors(plan))
+
+
+@pytest.mark.parametrize(
+    "unsafe",
+    ["../escape/**", "/absolute/**", "nested/../escape/**", "a/", "a//b"],
+)
+def test_roster_schema_and_runtime_reject_unsafe_ownership_paths(unsafe: str) -> None:
+    raw = load_json(FIXTURES / "roster-v2.json")
+    assert isinstance(raw, dict)
+    roles = raw["roles"]
+    assert isinstance(roles, list) and isinstance(roles[0], dict)
+    ownership = roles[0]["file_ownership"]
+    assert isinstance(ownership, dict)
+    ownership["include"] = [unsafe]
+    schema = load_json(SCHEMAS / "roster.schema.json")
+
+    assert list(validator_for(schema)(schema, registry=schema_registry()).iter_errors(raw))
+    with pytest.raises(ContractError, match="project-relative path"):
+        Roster.from_dict(raw)
+
+
+@pytest.mark.parametrize("key", ["BAD-NAME", "1STARTS_WITH_NUMBER", "HAS.DOT"])
+def test_roster_schema_and_runtime_reject_invalid_environment_variable_names(
+    key: str,
+) -> None:
+    raw = load_json(FIXTURES / "roster-v2.json")
+    assert isinstance(raw, dict)
+    roles = raw["roles"]
+    assert isinstance(roles, list) and isinstance(roles[1], dict)
+    environment = roles[1]["environment"]
+    assert isinstance(environment, dict)
+    environment["variables"] = {key: "value"}
+    schema = load_json(SCHEMAS / "roster.schema.json")
+
+    assert list(validator_for(schema)(schema, registry=schema_registry()).iter_errors(raw))
+    with pytest.raises(ContractError, match="shell identifiers"):
+        Roster.from_dict(raw)
+
+
+@pytest.mark.parametrize(
+    ("field", "unsafe"),
+    [
+        ("goal_ref", "../role-goal.md"),
+        ("agent_file", "/tmp/agent.md"),
+        ("workspace", ".squad/workspaces/../escape"),
+    ],
+)
+def test_roster_rejects_unsafe_path_bearing_fields(field: str, unsafe: str) -> None:
+    raw = load_json(FIXTURES / "roster-v2.json")
+    assert isinstance(raw, dict)
+    roles = raw["roles"]
+    assert isinstance(roles, list) and isinstance(roles[1], dict)
+    role = roles[1]
+    if field == "agent_file":
+        overrides = role["provider_overrides"]
+        assert isinstance(overrides, dict) and isinstance(overrides["claude"], dict)
+        overrides["claude"][field] = unsafe
+    elif field == "workspace":
+        environment = role["environment"]
+        assert isinstance(environment, dict)
+        environment[field] = unsafe
+    else:
+        role[field] = unsafe
+
+    with pytest.raises(ContractError, match="project-relative path"):
+        Roster.from_dict(raw)
+
+
+def test_claude_worktree_isolation_round_trips_and_legacy_migrates() -> None:
+    raw = load_json(FIXTURES / "roster-v2.json")
+    assert isinstance(raw, dict)
+    roles = raw["roles"]
+    assert isinstance(roles, list) and isinstance(roles[0], dict)
+    overrides = roles[0]["provider_overrides"]
+    assert isinstance(overrides, dict) and isinstance(overrides["claude"], dict)
+    overrides["claude"]["isolation"] = "worktree"
+
+    canonical = Roster.from_dict(raw)
+    assert canonical.roles[0].provider_overrides is not None
+    assert canonical.roles[0].provider_overrides.claude is not None
+    assert canonical.roles[0].provider_overrides.claude.isolation == "worktree"
+    assert canonical.to_dict() == raw
+
+    legacy = load_json(FIXTURES / "legacy-roster.json")
+    assert isinstance(legacy, dict)
+    legacy_roles = legacy["roles"]
+    assert isinstance(legacy_roles, list) and isinstance(legacy_roles[0], dict)
+    legacy_roles[0]["isolation"] = "worktree"
+    migrated = migrate_legacy_roster(legacy)
+    assert migrated.roles[0].provider_overrides is not None
+    assert migrated.roles[0].provider_overrides.claude is not None
+    assert migrated.roles[0].provider_overrides.claude.isolation == "worktree"
+
+
+def test_claude_override_rejects_unknown_isolation() -> None:
+    raw = load_json(FIXTURES / "roster-v2.json")
+    assert isinstance(raw, dict)
+    roles = raw["roles"]
+    assert isinstance(roles, list) and isinstance(roles[0], dict)
+    overrides = roles[0]["provider_overrides"]
+    assert isinstance(overrides, dict) and isinstance(overrides["claude"], dict)
+    overrides["claude"]["isolation"] = "container"
+
+    with pytest.raises(ContractError, match="isolation must be worktree"):
+        Roster.from_dict(raw)

@@ -32,7 +32,7 @@
       "active": true,
       "goal_ref": ".squad/role-goal-report-writer.md",
       "environment": {
-        "workspace": ".squad/workspaces/report-writer/",
+        "workspace": ".squad/workspaces/report-writer",
         "directories": ["inputs", "outputs"],
         "variables": {"REPORT_FORMAT": "markdown"},
         "context": [],

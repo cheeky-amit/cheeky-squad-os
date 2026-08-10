@@ -109,7 +109,7 @@ def _environment(value: object, path: str) -> Environment:
         for index, item in enumerate(_sequence(data.get("tools", []), f"{path}.tools"))
     )
     return Environment(
-        workspace=_text(data.get("workspace"), f"{path}.workspace"),
+        workspace=_text(data.get("workspace"), f"{path}.workspace").rstrip("/"),
         directories=_texts(data.get("dirs", []), f"{path}.dirs"),
         variables=variables,
         context=contexts,
@@ -149,6 +149,7 @@ def _legacy_role(value: object, index: int) -> Role:
         model=model,
         tools=tools,
         agent_file=_optional_text(data.get("agent_file"), f"{path}.agent_file"),
+        isolation=_optional_text(data.get("isolation"), f"{path}.isolation"),
     )
     return Role(
         id=name,

@@ -20,7 +20,7 @@ keeping this generator installed.
 - Claude compiler for namespaced Markdown agents and self-contained generated plugins.
   Shared lifecycle hooks are included only when Claude is the selected runtime owner.
 - Codex compiler for project/user TOML agents, repo-local skills, and native standalone
-  plugins with prompt-baked roles.
+  plugins with prompt-baked roles plus a valid, nested local-marketplace install surface.
 - `squad-export plan|apply|validate|uninstall` and the `export` verb on the existing
   `squad-roster` lifecycle skill.
 - Four destinations: session-only prompt baking, repository-local project discovery,

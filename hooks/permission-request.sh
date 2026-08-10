@@ -87,32 +87,6 @@ if ! command -v jq >/dev/null 2>&1; then
   exit 0
 fi
 
-# --- Resolve the project root ------------------------------------------------
-#
-# A role running under `isolation: worktree` (hard rule #7) works in a git
-# worktree, not the main checkout — and its .squad/ lives there. Resolving
-# solely from CLAUDE_PROJECT_DIR is therefore not safe: if that variable points
-# at the main checkout, this hook reads the wrong roster (or none), every
-# containment check runs against the wrong root, and the role gets no
-# auto-approval at all.
-#
-# The hook input carries `cwd` — where the tool call is actually happening.
-# Prefer whichever of the two candidates actually holds a roster. Both come
-# from Claude Code, not from the role, so neither is attacker-controlled; and
-# if neither has one we defer exactly as before.
-PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$PWD}"
-if [ ! -f "$PROJECT_DIR/.squad/roster.json" ]; then
-  HOOK_CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // empty' 2>/dev/null)
-  if [ -n "$HOOK_CWD" ] && [ -f "$HOOK_CWD/.squad/roster.json" ]; then
-    PROJECT_DIR="$HOOK_CWD"
-  fi
-fi
-ROSTER="$PROJECT_DIR/.squad/roster.json"
-
-if [ ! -f "$ROSTER" ]; then
-  exit 0
-fi
-
 # --- Extract input fields ----------------------------------------------------
 
 AGENT_TYPE=$(printf '%s' "$INPUT" | jq -r '.agent_type // empty' 2>/dev/null)
@@ -126,32 +100,200 @@ if [ -z "$AGENT_TYPE" ]; then
   exit 0
 fi
 
-# Portable v2 exports namespace provider discovery IDs so user/project agents
-# cannot collide. The canonical roster keeps the provider-neutral role ID. Map
-# only the exact namespace declared by the adjacent manifest; a missing or
-# mismatched manifest defers instead of guessing. Legacy rosters have no
-# schema_version and continue to use agent_type byte-for-byte.
-ROLE_NAME="$AGENT_TYPE"
-if jq -e '.schema_version == 2' "$ROSTER" >/dev/null 2>&1; then
-  MANIFEST="$PROJECT_DIR/.squad/manifest.json"
-  [ -f "$MANIFEST" ] || exit 0
-  SQUAD_ID=$(jq -r 'select(.schema_version == 2) | .squad.id // empty' "$MANIFEST" 2>/dev/null)
-  case "$SQUAD_ID" in
-    ''|*[!a-z0-9.-]*) exit 0 ;;
-  esac
-  ROLE_PREFIX="${SQUAD_ID//-/-h}"
-  ROLE_PREFIX="${ROLE_PREFIX//./-d}--"
-  case "$AGENT_TYPE" in
-    "$ROLE_PREFIX"*) ROLE_NAME="${AGENT_TYPE#"$ROLE_PREFIX"}" ;;
-    *) exit 0 ;;
-  esac
+# --- Resolve work and configuration roots -----------------------------------
+#
+# A role running under `isolation: worktree` (hard rule #7) works in a git
+# worktree, not the main checkout — and its .squad/ lives there. Resolving
+# solely from CLAUDE_PROJECT_DIR is therefore not safe: if that variable points
+# at the main checkout, this hook reads the wrong roster (or none), every
+# containment check runs against the wrong root, and the role gets no
+# auto-approval at all.
+#
+# The hook input carries `cwd` — where the tool call is actually happening.
+# This is always the containment root. The roster may instead be vendored in a
+# standalone plugin, so configuration has a separate fallback root. Never use
+# the plugin directory as the filesystem boundary for a role working elsewhere.
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$PWD}"
+HOOK_CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // empty' 2>/dev/null)
+if [ -n "$HOOK_CWD" ]; then
+  PROJECT_DIR="$HOOK_CWD"
 fi
-
-# Resolve project root to a canonical absolute path (shared by both surfaces).
-PROJECT_ABS=$(cd "$PROJECT_DIR" 2>/dev/null && pwd)
-if [ -z "$PROJECT_ABS" ]; then
+PROJECT_ABS=$(cd "$PROJECT_DIR" 2>/dev/null && pwd -P)
+PROJECT_LOGICAL_ABS=$(cd "$PROJECT_DIR" 2>/dev/null && pwd -L)
+if [ -z "$PROJECT_ABS" ] || [ -z "$PROJECT_LOGICAL_ABS" ]; then
   exit 0
 fi
+
+# Exported provider IDs are accepted only through the exact receipt-owned map
+# adjacent to their immutable roster and manifest. There is deliberately no
+# namespace-prefix decoding: bounded IDs contain hashes and a textual fallback
+# can bind the wrong role. Live authoring without a manifest keeps canonical
+# v2 IDs; legacy rosters keep their historical `name` lookup.
+validate_manifest() {
+  jq -e '
+    type == "object" and
+    ((keys_unsorted - ["schema_version","squad","execution_mode","destination","providers","runtime_owner","export_version"]) | length == 0) and
+    .schema_version == 2 and
+    (.squad | type == "object") and
+    ((.squad | keys_unsorted) - ["id","name","description"] | length == 0) and
+    (.squad.id | type == "string" and test("^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)*$")) and
+    (.squad.name | type == "string" and length > 0) and
+    (.execution_mode == "one-time" or .execution_mode == "multi-use" or .execution_mode == "evergreen") and
+    (.destination == "session" or .destination == "project" or .destination == "user" or .destination == "plugin") and
+    (.providers | type == "array" and length > 0 and all(. == "claude" or . == "codex") and length == (unique | length)) and
+    (.runtime_owner == "claude" or .runtime_owner == "codex") and
+    (.runtime_owner as $owner | .providers | index($owner) != null) and
+    (.export_version | type == "string" and test("^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"))
+  ' "$1" >/dev/null 2>&1
+}
+
+validate_role_map() {
+  jq -e '
+    type == "object" and
+    ((keys_unsorted - ["schema_version","roles"]) | length == 0) and
+    .schema_version == 1 and (.roles | type == "object") and
+    (.roles | length > 0) and
+    (.roles | to_entries | all(
+      (.key | test("^[a-z0-9][a-z0-9-]*$")) and
+      (.value | type == "string" and test("^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$"))
+    )) and
+    ((.roles | to_entries | map(.value) | length) == (.roles | to_entries | map(.value) | unique | length))
+  ' "$1" >/dev/null 2>&1
+}
+
+validate_v2_roster() {
+  jq -e '
+    def strings: type == "array" and all(type == "string");
+    def role_ok:
+      type == "object" and
+      ((keys_unsorted - ["id","purpose","description","file_ownership","capabilities","reasoning","active","goal_ref","created","environment","provider_overrides"]) | length == 0) and
+      (has("id") and has("purpose") and has("description") and has("file_ownership") and has("capabilities") and has("reasoning") and has("active")) and
+      (.id | type == "string" and test("^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$")) and
+      (.purpose | type == "string" and length > 0) and
+      (.description | type == "string" and length > 0) and
+      (.active | type == "boolean") and
+      (.file_ownership | type == "object") and
+      ((.file_ownership | keys_unsorted) - ["include","exclude"] | length == 0) and
+      (.file_ownership.include | strings and length > 0) and
+      (.file_ownership.exclude | strings) and
+      (.capabilities | strings and length > 0) and
+      (.reasoning | type == "object") and
+      ((.reasoning | keys_unsorted) - ["profile","effort"] | length == 0) and
+      (.reasoning.profile == "fast" or .reasoning.profile == "balanced" or .reasoning.profile == "deep" or .reasoning.profile == "inherit") and
+      (.reasoning.effort == "inherit" or .reasoning.effort == "low" or .reasoning.effort == "medium" or .reasoning.effort == "high" or .reasoning.effort == "xhigh" or .reasoning.effort == "max") and
+      ((has("environment") | not) or (
+        (.environment | type == "object") and
+        ((.environment | keys_unsorted) - ["workspace","directories","variables","context","tools"] | length == 0) and
+        (.environment.workspace | type == "string") and
+        (.environment.directories | strings) and
+        (.environment.variables | type == "object") and
+        (.environment.context | type == "array") and
+        (.environment.tools | type == "array")
+      ));
+    type == "object" and
+    ((keys_unsorted - ["schema_version","squad_goal_ref","execution_mode","created","roles"]) | length == 0) and
+    .schema_version == 2 and
+    (.squad_goal_ref | type == "string" and length > 0) and
+    (.execution_mode == "one-time" or .execution_mode == "multi-use" or .execution_mode == "evergreen") and
+    (.roles | type == "array" and all(role_ok))
+  ' "$1" >/dev/null 2>&1
+}
+
+validate_legacy_roster() {
+  jq -e '
+    type == "object" and ((has("schema_version") | not) or .schema_version == null) and
+    (.roles | type == "array") and
+    all(.roles[]; type == "object" and (.name | type == "string") and (.file_scope | type == "array" and all(type == "string")))
+  ' "$1" >/dev/null 2>&1
+}
+
+CONFIG_DIR=''
+ROSTER=''
+ROSTER_KIND=''
+ROLE_NAME=''
+ROLE_JSON=''
+MAP_MATCHES=0
+MAP_BLOCKED=0
+
+consider_role_map() {
+  local role_map="$1" root manifest roster canonical
+  [ -f "$role_map" ] || return 0
+  validate_role_map "$role_map" || return 0
+  canonical=$(jq -r --arg provider "$AGENT_TYPE" '.roles[$provider] // empty' "$role_map" 2>/dev/null)
+  [ -n "$canonical" ] || return 0
+  root="${role_map%/provider-role-map.json}"
+  manifest="$root/manifest.json"
+  roster="$root/roster.json"
+  if [ ! -f "$manifest" ] || [ ! -f "$roster" ] || ! validate_manifest "$manifest" \
+      || ! validate_v2_roster "$roster" \
+      || ! jq -e '.runtime_owner == "claude" and (.providers | index("claude") != null)' \
+        "$manifest" >/dev/null 2>&1; then
+    MAP_BLOCKED=1
+    return 0
+  fi
+  if ! jq -e --arg role "$canonical" \
+      'any(.roles[]; .id == $role and .active == true)' "$roster" >/dev/null 2>&1; then
+    MAP_BLOCKED=1
+    return 0
+  fi
+  MAP_MATCHES=$((MAP_MATCHES + 1))
+  CONFIG_DIR="$root"
+  ROSTER="$roster"
+  ROSTER_KIND='v2'
+  ROLE_NAME="$canonical"
+}
+
+consider_role_map "$PROJECT_ABS/.squad/provider-role-map.json"
+for role_map in "$PROJECT_ABS"/.squad/exports/*/provider-role-map.json; do
+  [ -f "$role_map" ] || continue
+  consider_role_map "$role_map"
+done
+if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ]; then
+  consider_role_map "$CLAUDE_PLUGIN_ROOT/.squad/provider-role-map.json"
+fi
+if [ -n "${HOME:-}" ]; then
+  for role_map in "$HOME"/.squad/squads/*/provider-role-map.json; do
+    [ -f "$role_map" ] || continue
+    consider_role_map "$role_map"
+  done
+fi
+
+if [ "$MAP_MATCHES" -gt 0 ] || [ "$MAP_BLOCKED" -eq 1 ]; then
+  [ "$MAP_MATCHES" -eq 1 ] && [ "$MAP_BLOCKED" -eq 0 ] || exit 0
+else
+  # No exported map claimed this provider ID. Only a manifest-free live roster
+  # (or a legacy plugin roster) may bind the raw agent_type directly.
+  CONFIG_DIR="$PROJECT_ABS/.squad"
+  ROSTER="$CONFIG_DIR/roster.json"
+  if [ -f "$CONFIG_DIR/manifest.json" ]; then
+    exit 0
+  fi
+  if [ ! -f "$ROSTER" ] && [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] \
+      && [ -f "$CLAUDE_PLUGIN_ROOT/.squad/roster.json" ] \
+      && [ ! -f "$CLAUDE_PLUGIN_ROOT/.squad/manifest.json" ]; then
+    CONFIG_DIR="$CLAUDE_PLUGIN_ROOT/.squad"
+    ROSTER="$CONFIG_DIR/roster.json"
+  fi
+  [ -f "$ROSTER" ] || exit 0
+  if jq -e 'has("schema_version") and .schema_version != null' "$ROSTER" >/dev/null 2>&1; then
+    validate_v2_roster "$ROSTER" || exit 0
+    ROSTER_KIND='v2'
+    ROLE_NAME="$AGENT_TYPE"
+  else
+    validate_legacy_roster "$ROSTER" || exit 0
+    ROSTER_KIND='legacy'
+    ROLE_NAME="$AGENT_TYPE"
+  fi
+fi
+
+if [ "$ROSTER_KIND" = 'v2' ]; then
+  ROLE_JSON=$(jq -c --arg role "$ROLE_NAME" \
+    'first(.roles[] | select(.id == $role and .active == true)) // empty' "$ROSTER" 2>/dev/null)
+else
+  ROLE_JSON=$(jq -c --arg role "$ROLE_NAME" \
+    'first(.roles[] | select(.name == $role and (.active // true) == true)) // empty' "$ROSTER" 2>/dev/null)
+fi
+[ -n "$ROLE_JSON" ] || exit 0
 
 # --- Shared containment primitives -------------------------------------------
 
@@ -198,6 +340,8 @@ normalize_rel() {
       case "$p" in
         "$PROJECT_ABS"/*) rel="${p#"$PROJECT_ABS"/}" ;;
         "$PROJECT_ABS")   rel="" ;;
+        "$PROJECT_LOGICAL_ABS"/*) rel="${p#"$PROJECT_LOGICAL_ABS"/}" ;;
+        "$PROJECT_LOGICAL_ABS")   rel="" ;;
         *) return 1 ;;  # absolute path outside project → defer
       esac
       ;;
@@ -216,6 +360,21 @@ has_traversal() {
   case "$1" in
     ..|../*|*/..|*/../*) return 0 ;;
   esac
+  return 1
+}
+
+# path_has_symlink <rel> — success when any existing path component is a
+# symlink. Textual scope checks cannot prove containment through symlinks, so
+# callers defer even when the final path does not exist yet.
+path_has_symlink() {
+  local rel="$1" current="$PROJECT_ABS" rest="$1" seg
+  while [ -n "$rest" ]; do
+    seg="${rest%%/*}"
+    if [ "$seg" = "$rest" ]; then rest=''; else rest="${rest#*/}"; fi
+    [ -z "$seg" ] && continue
+    current="$current/$seg"
+    [ -L "$current" ] && return 0
+  done
   return 1
 }
 
@@ -400,14 +559,8 @@ case "$TOOL_NAME" in
     if has_traversal "$REL_PATH"; then
       exit 0  # never auto-approve traversal — defer to user
     fi
-
-    # The role must be registered before any grant is considered — an
-    # unregistered agent_type gets nothing, on either surface below.
-    ROLE_JSON=$(printf '%s' "$(cat "$ROSTER")" \
-      | jq -c --arg name "$ROLE_NAME" \
-          'first(.roles[] | select((.name // .id // "") == $name)) // empty' 2>/dev/null)
-    if [ -z "$ROLE_JSON" ]; then
-      exit 0  # unknown role → defer
+    if path_has_symlink "$REL_PATH"; then
+      exit 0  # a textual in-scope path can escape through a symlink
     fi
 
     # ----- The .squad/ structural reservation --------------------------------
@@ -429,14 +582,18 @@ case "$TOOL_NAME" in
       exit 0
     fi
 
-    SCOPES=$(printf '%s' "$ROLE_JSON" \
-      | jq -r '(.file_scope // .file_ownership.include // [])[]?' 2>/dev/null)
+    if [ "$ROSTER_KIND" = 'v2' ]; then
+      SCOPES=$(printf '%s' "$ROLE_JSON" \
+        | jq -r '.file_ownership.include[]' 2>/dev/null)
+      EXCLUDES=$(printf '%s' "$ROLE_JSON" \
+        | jq -r '.file_ownership.exclude[]' 2>/dev/null)
+    else
+      SCOPES=$(printf '%s' "$ROLE_JSON" | jq -r '.file_scope[]' 2>/dev/null)
+      EXCLUDES=''
+    fi
     if [ -z "$SCOPES" ]; then
       exit 0  # no file_scope → defer
     fi
-
-    EXCLUDES=$(printf '%s' "$ROLE_JSON" \
-      | jq -r '(.file_ownership.exclude // [])[]?' 2>/dev/null)
     while IFS= read -r GLOB; do
       [ -z "$GLOB" ] && continue
       if path_in_scope "$REL_PATH" "$GLOB"; then
@@ -472,9 +629,8 @@ case "$TOOL_NAME" in
     fi
 
     # The role's sandbox root. No declared workspace → no sandbox → defer.
-    WS=$(printf '%s' "$(cat "$ROSTER")" \
-      | jq -r --arg name "$ROLE_NAME" \
-          '.roles[] | select((.name // .id // "") == $name) | .environment.workspace // empty' 2>/dev/null)
+    WS=$(printf '%s' "$ROLE_JSON" \
+      | jq -r '.environment.workspace // empty' 2>/dev/null)
     if [ -z "$WS" ]; then
       exit 0
     fi
@@ -504,12 +660,22 @@ case "$TOOL_NAME" in
     OPERANDS=0
     for tok in "${TOKENS[@]:1}"; do
       case "$tok" in
-        -*) continue ;;  # a flag, not a path operand
+        -*)
+          # Permit only options whose semantics do not introduce another path.
+          # Path-bearing and unknown options defer the whole command.
+          case "$VERB:$tok" in
+            mkdir:-p|cp:-R|cp:-r|ln:-s) continue ;;
+            *) exit 0 ;;
+          esac
+          ;;
       esac
       OPERANDS=$((OPERANDS + 1))
       REL=$(normalize_rel "$tok") || exit 0   # outside project → defer
       if has_traversal "$REL"; then
         exit 0  # traversal → defer
+      fi
+      if path_has_symlink "$REL"; then
+        exit 0  # a workspace path can escape through a symlink
       fi
       # An operand under .squad/ takes the SAME structural reservation the
       # Edit/Write surface takes — squad_grant decides, the workspace prefix

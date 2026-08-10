@@ -1,10 +1,7 @@
 ---
 name: squad-roster
-description: Use when the user wants to inspect, modify, audit, validate, or export the active squad — phrases like "show the roster", "who's on the squad", "remove <role>", "audit scopes", "export this squad", "make this project/user/session portable", "build a Claude/Codex plugin", or "uninstall the exported squad". Owns the canonical provider-neutral .squad/roster.json, its human view, and the preview/confirm lifecycle for squad-export.
-version: 1.1.0
-author: cheeky-squad-os
+description: Use when the user wants to inspect, modify, audit, validate, or export the active squad, including showing the roster, removing a role, auditing scopes, exporting a project or user squad, building a Claude or Codex plugin, or uninstalling an exported squad. Owns the canonical provider-neutral .squad/roster.json, its human view, and the preview/confirm lifecycle for squad-export.
 license: MIT
-compatible-with: [claude-code, codex, agentskills-1.0]
 ---
 
 # squad-roster
@@ -15,6 +12,29 @@ Claude rosters remain readable through pure, deterministic in-memory migration.
 
 You also expose **export** as a verb on this existing lifecycle skill. Export compiles
 roles; it never authors a second roster and never installs or enables a plugin.
+
+## Roster shape compatibility
+
+Choose the source shape once: `schema_version: 2` means v2; no schema version means
+legacy. Project roles into one read-only lifecycle view using these equivalents:
+
+- identifier: v2 `id` // legacy `name`
+- cadence: v2 `execution_mode` // legacy `mode`
+- goal references: `squad_goal_ref` in both shapes; v2 `goal_ref` // legacy `role_goal`
+- ownership: v2 `file_ownership.include` and `.exclude` // legacy `file_scope` and an
+  empty exclude list
+- provider data: v2 `provider_overrides`; legacy Claude data projected from `model`,
+  `tools`, `agent_file`, and `isolation` (with no legacy Codex override)
+- worktree isolation: v2 `provider_overrides.claude.isolation` // legacy `isolation`
+
+The `//` notation names source-shape equivalents; it is not permission to fall back to
+legacy aliases inside a malformed v2 object. Validate the selected shape and stop on a
+missing required field. The projection is deterministic and read-only. Read-only
+operations leave the source byte-for-byte untouched; ordinary mutations serialize the
+same source shape. Convert legacy to v2 only as a separate operation that previews the
+exact writes/deletes and requires the matching plan confirmation. If v2-only semantics
+cannot be represented losslessly in legacy shape, stop and offer conversion instead of
+dropping them.
 
 ## Canonical roster v2
 
@@ -55,8 +75,9 @@ Portable capabilities include `filesystem.read`, `filesystem.glob`,
 `network.fetch`, `network.search`, and `notebook.edit`. Exact provider-only tools use
 `provider_overrides`; do not invent a neutral mapping.
 
-An optional `environment` carries `workspace`, `directories`, `variables`, `context`,
-and `tools`. Provider overrides may tune Claude model/tools/legacy agent path or Codex
+An optional `environment` carries `workspace`, `directories`, non-secret `variables`,
+`context`, and `tools`. Portable exports retain variable names but redact every value.
+Provider overrides may tune Claude model/tools/legacy agent path or Codex
 model/reasoning/sandbox. They do not replace purpose, description, or ownership.
 
 ## Legacy behavior
@@ -67,6 +88,21 @@ legacy roster or existing `.claude/agents/` files automatically.
 
 Before any conversion write, preview the exact write/delete set and require the matching
 confirmation. Declining leaves the existing squad byte-for-byte untouched.
+
+For an ordinary mutation that stays legacy, reverse-project only fields legacy can
+represent:
+
+- canonical `id` → legacy `name`; `goal_ref` → `role_goal`
+- `file_ownership.include` → `file_scope`; require `file_ownership.exclude` to be empty
+- `provider_overrides.claude.model`, `.tools`, `.agent_file`, and `.isolation` → the
+  same legacy top-level fields; any Codex override requires v2 conversion
+- canonical environment `directories`/`variables` and context `source`/`target` → legacy
+  `dirs`/`env` and `from`/`into`; never serialize secret values
+
+After reverse projection, project the proposed legacy object forward again and compare
+identifier, goal reference, include/exclude ownership, Claude provider choices, and
+isolation. If any lifecycle meaning changes, refuse the mutation and offer a separately
+previewed v2 conversion. Never mix v2 keys into a schema-less legacy object.
 
 ## Read operations
 
@@ -102,7 +138,11 @@ Called by `squad-role` after role generation:
 1. Canonicalize the roster in memory.
 2. Refuse an ID collision.
 3. Validate required neutral fields and optional provider overrides.
-4. Append the role, pretty-print v2 JSON, and regenerate `.squad/roster.md`.
+4. For a v2 roster, append the role and pretty-print v2 JSON. For a legacy roster, preserve
+   its legacy shape using the reverse projection above. If the new role has exclusions,
+   Codex overrides, or any other semantics that fail the forward-projection check, stop and
+   offer a separate conversion plan; do not add a partially represented role. Regenerate
+   `.squad/roster.md` only after the selected-shape write succeeds.
 5. Report every generated provider artifact separately from the neutral roster write.
 
 ### Deactivate or remove
@@ -153,9 +193,10 @@ Unowned collisions, modified owned files, traversal, symlink components, filesys
 roots, home misuse, and ambiguous paths fail safely.
 
 `validate` checks receipts, hashes, modes, contracts, placeholders, and provider
-artifacts. `uninstall` requires `--confirm` and removes only receipt-owned, unmodified
-files. Preserve and report modified files. User uninstall also requires the explicit
-home and global-write confirmation.
+artifacts. `uninstall` first prints or saves the complete removal plan, then applies only
+with the matching `--plan-file` and `--confirm-plan-id`. It removes only receipt-owned,
+unmodified files. Preserve and report modified files. User uninstall also requires the
+explicit home and global-write confirmation on apply.
 
 ## Export exclusions
 

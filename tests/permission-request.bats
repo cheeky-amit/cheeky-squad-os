@@ -553,41 +553,63 @@ JSON
 
 @test "portable v2: exact namespaced agent maps to canonical role ownership" {
   cat > "$PROJECT_DIR/.squad/manifest.json" <<'JSON'
-{
-  "schema_version": 2,
-  "squad": {"id": "cheeky.portability-demo", "name": "Portability demo"},
-  "execution_mode": "one-time",
-  "destination": "project",
-  "providers": ["claude", "codex"],
-  "runtime_owner": "claude",
-  "export_version": "1.1.0"
-}
+{"schema_version":2,"squad":{"id":"cheeky.portability-demo","name":"Portability demo"},"execution_mode":"one-time","destination":"project","providers":["claude","codex"],"runtime_owner":"claude","export_version":"1.1.0"}
 JSON
   cat > "$PROJECT_DIR/.squad/roster.json" <<'JSON'
-{
-  "schema_version": 2,
-  "squad_goal_ref": ".squad/goal.md",
-  "execution_mode": "one-time",
-  "roles": [
-    {
-      "id": "report-writer",
-      "purpose": "Write report",
-      "description": "Write report",
-      "file_ownership": {"include": ["reports/final/**"], "exclude": []},
-      "capabilities": ["filesystem.write"],
-      "reasoning": {"profile": "balanced", "effort": "inherit"},
-      "active": true
-    }
-  ]
-}
+{"schema_version":2,"squad_goal_ref":".squad/goal.md","execution_mode":"one-time","roles":[{"id":"report-writer","purpose":"Write report","description":"Write report","file_ownership":{"include":["reports/final/**"],"exclude":[]},"capabilities":["filesystem.write"],"reasoning":{"profile":"balanced","effort":"inherit"},"active":true}]}
+JSON
+  cat > "$PROJECT_DIR/.squad/provider-role-map.json" <<'JSON'
+{"schema_version":1,"roles":{"cheeky-dportability-hdemo--report-writer":"report-writer"}}
 JSON
   publish_record report-writer
-
   run_hook '{"agent_type":"cheeky-dportability-hdemo--report-writer","tool_name":"Write","tool_input":{"file_path":"reports/final/report.md"}}'
   [ "$status" -eq 0 ]
   printf '%s' "$output" | jq -e '.hookSpecificOutput.decision.behavior == "allow"'
-
   run_hook '{"agent_type":"other-squad--report-writer","tool_name":"Write","tool_input":{"file_path":"reports/final/report.md"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "portable v2: a live canonical agent works before any export manifest exists" {
+  cat > "$PROJECT_DIR/.squad/roster.json" <<'JSON'
+{"schema_version":2,"squad_goal_ref":".squad/goal.md","execution_mode":"one-time","roles":[{"id":"report-writer","purpose":"Write report","description":"Write report","file_ownership":{"include":["reports/**"],"exclude":[]},"capabilities":["filesystem.write"],"reasoning":{"profile":"balanced","effort":"inherit"},"active":true}]}
+JSON
+  publish_record report-writer
+  run_hook '{"agent_type":"report-writer","tool_name":"Write","tool_input":{"file_path":"reports/report.md"}}'
+  [ "$status" -eq 0 ]
+  printf '%s' "$output" | jq -e '.hookSpecificOutput.decision.behavior == "allow"'
+}
+
+@test "portable v2: a standalone plugin uses its exact bounded role map in another project" {
+  work="$PROJECT_DIR/work"
+  plugin="$PROJECT_DIR/plugin"
+  mkdir -p "$work/.squad" "$plugin/.squad"
+  cat > "$plugin/.squad/manifest.json" <<'JSON'
+{"schema_version":2,"squad":{"id":"very-long-squad-id-for-a-bounded-provider-namespace.example","name":"Portable"},"execution_mode":"one-time","destination":"plugin","providers":["claude"],"runtime_owner":"claude","export_version":"1.1.0"}
+JSON
+  cat > "$plugin/.squad/roster.json" <<'JSON'
+{"schema_version":2,"squad_goal_ref":".squad/goal.md","execution_mode":"one-time","roles":[{"id":"canonical-writer-role-with-a-provider-id-that-has-been-bounded","purpose":"Write report","description":"Write report","file_ownership":{"include":["reports/**"],"exclude":[]},"capabilities":["filesystem.write"],"reasoning":{"profile":"balanced","effort":"inherit"},"active":true}]}
+JSON
+  cat > "$plugin/.squad/provider-role-map.json" <<'JSON'
+{"schema_version":1,"roles":{"very-long-squad-id-f-0123456789ab--canonical-write-fedcba987654":"canonical-writer-role-with-a-provider-id-that-has-been-bounded"}}
+JSON
+  printf -- '---\nstatus: active\n---\n' > "$work/.squad/role-plan-canonical-writer-role-with-a-provider-id-that-has-been-bounded.md"
+  export CLAUDE_PROJECT_DIR="$work"
+  export CLAUDE_PLUGIN_ROOT="$plugin"
+  run_hook '{"cwd":"'"$work"'","agent_type":"very-long-squad-id-f-0123456789ab--canonical-write-fedcba987654","tool_name":"Write","tool_input":{"file_path":"reports/report.md"}}'
+  [ "$status" -eq 0 ]
+  printf '%s' "$output" | jq -e '.hookSpecificOutput.decision.behavior == "allow"'
+}
+
+@test "portable v2: a Codex-owned manifest makes the Claude hook defer" {
+  cat > "$PROJECT_DIR/.squad/manifest.json" <<'JSON'
+{"schema_version":2,"squad":{"id":"cheeky.portability-demo","name":"Portability demo"},"execution_mode":"one-time","destination":"project","providers":["claude","codex"],"runtime_owner":"codex","export_version":"1.1.0"}
+JSON
+  cat > "$PROJECT_DIR/.squad/roster.json" <<'JSON'
+{"schema_version":2,"squad_goal_ref":".squad/goal.md","execution_mode":"one-time","roles":[{"id":"report-writer","purpose":"Write report","description":"Write report","file_ownership":{"include":["reports/**"],"exclude":[]},"capabilities":["filesystem.write"],"reasoning":{"profile":"balanced","effort":"inherit"},"active":true}]}
+JSON
+  publish_record report-writer
+  run_hook '{"agent_type":"report-writer","tool_name":"Write","tool_input":{"file_path":"reports/report.md"}}'
   [ "$status" -eq 0 ]
   [ -z "$output" ]
 }
@@ -624,6 +646,9 @@ JSON
     }
   ]
 }
+JSON
+  cat > "$PROJECT_DIR/.squad/provider-role-map.json" <<'JSON'
+{"schema_version":1,"roles":{"cheeky-dportability-hdemo--report-writer":"report-writer"}}
 JSON
   publish_record report-writer
 
@@ -665,7 +690,7 @@ JSON
       "capabilities": ["filesystem.write", "shell.execute"],
       "reasoning": {"profile": "balanced", "effort": "inherit"},
       "environment": {
-        "workspace": ".squad/workspaces/report-writer/",
+        "workspace": ".squad/workspaces/report-writer",
         "directories": [],
         "variables": {},
         "context": [],
@@ -675,6 +700,9 @@ JSON
     }
   ]
 }
+JSON
+  cat > "$PROJECT_DIR/.squad/provider-role-map.json" <<'JSON'
+{"schema_version":1,"roles":{"cheeky-dportability-hdemo--report-writer":"report-writer"}}
 JSON
   publish_record report-writer
 

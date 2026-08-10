@@ -1,11 +1,8 @@
 ---
 name: squad-env
 description: Use when the user wants each role to have its working environment set up before the squad runs — phrases like "set up the workspaces", "provision the environments", "build each role's sandbox", "prepare the squad to run", "what does each role need", or any "get ready to dispatch" signal after roles are generated. Derives a per-role environment (sandbox dir, env file, reference material, tool readiness) from the goal + role goal + domain, then materializes it via scripts/provision.sh. Runs everything it can CONTAIN inside each role's sandbox autonomously, and PROPOSES the few things it cannot contain (system packages, MCP servers, network fetches, global flags) for the user to approve. Also invoked by squad-spawn before dispatch.
-version: 0.1.0
-author: cheeky-squad-os
 license: MIT
 allowed-tools: [Read, Write, Edit, Bash]
-compatible-with: [claude-code, agentskills-1.0]
 ---
 
 # squad-env
@@ -18,7 +15,30 @@ The sandbox is **not** a kernel jail. It is:
 - locally copied/linked reference material,
 - tools verified present; local tools installed *into* the sandbox.
 
-The one safety rule, end to end: **contain what you can, propose what you can't.** Nothing that mutates the user's machine outside a sandbox is ever run without the user seeing and approving it.
+The one safety rule, end to end: **contain what you can, propose what you can't.** A workspace is a path convention, not a kernel sandbox. Custom verification commands are proposals, and local install commands run only after the user reviews the exact `local_plan` and explicitly approves that batch; those commands may still reach outside the workspace and must not be described as mechanically contained.
+
+## Roster shape compatibility
+
+Whenever this skill reads `.squad/roster.json`, choose its source shape once:
+`schema_version: 2` means v2; no schema version means legacy. Project roles into a
+read-only lifecycle view using these equivalents:
+
+- identifier: v2 `id` // legacy `name`
+- cadence: v2 `execution_mode` // legacy `mode`
+- goal references: `squad_goal_ref` in both shapes; v2 `goal_ref` // legacy `role_goal`
+- ownership: v2 `file_ownership.include` and `.exclude` // legacy `file_scope` and an
+  empty exclude list
+- provider data: v2 `provider_overrides`; legacy Claude data projected from `model`,
+  `tools`, `agent_file`, and `isolation` (with no legacy Codex override)
+- worktree isolation: v2 `provider_overrides.claude.isolation` // legacy `isolation`
+
+The `//` notation names source-shape equivalents; it is not permission to fall back to
+legacy aliases inside a malformed v2 object. Validate the selected shape and stop on a
+missing required field. This projection is read-only. Preserve a legacy roster's source
+shape on ordinary lifecycle writes; migrate it to v2 only through a separate
+`squad-roster` conversion plan that previews the exact writes/deletes and receives the
+matching confirmation. If a requested change cannot be represented losslessly in legacy
+shape, stop and offer that migration instead of dropping data.
 
 ## Preflight — refuse if not ready
 
@@ -28,12 +48,12 @@ The one safety rule, end to end: **contain what you can, propose what you can't.
 
 ## Step 1 — Derive an environment for each role that lacks one
 
-A role's `roster.json` entry MAY already carry an `environment` block. For each active role that does **not**, derive one from everything you know — the squad goal, the role goal, the role's `file_scope`, and its `tools`:
+A role's `roster.json` entry MAY already carry an `environment` block. For each active role that does **not**, derive one from everything you know — the squad goal, the role goal, the role's `file_ownership.include`, and its Claude tools override:
 
 - **`workspace`** — `.squad/workspaces/<role>/`. This is the sandbox root.
-- **`dirs`** — the working layout the role's job implies. A data puller wants `inputs/ outputs/ scratch/`; a report writer wants `drafts/ final/`. Keep it to what the role-goal's owned outputs need.
-- **`env`** — only variables the role genuinely needs (e.g. an output dir, a locale, a model flag). Leave empty if none. Never put secrets here.
-- **`context`** — local reference material the role should have at hand, as `{from, into, kind}`. `kind: "copy"` or `"link"` for in-project paths (contained, run locally). `kind: "fetch"` for anything off the network (this becomes a proposal, never auto-run).
+- **`directories`** — the working layout the role's job implies. A data puller wants `inputs/ outputs/ scratch/`; a report writer wants `drafts/ final/`. Keep it to what the role-goal's owned outputs need.
+- **`variables`** — non-secret runtime values the role genuinely needs (e.g. an output format or locale). Leave empty if none and never put credentials here. Export strips every value from portable snapshots even when a live roster contains one.
+- **`context`** — local reference material the role should have at hand, as `{source, target, kind}`. `kind: "copy"` or `"link"` for in-project paths (contained, run locally). `kind: "fetch"` for anything off the network (this becomes a proposal, never auto-run).
 - **`tools`** — derive from the role's `tools` allowlist + domain. For each: `{name, kind, verify, install?}`.
   - `kind: "local"` + an `install` that targets the sandbox (`pip install --target lib …`, `npm install --prefix …`, a binary dropped into `bin/`) → installed INTO the sandbox.
   - `kind: "system"` (a CLI like `jq`, `git`) or `kind: "mcp"` (an MCP server) → **never installed by you**; proposed to the user.
@@ -42,7 +62,7 @@ Write the derived block into the role's `roster.json` entry **via `squad-roster`
 
 ## Step 2 — Make the workspace writable by the role
 
-For the in-sandbox boundary to be hook-enforced, each role's `workspace` must be inside its `file_scope` (otherwise the role's own Edit/Write into its sandbox would prompt). For every active role with an `environment`, ensure `<workspace>/**` is present in `file_scope`. If missing, add it **via `squad-roster`** and tell the user you widened the scope to cover the sandbox.
+For the in-sandbox boundary to be hook-enforced, each role's `workspace` must be inside `file_ownership.include` (otherwise the role's own Edit/Write into its sandbox would prompt). For every active role with an `environment`, ensure `<workspace>/**` is present in `file_ownership.include`. If missing, add it **via `squad-roster`** and tell the user you widened the scope to cover the sandbox.
 
 ## Step 3 — Provision (dry pass first)
 
@@ -75,7 +95,7 @@ Needs your decision (cannot be contained):
 ```
 
 Then:
-- **Local plan** — this is contained autonomy. If `local_plan` is non-empty, run the provisioner once more **with `--install`** to execute those installs inside the sandboxes. (One action for the whole batch — not a prompt per tool.)
+- **Local plan** — print every command verbatim and explain that changing its working directory does not mechanically confine it. Run the provisioner once more **with `--install`** only after the user explicitly approves that exact batch. One approval may cover the batch, but silence or a prior generic approval does not.
 
   ```
   ${CLAUDE_PLUGIN_ROOT}/skills/squad-env/scripts/provision.sh --install .squad/roster.json .squad/goal.md
@@ -125,4 +145,5 @@ it can be added to your `environment` and provisioned.
 - **No goal:** refuse, point at `squad-onboard`.
 - **No active roles:** refuse, point at `squad-role`.
 - **Unsafe workspace** (absolute path, or `..` traversal): `provision.sh` skips it and reports an error; fix the role's `environment.workspace` (via `squad-roster`) before retrying. Never provision outside the project tree.
-- **A `kind: "local"` install that does not target the sandbox:** treat it as a `global_need` and propose it — do not run an "install" that would touch the machine globally.
+- **A `kind: "local"` install that does not target the sandbox:** treat it as a `global_need` and propose it — do not run it through `--install`.
+- **Custom `verify`:** the provisioner never executes arbitrary verification shell text during its dry pass. It reports the command as a `global_need` for explicit manual review.

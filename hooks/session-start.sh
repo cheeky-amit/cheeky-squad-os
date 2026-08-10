@@ -75,6 +75,48 @@ PARTNER="$SQUAD_DIR/partner.md"
 # regardless of source (startup vs resume vs clear vs compact).
 cat >/dev/null 2>&1 || true
 
+# --- Portable runtime-owner arbitration ---------------------------------------
+#
+# A v2 export manifest is an activation boundary. The generated Claude hooks
+# emit context only when Claude is both selected and the runtime owner. A
+# present-but-malformed/unknown manifest is not legacy state: defer silently.
+# Standalone plugins read only their vendored context snapshot and never fall
+# back to a live project's .squad/goal.md.
+manifest_allows_claude_runtime() {
+  local manifest="$1"
+  command -v jq >/dev/null 2>&1 || return 1
+  jq -e '
+    type == "object" and
+    .schema_version == 2 and
+    .runtime_owner == "claude" and
+    (.providers | type == "array" and index("claude") != null)
+  ' "$manifest" >/dev/null 2>&1
+}
+
+PLUGIN_MANIFEST=''
+if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ]; then
+  PLUGIN_MANIFEST="$CLAUDE_PLUGIN_ROOT/.squad/manifest.json"
+fi
+PROJECT_MANIFEST="$PROJECT_DIR/.squad/manifest.json"
+
+if [ -n "$PLUGIN_MANIFEST" ] && [ -f "$PLUGIN_MANIFEST" ]; then
+  manifest_allows_claude_runtime "$PLUGIN_MANIFEST" || exit 0
+  SQUAD_DIR="$CLAUDE_PLUGIN_ROOT/.squad"
+  CONTEXT_INDEX="$SQUAD_DIR/context/index.json"
+  GOAL="$SQUAD_DIR/context/squad-goal.md"
+  VERIFICATION="$SQUAD_DIR/verification.md"
+  PARTNER="$SQUAD_DIR/partner.md"
+  [ -f "$CONTEXT_INDEX" ] && [ -f "$GOAL" ] || exit 0
+  jq -e '
+    type == "object" and
+    .schema_version == 1 and
+    .squad_goal.status == "included" and
+    .squad_goal.snapshot == "context/squad-goal.md"
+  ' "$CONTEXT_INDEX" >/dev/null 2>&1 || exit 0
+elif [ -f "$PROJECT_MANIFEST" ]; then
+  manifest_allows_claude_runtime "$PROJECT_MANIFEST" || exit 0
+fi
+
 # --- Open-escalation count (no jq — grep + awk only) --------------------------
 
 # frontmatter_of <file> → prints only the lines strictly between the first

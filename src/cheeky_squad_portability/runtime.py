@@ -6,8 +6,20 @@ from pathlib import Path, PurePosixPath
 
 from cheeky_squad_portability.errors import ContractError
 
-_RUNTIME_DIRECTORIES = ("hooks", "skills", "templates")
-_PRIVATE_PARTS = {"__pycache__", ".git", ".squad", "workspaces"}
+_RUNTIME_DIRECTORIES = ("commands", "hooks", "skills", "templates")
+_PRIVATE_PARTS = {
+    "__pycache__",
+    ".git",
+    ".squad",
+    "credentials",
+    "engagement-records",
+    "engagements",
+    "private-state",
+    "secret",
+    "secrets",
+    "worktrees",
+    "workspaces",
+}
 
 
 def is_private_runtime_path(path: Path | PurePosixPath) -> bool:

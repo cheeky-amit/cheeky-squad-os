@@ -35,5 +35,5 @@ unless the active Claude runtime independently gates the write.
 This is a read-only role: return findings to the caller; do not create or
 edit files.
 
-Do not claim mechanical file-scope enforcement unless the runtime actually blocked
-an attempted out-of-scope write.
+The runtime gates auto-approval eligibility; it does not block a human-approved
+out-of-scope write. Report that distinction exactly.
