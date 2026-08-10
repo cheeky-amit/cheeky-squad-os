@@ -206,40 +206,49 @@ is_squad_path() {
   return 1
 }
 
-# count_glob <glob> → prints the number of regular files the glob covers,
-# excluding anything under .squad/ (see is_squad_path above).
-# Mirrors the PermissionRequest hook's semantics: "prefix/**" is the whole
-# subtree, bare "**" is the whole project (minus .git), and any other glob
-# expands with pathname rules where "*" never crosses a "/".
-count_glob() {
-  local glob="$1" n=0 f
+# path_in_scope <rel> <glob> — the same segment-aware ownership semantics used
+# by PermissionRequest. A v2 exclude is evaluated with this matcher and always
+# wins over an include.
+path_in_scope() {
+  local rel="$1" glob="$2" prefix g_slashes r_slashes
   case "$glob" in
-    \*\*)
-      while IFS= read -r f; do
-        [ -z "$f" ] && continue
-        is_squad_path "$f" && continue
-        n=$((n + 1))
-      done < <(find . -path ./.git -prune -o -type f -print 2>/dev/null)
-      ;;
     */\*\*)
-      local prefix="${glob%/\*\*}"
-      if [ -d "$prefix" ]; then
-        while IFS= read -r f; do
-          [ -z "$f" ] && continue
-          is_squad_path "$f" && continue
-          n=$((n + 1))
-        done < <(find "$prefix" -type f 2>/dev/null)
-      fi
+      prefix="${glob%/\*\*}"
+      case "$rel" in "$prefix"|"$prefix"/*) return 0 ;; esac
+      return 1
       ;;
-    *)
-      while IFS= read -r f; do
-        [ -f "$f" ] || continue
-        is_squad_path "$f" && continue
-        n=$((n + 1))
-      done < <(compgen -G "$glob" 2>/dev/null || true)
-      ;;
+    \*\*) return 0 ;;
   esac
-  printf '%s' "$n"
+  g_slashes="${glob//[^\/]/}"
+  r_slashes="${rel//[^\/]/}"
+  [ "${#g_slashes}" -eq "${#r_slashes}" ] || return 1
+  # shellcheck disable=SC2053
+  [[ "$rel" == $glob ]]
+}
+
+# count_owned_files <newline-includes> <newline-excludes> — count each regular
+# deliverable once, excluding .squad/.git and applying v2 exclusions before
+# includes. This avoids double-counting files covered by overlapping includes.
+count_owned_files() {
+  local includes="$1" excludes="$2" file rel glob included excluded count=0
+  while IFS= read -r file; do
+    [ -n "$file" ] || continue
+    rel="${file#./}"
+    is_squad_path "$rel" && continue
+    excluded=0
+    while IFS= read -r glob; do
+      [ -n "$glob" ] || continue
+      if path_in_scope "$rel" "$glob"; then excluded=1; break; fi
+    done <<< "$excludes"
+    [ "$excluded" -eq 0 ] || continue
+    included=0
+    while IFS= read -r glob; do
+      [ -n "$glob" ] || continue
+      if path_in_scope "$rel" "$glob"; then included=1; break; fi
+    done <<< "$includes"
+    [ "$included" -eq 0 ] || count=$((count + 1))
+  done < <(find . -path ./.git -prune -o -type f -print 2>/dev/null)
+  printf '%s' "$count"
 }
 
 # --- Engagement record helpers (hard rule #11) --------------------------------
@@ -477,11 +486,11 @@ while IFS= read -r ROLE_JSON; do
   [ -f "$RG" ] && RG_PRESENT=true
 
   SCOPE_JSON=$(printf '%s' "$ROLE_JSON" | jq -c '.file_ownership.include // .file_scope // []')
-  FILES=0
-  while IFS= read -r G; do
-    [ -z "$G" ] && continue
-    FILES=$((FILES + $(count_glob "$G")))
-  done < <(printf '%s' "$ROLE_JSON" | jq -r '(.file_ownership.include // .file_scope // [])[]? // empty')
+  SCOPES=$(printf '%s' "$ROLE_JSON" \
+    | jq -r '(.file_ownership.include // .file_scope // [])[]? // empty')
+  EXCLUDES=$(printf '%s' "$ROLE_JSON" \
+    | jq -r '(.file_ownership.exclude // [])[]? // empty')
+  FILES=$(count_owned_files "$SCOPES" "$EXCLUDES")
 
   # --- Engagement record (hard rule #11) — absence contract in force ---------
   # PLAN is looked up by the roster's own role name, i.e. by the FILENAME this

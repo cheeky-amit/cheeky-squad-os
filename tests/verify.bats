@@ -358,7 +358,10 @@ JSON
       "id": "v2-auditor",
       "purpose": "Audit v2 deliverables",
       "description": "Use when v2 deliverables need an audit",
-      "file_ownership": {"include": ["reports/**"], "exclude": []},
+      "file_ownership": {
+        "include": ["reports/**"],
+        "exclude": ["reports/private/**"]
+      },
       "capabilities": ["filesystem.read"],
       "reasoning": {"profile": "balanced", "effort": "inherit"},
       "active": true,
@@ -374,8 +377,10 @@ JSON
   ]
 }
 JSON
-  mkdir -p "$PROJECT_DIR/reports"
-  touch "$PROJECT_DIR/reports/report.md" "$PROJECT_DIR/.squad/custom-v2-goal.md"
+  mkdir -p "$PROJECT_DIR/reports/private"
+  touch "$PROJECT_DIR/reports/report.md" \
+    "$PROJECT_DIR/reports/private/secret.md" \
+    "$PROJECT_DIR/.squad/custom-v2-goal.md"
 
   run_verify
   [ "$status" -eq 0 ]
