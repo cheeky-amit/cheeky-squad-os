@@ -131,6 +131,8 @@ These are the load-bearing invariants the rest of the document references by num
 14. **Declared bounds.** Every role declares `needs:` preconditions and `stop:` bounds in its role goal. A fired condition ends the run with `status: escalated` on the engagement record. An open escalation blocks a `met` verdict; escalations are opened by roles and closed only in `verification.md` by the human's recorded ruling. Escalation is evidence generation, never decision — hard rule #10 holds. *Stopping well is a deliverable.*
 15. **The human meets the same evidence bar.** A NEEDS-HUMAN row or open escalation converts to PASS only against a stated what-you-checked / what-you-found, recorded verbatim in `verification.md` with attribution and date, permanently marked distinct from machine-verified truth. The human is never blocked — they are put on the record. This is the rule the metaphor stance (README, "Why we say squad") means by *"you are not exempt from the discipline you imposed"* — the one hard rule in this list that binds the human rather than the squad; see "The thesis" above.
 
+16. **Five seats per squad.** A squad holds at most five active roles (`active: true`); deactivated roles don't count toward the cap. The cap is enforced at three points: decomposition (`squad-onboard`, when workstreams are proposed — a decomposition that needs a sixth seat is consolidated to ≤5, not exempted), registration preflight (`squad-role`, before Q1 and again on the "generate another role?" loop-back), and the roster write itself (`squad-roster`'s Add operation, last line of defense). A squad already over the cap when this rule shipped is grandfathered: it keeps running exactly as before, but no new role may be added until its active count drops back under 5.
+
 ## Evidence grades
 
 Hard rule #11's engagement record grades every assumption by evidence class, never by number — a role cannot derive "73% confident," so a number here would be theatre. This is the **one vocabulary**, defined here once; `templates/role-plan.md`, `templates/verification.md`, `squad-verify`, and every generated role cite it rather than restate it.
@@ -337,6 +339,125 @@ The paper apparatus, stated once here as a reference table — not repeated as r
 | 2 — "I understand you" | #11 | the engagement record (`.squad/role-plan-<role>.md`) |
 | 3 — "We understand the world" | #13 | the belief ledger (`.squad/world/claims-*.md`) |
 | §3.4 — the infrastructure layer | #14 / #15 | stop conditions + `.squad/verification.md` |
+| — (operational bound, not a Collins et al. desideratum) | #16 | active-role count check (`squad-onboard`, `squad-role` preflight, `squad-roster` Add) |
+
+## Skill onboarding
+
+A role is not just a prompt — it can carry **onboarded skills**: external, open-source
+skill or agent files a role researched, adapted, and had approved before its first run.
+The rule of the flow is the same one the research verb applies to domain facts, turned
+toward capability instead of belief: *don't reinvent the wheel — find an existing
+open-source skill first, onboard it, and improve it; always keep attribution.*
+
+**Research first, on two dimensions, always both.** `squad-role`'s Q8 never researches
+only how a role *thinks* — it researches how the role *acts*, too. **Knowledge
+skills** are frameworks, logic, and domain best practice; **execution skills** are how
+the role actually performs its actions on whatever platform its purpose names —
+official APIs, MCP servers, CLIs, bulk/export mechanics, platform documentation. Both
+dimensions check the same curated source list first (`anthropics/skills`,
+`addyosmani/agent-skills`, `msitarzewski/agency-agents`, `obra/superpowers`);
+execution additionally checks official platform docs and MCP server registries, and a
+how-to skill distilled from official docs still counts as research-first — the docs
+are the source, attributed the same as any other. Nothing is authored fresh on either
+dimension until its search comes back empty, stated plainly, per dimension. A role
+with no platform to operate skips the execution dimension outright — there is nothing
+to research — and says so rather than silently running only the knowledge search.
+
+**The approval gate, and its two auto-approve channels.** Default is
+`approval_mode: user` — the human approves each skill before it's onboarded, mirroring
+the research verb's Gate 1 (`go` / `skip` / edit in the same reply). Auto-approval
+(`approval_mode: auto`) fires only through one of two channels the human set up in
+advance, never inferred mid-flow: a standing constraint in `.squad/partner.md`
+authorizing skill onboarding without asking (hard rule #12 — told, not inferred), or
+`skill_onboarding: auto` in the squad's own `.squad/goal.md` frontmatter, set once
+during `squad-onboard` when the builder said so. Every entry records which mode
+approved it and when. The same gate governs `squad-roster`'s Refresh-skills operation
+below — an upgrade proposed later is still a proposal, never a silent overwrite.
+
+**The execution gap is declared, never silently absent.** A role whose purpose names a
+platform or tool it must operate may not close Q8 with zero execution skills and
+nothing said about it. Either an execution skill gets onboarded, or the gap is
+*declared*: a `## Declared capability gaps` section on the role's role-goal file, one
+bullet per gap, plus a proposal for what would close it — an MCP server to connect, a
+CLI to install — handed to `squad-env`'s existing contain/propose channel
+(`global_needs`), the same mechanism that already proposes any other tool a role can't
+provision for itself. Knowledge without hands is exactly the failure this closes: a
+paid-media specialist with great frameworks and no way to actually operate the ad
+platform is not a finished role, and this makes that gap visible instead of silent.
+
+**Every onboarded skill ends with `## Provenance & limits`, or it is not onboarded.**
+The block names every source searched — including the ones that came back empty — the
+intake date, the skill's known limits, and a standing line that a better way is
+assumed to exist somewhere the search didn't reach. This is a stated contract, not a
+courtesy: `squad-roster`'s Add operation refuses to register a role's
+`onboarded_skills` entry whose file on disk lacks this block, the same way it refuses
+an ID collision or a missing required field.
+
+**Storage layout.** An onboarded skill's rewritten SKILL.md lives at
+`.squad/skills/<role-id>/<skill-name>/SKILL.md`, carrying a `Source:` attribution line
+(the origin URL, or `original` if authored fresh) and the mandatory `## Provenance &
+limits` block. The roster's `onboarded_skills` array (schema:
+`schemas/roster.schema.json`) is the manifest — name, `kind` (`knowledge` |
+`execution`), source, local path, purpose, approval mode, and approval timestamp — for
+every skill a role has onboarded.
+
+**Spawn injection, plus the step-further check.** `squad-spawn` bakes a
+`# Your onboarded skills` section into a role's spawn prompt whenever its roster entry
+has any — one line per skill (name, kind, absolute path, purpose) plus the
+instruction to read each before starting. The same section — and the equivalent block
+in the generated `.claude/agents/<role>.md` — carries a standing instruction: before
+executing, ask *"could one more research step find a better way than my onboarded
+method?"* If yes, and the step is cheap (one search, one doc lookup, one MCP
+introspection call — never a second research pass), take it; record the answer either
+way in the role's own engagement record `## Assumptions` (hard rule #11 — reused, not
+reinvented: the same evidence-graded record every role already publishes before its
+first write). Absent entries omit the whole section, the same absence contract every
+other conditional spawn-prompt section in this plugin honors (see hard rule #4).
+Humility is the point: a skill is only ever the best way *found at intake*, never
+asserted as the best way that exists.
+
+**Refresh closes the loop.** `squad-roster`'s Refresh-skills operation re-runs a
+role's Q8 research against its *existing* onboarded set, diffs what comes back (a
+better source found, the same source materially updated, a declared limit resolved,
+or a declared capability gap now closeable), and proposes upgrades through the exact
+same approval gate as first onboarding — never a silent swap. Worth running on an
+Evergreen or Multi-use squad's natural cadence, and any time a declared capability gap
+might have closed (a newly connected MCP server can unlock an execution skill that
+didn't exist at intake).
+
+**Export stance.** The manifest entries in `onboarded_skills` are part of the portable
+contract and travel with the roster on export. The skill *payload* — the actual bytes
+under `.squad/skills/**` — does not; vendoring it into export packages is a documented
+follow-up (see `CHANGELOG.md` and `docs/ROADMAP.md`), not a v1.2.0 guarantee.
+
+**None of this mints a new hard rule.** Same reasoning the research verb already
+established: an optional, human-approved verb is an application of rules already on
+the books, not a new invariant. #12 gives skill onboarding — and its refresh — their
+auto-approve channels; #11 gives the step-further check and the Provenance & limits
+contract their evidence-grading vocabulary and their home in the engagement record; #4
+gives it the spawn-injection channel. The execution-gap declaration and the squad-card
+narration (see `squad-onboard`'s "Narration — the squad card") are both optional,
+human-visible surfacing — the same shape #12's ask-first surfacing already takes, not
+a new obligation on the squad. Adding a #17 for any of this would say the invariant
+list grows with every new verb, which this repo has already refused twice and should
+refuse a third time.
+
+The whole flow — the five-seat cap firing at decomposition, research-first Q8 on both
+dimensions, the execution-gap declaration, Provenance & limits, the step-further
+check, the auto-approve channel, refresh, and the squad card — is worked end to end in
+`examples/full-funnel-agency.md`, with the real roster and adapted skill files under
+`examples/full-funnel-agency/`.
+
+**This feature — and the squad-card narration standard shipping alongside it
+(structural changes now print a compact, plain-language squad card: the goal, the seat
+count, one line per role) — mint no new hard rule between them.** Same reasoning the
+research verb already established (see "Guided domain research" above): an optional,
+human-approved verb is an application of rules already on the books, not a new
+invariant. #12 gives skill onboarding its two auto-approve channels, #4 gives it the
+spawn-injection channel; the squad card is pure narration over state every one of these
+artifacts already tracks. Adding a #17 for "an optional skill an approved role may pick
+up" would say the invariant list grows with every new verb, which this repo has already
+refused once and should refuse again.
 
 ## The three modes
 

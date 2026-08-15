@@ -604,6 +604,16 @@ JSON
   printf '%s' "$output" | jq -e '.hookSpecificOutput.decision.behavior == "allow"'
 }
 
+@test "portable v2: a role's onboarded_skills key (with kind) does not break auto-approval" {
+  cat > "$PROJECT_DIR/.squad/roster.json" <<'JSON'
+{"schema_version":2,"squad_goal_ref":".squad/goal.md","execution_mode":"one-time","roles":[{"id":"report-writer","purpose":"Write report","description":"Write report","file_ownership":{"include":["reports/**"],"exclude":[]},"capabilities":["filesystem.write"],"reasoning":{"profile":"balanced","effort":"inherit"},"active":true,"onboarded_skills":[{"name":"citation-formatter","source_url":"https://github.com/anthropics/skills","local_path":".squad/skills/report-writer/citation-formatter/SKILL.md","purpose":"Format citations","approval_mode":"user","kind":"execution","approved_at":"2026-08-08T00:00:03Z"}]}]}
+JSON
+  publish_record report-writer
+  run_hook '{"agent_type":"report-writer","tool_name":"Write","tool_input":{"file_path":"reports/report.md"}}'
+  [ "$status" -eq 0 ]
+  printf '%s' "$output" | jq -e '.hookSpecificOutput.decision.behavior == "allow"'
+}
+
 @test "portable v2: a standalone plugin uses its exact bounded role map in another project" {
   work="$PROJECT_DIR/work"
   plugin="$PROJECT_DIR/plugin"

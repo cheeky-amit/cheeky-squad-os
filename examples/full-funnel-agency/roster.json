@@ -1,0 +1,376 @@
+{
+  "schema_version": 2,
+  "squad_goal_ref": ".squad/goal.md",
+  "execution_mode": "multi-use",
+  "created": "2026-08-15T08:12:00Z",
+  "roles": [
+    {
+      "id": "studio-producer",
+      "purpose": "Run the acquisition program end to end — sequence the workstreams, hold the weekly decision cadence, and own every client-facing artifact.",
+      "description": "Use when the squad needs the program sequenced, the weekly client brief written, a program-level risk logged, or a decision that spans more than one channel.",
+      "file_ownership": {
+        "include": [
+          "deliverables/program/**"
+        ],
+        "exclude": [
+          "deliverables/program/archive/**"
+        ]
+      },
+      "capabilities": [
+        "filesystem.edit",
+        "filesystem.glob",
+        "filesystem.read",
+        "filesystem.search",
+        "filesystem.write"
+      ],
+      "reasoning": {
+        "profile": "deep",
+        "effort": "high"
+      },
+      "active": true,
+      "goal_ref": ".squad/role-goal-studio-producer.md",
+      "provider_overrides": {
+        "claude": {
+          "model": "opus",
+          "tools": [
+            "Read",
+            "Write",
+            "Edit",
+            "Glob",
+            "Grep"
+          ],
+          "agent_file": ".claude/agents/studio-producer.md"
+        }
+      },
+      "onboarded_skills": [
+        {
+          "name": "weekly-client-brief",
+          "kind": "knowledge",
+          "source_url": "https://github.com/msitarzewski/agency-agents/blob/main/project-management/project-management-studio-producer.md",
+          "local_path": ".squad/skills/studio-producer/weekly-client-brief/SKILL.md",
+          "purpose": "Write the Monday client brief as a decision record — what changed, what was decided, who owns the next move — instead of a metrics dump.",
+          "approval_mode": "auto",
+          "approved_at": "2026-08-15T08:19:41Z"
+        },
+        {
+          "name": "program-risk-register",
+          "kind": "knowledge",
+          "source_url": "https://github.com/msitarzewski/agency-agents/blob/main/project-management/project-management-studio-producer.md",
+          "local_path": ".squad/skills/studio-producer/program-risk-register/SKILL.md",
+          "purpose": "Keep one program-level risk register with a named owner, a trigger, and a pre-agreed response for every open risk.",
+          "approval_mode": "auto",
+          "approved_at": "2026-08-15T08:19:41Z"
+        }
+      ],
+      "created": "2026-08-15T08:19:41Z"
+    },
+    {
+      "id": "performance-media-buyer",
+      "purpose": "Own every paid dollar across search, shopping, and paid social — one budget, one pacing decision, one weekly reallocation.",
+      "description": "Use when the squad needs paid campaign structure, a bidding or budget-pacing decision, a spend reallocation across channels, or a pre-flight audit of an inherited ad account.",
+      "file_ownership": {
+        "include": [
+          "deliverables/media/**",
+          ".squad/workspaces/performance-media-buyer/**"
+        ],
+        "exclude": []
+      },
+      "capabilities": [
+        "filesystem.edit",
+        "filesystem.read",
+        "filesystem.write",
+        "shell.execute",
+        "web.fetch",
+        "web.search"
+      ],
+      "reasoning": {
+        "profile": "deep",
+        "effort": "high"
+      },
+      "active": true,
+      "goal_ref": ".squad/role-goal-performance-media-buyer.md",
+      "environment": {
+        "workspace": ".squad/workspaces/performance-media-buyer",
+        "directories": [
+          "exports",
+          "pacing",
+          "reference"
+        ],
+        "variables": {
+          "PACING_WINDOW_DAYS": "28"
+        },
+        "context": [
+          {
+            "source": ".squad/goal.md",
+            "target": "reference",
+            "kind": "copy"
+          }
+        ],
+        "tools": [
+          {
+            "name": "jq",
+            "kind": "system",
+            "verify": "command -v jq"
+          }
+        ]
+      },
+      "provider_overrides": {
+        "claude": {
+          "model": "opus",
+          "tools": [
+            "Read",
+            "Write",
+            "Edit",
+            "Bash",
+            "Glob",
+            "Grep",
+            "WebSearch",
+            "WebFetch"
+          ],
+          "agent_file": ".claude/agents/performance-media-buyer.md"
+        }
+      },
+      "onboarded_skills": [
+        {
+          "name": "paid-media-audit",
+          "kind": "knowledge",
+          "source_url": "https://github.com/msitarzewski/agency-agents/blob/main/paid-media/paid-media-auditor.md",
+          "local_path": ".squad/skills/performance-media-buyer/paid-media-audit/SKILL.md",
+          "purpose": "Pre-flight an inherited ad account on structure, bidding, budget, targeting, and creative coverage before a single dollar moves.",
+          "approval_mode": "auto",
+          "approved_at": "2026-08-15T08:31:07Z"
+        },
+        {
+          "name": "budget-pacing-review",
+          "kind": "knowledge",
+          "source_url": "https://github.com/msitarzewski/agency-agents/blob/main/paid-media/paid-media-ppc-strategist.md",
+          "local_path": ".squad/skills/performance-media-buyer/budget-pacing-review/SKILL.md",
+          "purpose": "Run the weekly cross-channel pacing and reallocation decision from one table, with a written rule for when spend moves and when it does not.",
+          "approval_mode": "auto",
+          "approved_at": "2026-08-15T08:31:07Z"
+        },
+        {
+          "name": "google-ads-operations",
+          "kind": "execution",
+          "source_url": "https://developers.google.com/google-ads/api/docs/start",
+          "local_path": ".squad/skills/performance-media-buyer/google-ads-operations/SKILL.md",
+          "purpose": "Operate the Google Ads account safely — read current state and change history first, stage every change with its rollback, and verify by reading back.",
+          "approval_mode": "auto",
+          "approved_at": "2026-08-15T08:31:07Z"
+        }
+      ],
+      "created": "2026-08-15T08:31:07Z"
+    },
+    {
+      "id": "creative-strategist",
+      "purpose": "Turn the program's angles into a tested creative system — hypothesis, asset, and organic follow-through all drawn from one shared matrix.",
+      "description": "Use when the squad needs a creative hypothesis, an ad or landing-page brief, a decision about which concept to kill or scale, or the organic content plan that follows the paid winners.",
+      "file_ownership": {
+        "include": [
+          "deliverables/creative/**"
+        ],
+        "exclude": []
+      },
+      "capabilities": [
+        "filesystem.edit",
+        "filesystem.glob",
+        "filesystem.read",
+        "filesystem.search",
+        "filesystem.write",
+        "web.fetch",
+        "web.search"
+      ],
+      "reasoning": {
+        "profile": "deep",
+        "effort": "high"
+      },
+      "active": true,
+      "goal_ref": ".squad/role-goal-creative-strategist.md",
+      "provider_overrides": {
+        "claude": {
+          "model": "opus",
+          "tools": [
+            "Read",
+            "Write",
+            "Edit",
+            "Glob",
+            "Grep",
+            "WebSearch",
+            "WebFetch"
+          ],
+          "agent_file": ".claude/agents/creative-strategist.md"
+        }
+      },
+      "onboarded_skills": [
+        {
+          "name": "hook-matrix",
+          "kind": "knowledge",
+          "source_url": "https://github.com/msitarzewski/agency-agents/blob/main/paid-media/paid-media-creative-strategist.md",
+          "local_path": ".squad/skills/creative-strategist/hook-matrix/SKILL.md",
+          "purpose": "Lay out hook x audience x format as a matrix where every cell is a written hypothesis with a kill or scale criterion attached before it ships.",
+          "approval_mode": "auto",
+          "approved_at": "2026-08-15T08:44:20Z"
+        },
+        {
+          "name": "creative-brief",
+          "kind": "knowledge",
+          "source_url": "https://github.com/msitarzewski/agency-agents/blob/main/marketing/marketing-content-creator.md",
+          "local_path": ".squad/skills/creative-strategist/creative-brief/SKILL.md",
+          "purpose": "Turn one hook-matrix cell into a production brief a designer, editor, or writer can execute without asking a follow-up question.",
+          "approval_mode": "auto",
+          "approved_at": "2026-08-15T08:44:20Z"
+        },
+        {
+          "name": "organic-social-plan",
+          "kind": "knowledge",
+          "source_url": "https://github.com/msitarzewski/agency-agents/blob/main/marketing/marketing-instagram-curator.md",
+          "local_path": ".squad/skills/creative-strategist/organic-social-plan/SKILL.md",
+          "purpose": "Plan the 30-day organic format mix from concepts paid has already validated, so organic tests nothing paid has not paid for first.",
+          "approval_mode": "auto",
+          "approved_at": "2026-08-15T08:44:20Z"
+        }
+      ],
+      "created": "2026-08-15T08:44:20Z"
+    },
+    {
+      "id": "tracking-analyst",
+      "purpose": "Make the numbers trustworthy — one conversion definition, one attribution model, and a weekly reconciliation nobody has to argue with.",
+      "description": "Use when the squad needs conversion tracking verified, a platform-versus-store discrepancy root-caused, an attribution decision settled, or the weekly reconciliation published.",
+      "file_ownership": {
+        "include": [
+          "deliverables/measurement/**"
+        ],
+        "exclude": []
+      },
+      "capabilities": [
+        "filesystem.edit",
+        "filesystem.read",
+        "filesystem.write",
+        "shell.execute",
+        "web.fetch"
+      ],
+      "reasoning": {
+        "profile": "deep",
+        "effort": "xhigh"
+      },
+      "active": true,
+      "goal_ref": ".squad/role-goal-tracking-analyst.md",
+      "provider_overrides": {
+        "claude": {
+          "model": "fable",
+          "tools": [
+            "Read",
+            "Write",
+            "Edit",
+            "Bash",
+            "Glob",
+            "Grep",
+            "WebFetch"
+          ],
+          "agent_file": ".claude/agents/tracking-analyst.md"
+        }
+      },
+      "onboarded_skills": [
+        {
+          "name": "conversion-tracking-audit",
+          "kind": "knowledge",
+          "source_url": "https://github.com/msitarzewski/agency-agents/blob/main/paid-media/paid-media-tracking-specialist.md",
+          "local_path": ".squad/skills/tracking-analyst/conversion-tracking-audit/SKILL.md",
+          "purpose": "Verify every conversion path end to end — event, dedup key, consent state, value — against a stated pass bar before any number is reported.",
+          "approval_mode": "auto",
+          "approved_at": "2026-08-15T08:58:52Z"
+        },
+        {
+          "name": "attribution-reconciliation",
+          "kind": "knowledge",
+          "source_url": "https://github.com/msitarzewski/agency-agents/blob/main/paid-media/paid-media-auditor.md",
+          "local_path": ".squad/skills/tracking-analyst/attribution-reconciliation/SKILL.md",
+          "purpose": "Reconcile platform-reported conversions against the store of record every week and root-cause any gap through change history, not guesswork.",
+          "approval_mode": "auto",
+          "approved_at": "2026-08-15T08:58:52Z"
+        },
+        {
+          "name": "ga4-event-audit-operations",
+          "kind": "execution",
+          "source_url": "https://developers.google.com/analytics/devguides/collection/ga4",
+          "local_path": ".squad/skills/tracking-analyst/ga4-event-audit-operations/SKILL.md",
+          "purpose": "Observe what the site actually sends — data layer through debug view to the platform's own event tool — and prove browser and server events deduplicate.",
+          "approval_mode": "auto",
+          "approved_at": "2026-08-15T08:58:52Z"
+        }
+      ],
+      "created": "2026-08-15T08:58:52Z"
+    },
+    {
+      "id": "lifecycle-organic-marketer",
+      "purpose": "Own the compounding half of the funnel — lifecycle email and SMS plus organic search — so paid is not the only thing holding acquisition cost down.",
+      "description": "Use when the squad needs a lifecycle sequence designed or fixed, a segment definition written, deliverability checked, or an organic search brief that will not cannibalize an existing page.",
+      "file_ownership": {
+        "include": [
+          "deliverables/lifecycle/**"
+        ],
+        "exclude": []
+      },
+      "capabilities": [
+        "filesystem.edit",
+        "filesystem.glob",
+        "filesystem.read",
+        "filesystem.search",
+        "filesystem.write",
+        "web.fetch",
+        "web.search"
+      ],
+      "reasoning": {
+        "profile": "balanced",
+        "effort": "high"
+      },
+      "active": true,
+      "goal_ref": ".squad/role-goal-lifecycle-organic-marketer.md",
+      "provider_overrides": {
+        "claude": {
+          "model": "sonnet",
+          "tools": [
+            "Read",
+            "Write",
+            "Edit",
+            "Glob",
+            "Grep",
+            "WebSearch",
+            "WebFetch"
+          ],
+          "agent_file": ".claude/agents/lifecycle-organic-marketer.md"
+        }
+      },
+      "onboarded_skills": [
+        {
+          "name": "lifecycle-sequence-spec",
+          "kind": "knowledge",
+          "source_url": "https://github.com/msitarzewski/agency-agents/blob/main/marketing/marketing-email-strategist.md",
+          "local_path": ".squad/skills/lifecycle-organic-marketer/lifecycle-sequence-spec/SKILL.md",
+          "purpose": "Specify a lifecycle sequence so it cannot ship without a trigger, a segment definition, exit conditions, and a click-based success bar.",
+          "approval_mode": "auto",
+          "approved_at": "2026-08-15T09:11:36Z"
+        },
+        {
+          "name": "organic-search-brief",
+          "kind": "knowledge",
+          "source_url": "https://github.com/msitarzewski/agency-agents/blob/main/marketing/marketing-seo-specialist.md",
+          "local_path": ".squad/skills/lifecycle-organic-marketer/organic-search-brief/SKILL.md",
+          "purpose": "Run the cannibalization check and cluster-ownership map before proposing any on-page change, so no brief steals a query a live page already owns.",
+          "approval_mode": "auto",
+          "approved_at": "2026-08-15T09:11:36Z"
+        },
+        {
+          "name": "klaviyo-flow-operations",
+          "kind": "execution",
+          "source_url": "https://developers.klaviyo.com/en/reference/api_overview",
+          "local_path": ".squad/skills/lifecycle-organic-marketer/klaviyo-flow-operations/SKILL.md",
+          "purpose": "Inspect and stage changes to running flows and segments without breaking the profiles currently inside them; never trigger a real send.",
+          "approval_mode": "auto",
+          "approved_at": "2026-08-15T09:11:36Z"
+        }
+      ],
+      "created": "2026-08-15T09:11:36Z"
+    }
+  ]
+}

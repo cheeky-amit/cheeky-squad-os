@@ -19,6 +19,7 @@ from cheeky_squad_portability.contracts import (
     CodexOverride,
     Destination,
     ExecutionMode,
+    OnboardedSkill,
     Provider,
     ProviderOverrides,
     ReasoningEffort,
@@ -84,6 +85,32 @@ def test_read_only_and_writing_roles_get_truthful_sandboxes() -> None:
     assert "instructional coordination boundary" in writer["developer_instructions"]
     assert "not mechanically enforced" in writer["developer_instructions"]
     assert "Dispatch it sequentially" in writer["developer_instructions"]
+    assert "Onboarded skills for this role:" in writer["developer_instructions"]
+    assert "citation-formatter (knowledge)" in writer["developer_instructions"]
+    assert "docx-export-cli (execution)" in writer["developer_instructions"]
+    assert "Onboarded skills for this role:" not in reader["developer_instructions"]
+
+
+def test_onboarded_skill_with_no_source_url_attributes_as_original() -> None:
+    manifest, roster = load_contracts()
+    writer = next(role for role in roster.roles if role.id == "report-writer")
+    original_skill = replace(
+        writer,
+        onboarded_skills=(
+            OnboardedSkill(
+                name="in-house-tool",
+                local_path=".squad/skills/report-writer/in-house-tool/SKILL.md",
+                purpose="A skill authored fresh for this squad",
+                approval_mode="auto",
+            ),
+        ),
+    )
+    solo = replace(roster, roles=(original_skill,))
+
+    content = next(iter(compile_codex_agents(manifest, solo).values())).decode("utf-8")
+
+    assert "in-house-tool (knowledge)" in content
+    assert "(source: original)" in content
 
 
 def test_codex_override_maps_model_effort_and_safe_sandbox() -> None:
@@ -435,8 +462,14 @@ def test_namespace_encoding_is_injective_for_dots_and_hyphens() -> None:
 def test_legacy_roster_compiles_identically_for_codex() -> None:
     manifest, roster = load_contracts()
     legacy = json.loads((PORTABLE_FIXTURES / "legacy-roster.json").read_text(encoding="utf-8"))
+    # roster-v2.json carries a v2-only onboarded_skills entry that a legacy
+    # roster has no way to express; strip it before comparing compiled output.
+    portable_only = replace(
+        roster,
+        roles=tuple(replace(role, onboarded_skills=()) for role in roster.roles),
+    )
 
-    assert compile_codex_agents(manifest, legacy) == compile_codex_agents(manifest, roster)
+    assert compile_codex_agents(manifest, legacy) == compile_codex_agents(manifest, portable_only)
 
 
 def test_generated_codex_artifacts_never_embed_environment_values() -> None:

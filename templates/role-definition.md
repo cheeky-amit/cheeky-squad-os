@@ -20,6 +20,14 @@
 #   {{tools_rationale}}   — short paragraph explaining why these specific tools
 #   {{workspace_block}}   — the "Your workspace (sandbox)" section if the role has
 #                           an `environment` block, OR omitted entirely if not
+#   {{onboarded_skills_block}} — the "Onboarded skills" section listing this role's
+#                           researched/adapted external skills (name, kind:
+#                           knowledge|execution, absolute path to its SKILL.md,
+#                           purpose, Source attribution) plus the standing
+#                           step-further check (hard rule #11 — "could one more
+#                           research step find a better way?"), OR omitted entirely
+#                           if the role has no `onboarded_skills` entries — same
+#                           omission contract as {{workspace_block}} above.
 #   {{plan_block}}        — the "Step 0 — publish your engagement record"
 #                           section (hard rule #11): the standing instruction to
 #                           publish .squad/role-plan-<name>.md BEFORE the role's
@@ -73,6 +81,7 @@ You own these paths. Inside scope, the `PermissionRequest` hook auto-approves yo
 If you need to touch a path outside this scope and the user denies it, do not retry. Surface the friction back to the user — your scope may be wrong, or another role should own that path.
 
 {{workspace_block}}
+{{onboarded_skills_block}}
 ## Your tools
 
 You have access to: `{{tools}}`.

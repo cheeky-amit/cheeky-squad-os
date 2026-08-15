@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
-from dataclasses import FrozenInstanceError
+from dataclasses import FrozenInstanceError, replace
 from pathlib import Path
 
 import pytest
@@ -10,9 +10,11 @@ from jsonschema.validators import validator_for
 from referencing import Registry, Resource
 
 from cheeky_squad_portability import (
+    MAX_ACTIVE_ROLES,
     ContractError,
     Destination,
     EnvironmentContext,
+    OnboardedSkill,
     Roster,
     SquadManifest,
     build_export_plan,
@@ -55,7 +57,15 @@ def test_legacy_migration_is_pure_and_matches_golden() -> None:
     migrated = migrate_legacy_roster(legacy)
 
     assert legacy == original
-    assert migrated.to_dict() == load_json(FIXTURES / "roster-v2.json")
+    # roster-v2.json carries one v2-only field (onboarded_skills on report-writer)
+    # that the legacy schema has no way to express, so migration can never
+    # produce it; everything else must still match the canonical fixture exactly.
+    golden = load_json(FIXTURES / "roster-v2.json")
+    assert isinstance(golden, dict)
+    golden_roles = golden["roles"]
+    assert isinstance(golden_roles, list) and isinstance(golden_roles[1], dict)
+    golden_roles[1].pop("onboarded_skills")
+    assert migrated.to_dict() == golden
     assert load_roster(migrated.to_dict()) == migrated
 
 
@@ -332,3 +342,145 @@ def test_claude_override_rejects_unknown_isolation() -> None:
 
     with pytest.raises(ContractError, match="isolation must be worktree"):
         Roster.from_dict(raw)
+
+
+def test_onboarded_skill_round_trips_from_the_canonical_fixture() -> None:
+    roster = Roster.from_dict(load_json(FIXTURES / "roster-v2.json"))
+
+    writer = next(role for role in roster.roles if role.id == "report-writer")
+    assert writer.onboarded_skills == (
+        OnboardedSkill(
+            name="citation-formatter",
+            local_path=".squad/skills/report-writer/citation-formatter/SKILL.md",
+            purpose="Format citations consistently in the final report",
+            approval_mode="user",
+            kind="knowledge",
+            source_url="https://github.com/anthropics/skills",
+            approved_at="2026-08-08T00:00:03Z",
+        ),
+        OnboardedSkill(
+            name="docx-export-cli",
+            local_path=".squad/skills/report-writer/docx-export-cli/SKILL.md",
+            purpose="Operate the export CLI to convert the markdown report to signed-off DOCX",
+            approval_mode="auto",
+            kind="execution",
+            source_url="https://github.com/addyosmani/agent-skills",
+        ),
+    )
+    reader = next(role for role in roster.roles if role.id == "evidence-reader")
+    assert reader.onboarded_skills == ()
+    assert "onboarded_skills" not in reader.to_dict()
+
+
+def test_onboarded_skill_defaults_kind_to_knowledge_and_serializes_it_always() -> None:
+    skill = OnboardedSkill(
+        name="original-skill",
+        local_path=".squad/skills/report-writer/original-skill/SKILL.md",
+        purpose="An original skill authored for this squad",
+        approval_mode="auto",
+    )
+
+    assert skill.kind == "knowledge"
+    assert skill.to_dict() == {
+        "name": "original-skill",
+        "local_path": ".squad/skills/report-writer/original-skill/SKILL.md",
+        "purpose": "An original skill authored for this squad",
+        "approval_mode": "auto",
+        "kind": "knowledge",
+    }
+
+
+def test_onboarded_skill_from_dict_defaults_kind_for_backward_compatibility() -> None:
+    skill = OnboardedSkill.from_dict(
+        {
+            "name": "original-skill",
+            "local_path": ".squad/skills/report-writer/original-skill/SKILL.md",
+            "purpose": "An original skill authored for this squad",
+            "approval_mode": "auto",
+        },
+        "onboarded_skills[0]",
+    )
+
+    assert skill.kind == "knowledge"
+
+
+def test_onboarded_skill_rejects_bad_kind() -> None:
+    with pytest.raises(ContractError, match="kind must be knowledge or execution"):
+        OnboardedSkill(
+            name="a-skill",
+            local_path=".squad/skills/role/skill/SKILL.md",
+            purpose="purpose",
+            approval_mode="user",
+            kind="logic",
+        )
+
+
+def test_onboarded_skill_rejects_bad_name_and_approval_mode() -> None:
+    with pytest.raises(ContractError, match="lowercase kebab-case"):
+        OnboardedSkill(
+            name="Not_Kebab",
+            local_path=".squad/skills/role/skill/SKILL.md",
+            purpose="purpose",
+            approval_mode="user",
+        )
+    with pytest.raises(ContractError, match="approval_mode must be user or auto"):
+        OnboardedSkill(
+            name="a-skill",
+            local_path=".squad/skills/role/skill/SKILL.md",
+            purpose="purpose",
+            approval_mode="maybe",
+        )
+
+
+def test_role_rejects_duplicate_onboarded_skill_names() -> None:
+    raw = load_json(FIXTURES / "roster-v2.json")
+    assert isinstance(raw, dict)
+    roles = raw["roles"]
+    assert isinstance(roles, list) and isinstance(roles[1], dict)
+    onboarded = roles[1]["onboarded_skills"]
+    assert isinstance(onboarded, list) and isinstance(onboarded[0], dict)
+    onboarded.append(dict(onboarded[0]))
+
+    with pytest.raises(ContractError, match="onboarded_skills must have unique names"):
+        Roster.from_dict(raw)
+
+
+def test_role_rejects_unknown_onboarded_skill_field() -> None:
+    raw = load_json(FIXTURES / "roster-v2.json")
+    assert isinstance(raw, dict)
+    roles = raw["roles"]
+    assert isinstance(roles, list) and isinstance(roles[1], dict)
+    onboarded = roles[1]["onboarded_skills"]
+    assert isinstance(onboarded, list) and isinstance(onboarded[0], dict)
+    onboarded[0]["unexpected"] = "nope"
+
+    with pytest.raises(ContractError, match="unknown fields"):
+        Roster.from_dict(raw)
+
+
+def test_legacy_migration_yields_no_onboarded_skills_key() -> None:
+    legacy = load_json(FIXTURES / "legacy-roster.json")
+    migrated = migrate_legacy_roster(legacy)
+
+    assert all(role.onboarded_skills == () for role in migrated.roles)
+    assert all("onboarded_skills" not in role.to_dict() for role in migrated.roles)
+
+
+def test_max_active_roles_and_active_roles_helper_grandfather_over_cap_rosters() -> None:
+    assert MAX_ACTIVE_ROLES == 5
+
+    roster = Roster.from_dict(load_json(FIXTURES / "roster-v2.json"))
+    assert roster.active_roles() == tuple(role for role in roster.roles if role.active)
+
+    template_role = roster.roles[0]
+    over_cap_roles = tuple(
+        replace(template_role, id=f"{template_role.id}-{index}", onboarded_skills=())
+        for index in range(MAX_ACTIVE_ROLES + 1)
+    )
+    over_cap = Roster(
+        squad_goal_ref=roster.squad_goal_ref,
+        execution_mode=roster.execution_mode,
+        roles=over_cap_roles,
+    )
+
+    assert len(over_cap.active_roles()) == MAX_ACTIVE_ROLES + 1

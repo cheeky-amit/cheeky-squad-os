@@ -166,7 +166,7 @@ validate_v2_roster() {
     def strings: type == "array" and all(type == "string");
     def role_ok:
       type == "object" and
-      ((keys_unsorted - ["id","purpose","description","file_ownership","capabilities","reasoning","active","goal_ref","created","environment","provider_overrides"]) | length == 0) and
+      ((keys_unsorted - ["id","purpose","description","file_ownership","capabilities","reasoning","active","goal_ref","created","environment","provider_overrides","onboarded_skills"]) | length == 0) and
       (has("id") and has("purpose") and has("description") and has("file_ownership") and has("capabilities") and has("reasoning") and has("active")) and
       (.id | type == "string" and test("^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$")) and
       (.purpose | type == "string" and length > 0) and

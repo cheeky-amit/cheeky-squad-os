@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "cheeky-squad-portability"
-version = "1.1.0"
+version = "1.2.0"
 description = "Provider-neutral portability contracts for cheeky-squad-os"
 readme = "README.md"
 requires-python = ">=3.11"

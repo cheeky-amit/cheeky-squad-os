@@ -24,6 +24,12 @@ _SEMVER_PATTERN = re.compile(
     r"(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$"
 )
 
+MAX_ACTIVE_ROLES = 5
+"""A squad holds at most this many active roles. Enforced at decomposition
+(squad-onboard), registration (squad-role preflight), and the roster write
+(squad-roster Add). Over-cap rosters are grandfathered: this module never
+hard-fails validation on an over-cap roster, so a legacy squad keeps working."""
+
 
 class ExecutionMode(StrEnum):
     """How often a squad executes; independent from where it is exported."""
@@ -398,6 +404,73 @@ class EnvironmentTool:
 
 
 @dataclass(frozen=True)
+class OnboardedSkill:
+    """An external, open-source skill a role researched, adapted, and had approved."""
+
+    name: str
+    local_path: str
+    purpose: str
+    approval_mode: str
+    kind: str = "knowledge"
+    source_url: str | None = None
+    approved_at: str | None = None
+
+    def __post_init__(self) -> None:
+        if not _ROLE_ID_PATTERN.fullmatch(self.name):
+            raise ContractError("onboarded_skills.name must be lowercase kebab-case")
+        _relative_path(self.local_path, "onboarded_skills.local_path", allow_glob=False)
+        _string(self.purpose, "onboarded_skills.purpose")
+        if self.approval_mode not in {"user", "auto"}:
+            raise ContractError("onboarded_skills.approval_mode must be user or auto")
+        if self.kind not in {"knowledge", "execution"}:
+            raise ContractError("onboarded_skills.kind must be knowledge or execution")
+        if self.source_url is not None:
+            _string(self.source_url, "onboarded_skills.source_url")
+        if self.approved_at is not None:
+            _string(self.approved_at, "onboarded_skills.approved_at")
+
+    @classmethod
+    def from_dict(cls, value: object, path: str) -> OnboardedSkill:
+        data = _object(value, path)
+        _reject_unknown(
+            data,
+            {
+                "name",
+                "source_url",
+                "local_path",
+                "purpose",
+                "approval_mode",
+                "kind",
+                "approved_at",
+            },
+            path,
+        )
+        return cls(
+            name=_string(data.get("name"), f"{path}.name"),
+            local_path=_string(data.get("local_path"), f"{path}.local_path"),
+            purpose=_string(data.get("purpose"), f"{path}.purpose"),
+            approval_mode=_string(data.get("approval_mode"), f"{path}.approval_mode"),
+            kind=_string(data.get("kind", "knowledge"), f"{path}.kind"),
+            source_url=_optional_string(data.get("source_url"), f"{path}.source_url"),
+            approved_at=_optional_string(data.get("approved_at"), f"{path}.approved_at"),
+        )
+
+    def to_dict(self) -> dict[str, JsonValue]:
+        result: dict[str, JsonValue] = {
+            "name": self.name,
+            "local_path": self.local_path,
+            "purpose": self.purpose,
+            "approval_mode": self.approval_mode,
+            "kind": self.kind,
+        }
+        if self.source_url is not None:
+            result["source_url"] = self.source_url
+        if self.approved_at is not None:
+            result["approved_at"] = self.approved_at
+        return result
+
+
+@dataclass(frozen=True)
 class Environment:
     workspace: str
     directories: tuple[str, ...] = ()
@@ -599,6 +672,7 @@ class Role:
     goal_ref: str | None = None
     environment: Environment | None = None
     provider_overrides: ProviderOverrides | None = None
+    onboarded_skills: tuple[OnboardedSkill, ...] = ()
     created: str | None = None
 
     def __post_init__(self) -> None:
@@ -615,6 +689,9 @@ class Role:
                 raise ContractError(f"role.capabilities[{index}] is not a portable capability name")
         if self.goal_ref is not None:
             _relative_path(self.goal_ref, "role.goal_ref")
+        skill_names = [skill.name for skill in self.onboarded_skills]
+        if len(skill_names) != len(set(skill_names)):
+            raise ContractError("role.onboarded_skills must have unique names")
         if self.created is not None:
             _string(self.created, "role.created")
 
@@ -634,6 +711,7 @@ class Role:
                 "goal_ref",
                 "environment",
                 "provider_overrides",
+                "onboarded_skills",
                 "created",
             },
             path,
@@ -661,6 +739,12 @@ class Role:
                     data.get("provider_overrides"), f"{path}.provider_overrides"
                 )
             ),
+            onboarded_skills=tuple(
+                OnboardedSkill.from_dict(item, f"{path}.onboarded_skills[{index}]")
+                for index, item in enumerate(
+                    _array(data.get("onboarded_skills", []), f"{path}.onboarded_skills")
+                )
+            ),
             created=_optional_string(data.get("created"), f"{path}.created"),
         )
 
@@ -680,6 +764,8 @@ class Role:
             result["environment"] = self.environment.to_dict()
         if self.provider_overrides is not None:
             result["provider_overrides"] = self.provider_overrides.to_dict()
+        if self.onboarded_skills:
+            result["onboarded_skills"] = [skill.to_dict() for skill in self.onboarded_skills]
         if self.created is not None:
             result["created"] = self.created
         return result
@@ -700,6 +786,16 @@ class Roster:
             raise ContractError("roster.roles must have unique ids")
         if self.created is not None:
             _string(self.created, "roster.created")
+
+    def active_roles(self) -> tuple[Role, ...]:
+        """Return the roster's active roles, in declared order.
+
+        Over-cap rosters (more than MAX_ACTIVE_ROLES active roles) are not
+        rejected here — they are grandfathered. Callers that enforce the cap
+        on new additions do so at the write boundary, not on load.
+        """
+
+        return tuple(role for role in self.roles if role.active)
 
     @classmethod
     def from_dict(cls, value: object) -> Roster:
