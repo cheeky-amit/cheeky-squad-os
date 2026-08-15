@@ -21,10 +21,13 @@
 #   {{workspace_block}}   — the "Your workspace (sandbox)" section if the role has
 #                           an `environment` block, OR omitted entirely if not
 #   {{onboarded_skills_block}} — the "Onboarded skills" section listing this role's
-#                           researched/adapted external skills (name, absolute path to
-#                           its SKILL.md, purpose), OR omitted entirely if the role has
-#                           no `onboarded_skills` entries — same omission contract as
-#                           {{workspace_block}} above.
+#                           researched/adapted external skills (name, kind:
+#                           knowledge|execution, absolute path to its SKILL.md,
+#                           purpose, Source attribution) plus the standing
+#                           step-further check (hard rule #11 — "could one more
+#                           research step find a better way?"), OR omitted entirely
+#                           if the role has no `onboarded_skills` entries — same
+#                           omission contract as {{workspace_block}} above.
 #   {{plan_block}}        — the "Step 0 — publish your engagement record"
 #                           section (hard rule #11): the standing instruction to
 #                           publish .squad/role-plan-<name>.md BEFORE the role's

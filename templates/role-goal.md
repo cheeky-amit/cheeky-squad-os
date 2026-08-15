@@ -92,3 +92,21 @@ created: <ISO-8601>
 
 - `needs:` <precondition>
 - `stop:` <mid-run bound>
+
+## Declared capability gaps
+
+<!--
+  Only present when Q8's execution-gap check fired: this role's purpose
+  includes operating a platform, and no execution skill was onboarded for
+  it. Omit this whole heading otherwise — same absence contract as every
+  other conditional section in this plugin.
+
+  One bullet per gap, same shape as squad-role's printed refusal line.
+  Each gap's proposed fix travels through squad-env's existing
+  contain/propose channel (global_needs) — never a second channel.
+  Cleared by squad-roster's Refresh-skills operation when a matching
+  execution skill is later onboarded.
+-->
+
+- <platform/tool this role can't yet operate — what's missing, and what was
+  proposed via squad-env's global_needs to close it>

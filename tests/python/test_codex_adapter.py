@@ -86,7 +86,8 @@ def test_read_only_and_writing_roles_get_truthful_sandboxes() -> None:
     assert "not mechanically enforced" in writer["developer_instructions"]
     assert "Dispatch it sequentially" in writer["developer_instructions"]
     assert "Onboarded skills for this role:" in writer["developer_instructions"]
-    assert "citation-formatter" in writer["developer_instructions"]
+    assert "citation-formatter (knowledge)" in writer["developer_instructions"]
+    assert "docx-export-cli (execution)" in writer["developer_instructions"]
     assert "Onboarded skills for this role:" not in reader["developer_instructions"]
 
 
@@ -108,7 +109,7 @@ def test_onboarded_skill_with_no_source_url_attributes_as_original() -> None:
 
     content = next(iter(compile_codex_agents(manifest, solo).values())).decode("utf-8")
 
-    assert "in-house-tool" in content
+    assert "in-house-tool (knowledge)" in content
     assert "(source: original)" in content
 
 

@@ -354,8 +354,17 @@ def test_onboarded_skill_round_trips_from_the_canonical_fixture() -> None:
             local_path=".squad/skills/report-writer/citation-formatter/SKILL.md",
             purpose="Format citations consistently in the final report",
             approval_mode="user",
+            kind="knowledge",
             source_url="https://github.com/anthropics/skills",
             approved_at="2026-08-08T00:00:03Z",
+        ),
+        OnboardedSkill(
+            name="docx-export-cli",
+            local_path=".squad/skills/report-writer/docx-export-cli/SKILL.md",
+            purpose="Operate the export CLI to convert the markdown report to signed-off DOCX",
+            approval_mode="auto",
+            kind="execution",
+            source_url="https://github.com/addyosmani/agent-skills",
         ),
     )
     reader = next(role for role in roster.roles if role.id == "evidence-reader")
@@ -363,7 +372,7 @@ def test_onboarded_skill_round_trips_from_the_canonical_fixture() -> None:
     assert "onboarded_skills" not in reader.to_dict()
 
 
-def test_onboarded_skill_omits_optional_fields_when_absent() -> None:
+def test_onboarded_skill_defaults_kind_to_knowledge_and_serializes_it_always() -> None:
     skill = OnboardedSkill(
         name="original-skill",
         local_path=".squad/skills/report-writer/original-skill/SKILL.md",
@@ -371,12 +380,39 @@ def test_onboarded_skill_omits_optional_fields_when_absent() -> None:
         approval_mode="auto",
     )
 
+    assert skill.kind == "knowledge"
     assert skill.to_dict() == {
         "name": "original-skill",
         "local_path": ".squad/skills/report-writer/original-skill/SKILL.md",
         "purpose": "An original skill authored for this squad",
         "approval_mode": "auto",
+        "kind": "knowledge",
     }
+
+
+def test_onboarded_skill_from_dict_defaults_kind_for_backward_compatibility() -> None:
+    skill = OnboardedSkill.from_dict(
+        {
+            "name": "original-skill",
+            "local_path": ".squad/skills/report-writer/original-skill/SKILL.md",
+            "purpose": "An original skill authored for this squad",
+            "approval_mode": "auto",
+        },
+        "onboarded_skills[0]",
+    )
+
+    assert skill.kind == "knowledge"
+
+
+def test_onboarded_skill_rejects_bad_kind() -> None:
+    with pytest.raises(ContractError, match="kind must be knowledge or execution"):
+        OnboardedSkill(
+            name="a-skill",
+            local_path=".squad/skills/role/skill/SKILL.md",
+            purpose="purpose",
+            approval_mode="user",
+            kind="logic",
+        )
 
 
 def test_onboarded_skill_rejects_bad_name_and_approval_mode() -> None:

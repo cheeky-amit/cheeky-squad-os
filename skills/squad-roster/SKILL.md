@@ -138,7 +138,7 @@ Called by `squad-role` after role generation:
 1. Canonicalize the roster in memory.
 2. Refuse an ID collision.
 3. **Refuse the 5-seat cap (hard rule #16).** Count active roles (`active: true`); if the new role would make the count 6, refuse the write — same message shape as the ID-collision refusal: name the current active roster and point at consolidating two roles or deactivating one first. Deactivated roles never count. This is the last line of defense — `squad-onboard`'s decomposition cap and `squad-role`'s preflight should have already caught this, but a direct roster write bypasses both.
-4. Validate required neutral fields, optional provider overrides, and — v2 only — each `onboarded_skills` entry (`name`, `local_path`, `purpose`, `approval_mode` required; `source_url`, `approved_at` optional; `additionalProperties: false`).
+4. Validate required neutral fields, optional provider overrides, and — v2 only — each `onboarded_skills` entry (`name`, `kind` (`knowledge` | `execution`), `local_path`, `purpose`, `approval_mode` required; `source_url`, `approved_at` optional; `additionalProperties: false`). **Provenance & limits enforcement:** for every `onboarded_skills` entry, read the file at `local_path` and refuse the write if it does not contain a `## Provenance & limits` heading — same failure shape as an ID collision or a missing required field. An onboarded skill without that block is not onboarded (see `squad-role`'s Q8), and this is the last line of defense for that contract, the same role this step already plays for the 5-seat cap.
 5. For a v2 roster, append the role and pretty-print v2 JSON. For a legacy roster, preserve
    its legacy shape using the reverse projection above. If the new role has exclusions,
    Codex overrides, `onboarded_skills`, or any other v2-only semantics that fail the
@@ -158,6 +158,20 @@ unreferenced). Then ask whether to soft-deactivate (`active: false`) or hard-del
 roster entry and referenced generated role/goal artifacts. Hard-delete requires exact
 confirmation `yes, delete`. Delete only paths the selected role entry owns; ambiguous or
 missing ownership cancels deletion.
+
+### Refresh skills
+
+Re-runs a role's Q8 research against its **existing** onboarded set — an audit-and-upgrade pass, not a fresh onboarding. Worth running: on every iteration of an Evergreen or Multi-use squad's natural cadence (a long-running squad's context goes stale faster than a one-time squad's), and any time a role's `## Declared capability gaps` (see `squad-role`'s execution-gap check) might have closed — a newly connected MCP server or installed CLI can unlock an execution skill that didn't exist at intake.
+
+1. For the named role (or every active role, if asked for the whole squad), re-run Q8's two-dimension research (knowledge + execution) against the role's current purpose and file scope — same curated source list, same research-first rule, same per-dimension "state plainly when nothing turns up."
+2. **Diff** the new research against each existing `onboarded_skills` entry and against the role's `## Declared capability gaps`:
+   - **Better source found** — a newer or more authoritative source for the same capability.
+   - **Source updated** — the same source URL, materially changed content since `approved_at`.
+   - **Limit resolved** — a `## Provenance & limits` "Known limits" line no longer applies.
+   - **Gap closed** — a declared capability gap now has a candidate execution skill where none existed before.
+3. **Propose upgrades** through the exact same approval gate Q8 uses (default `approval_mode: user`; auto-approve only through the same two channels — a `.squad/partner.md` standing constraint, or `.squad/goal.md`'s `skill_onboarding: auto`). Nothing upgrades silently, regardless of how the original entry was approved.
+4. On approval: update the `onboarded_skills` entry (new `source_url`, `local_path` if the file moved), rewrite the local SKILL.md file (its `## Provenance & limits` block gets a fresh `Intake date` and `Sources searched`), and bump `approved_at` to the refresh's timestamp. Regenerate `roster.md`. If a declared gap closed, remove the corresponding bullet from the role's `## Declared capability gaps` and note the resolution.
+5. Report what changed, role by role — upgraded / unchanged / gap-closed — never silent when nothing changed either (e.g. *"`compliance-checker`: research found nothing newer — 2 skills unchanged."*).
 
 ### Human view
 
@@ -231,8 +245,9 @@ follow-up in `docs/ROADMAP.md`.
 - reasoning profile is `fast`, `balanced`, `deep`, or `inherit`; effort is `inherit`,
   `low`, `medium`, `high`, `xhigh`, or `max`.
 - `active` is Boolean; environment/provider override shapes match schema.
-- each `onboarded_skills` entry has `name`, `local_path`, `purpose`, `approval_mode`;
-  `source_url`/`approved_at` are optional; no unknown fields.
+- each `onboarded_skills` entry has `name`, `kind` (`knowledge` | `execution`),
+  `local_path`, `purpose`, `approval_mode`; `source_url`/`approved_at` are optional; no
+  unknown fields; the file at `local_path` contains a `## Provenance & limits` heading.
 - JSON is well formed and has no unknown fields.
 
 If validation fails, do not write. Name the exact boundary failure.

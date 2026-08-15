@@ -108,3 +108,10 @@ query changes — the map is the thing that keeps the check cheap next time.
 - The primary query has exactly one owning page after this brief ships.
 - The "Not this page's job" section names the adjacent queries.
 - Every claim in the outline has its evidence named.
+
+## Provenance & limits
+
+Sources searched: anthropics/skills (no match), addyosmani/agent-skills (no match), msitarzewski/agency-agents (marketing-seo-specialist.md — this skill; its cannibalization-prevention rules preserved literally, its technical-crawl and link-authority sections dropped as work this squad does not own), obra/superpowers (no match), web search for content-brief templates (abundant, low signal). Execution dimension: no search-console API research was run — the check is performed through the console UI by a human at intake.
+Intake date: 2026-08-15
+Known limits: Assumes 90 days of search-console data exists; on a new site the check cannot run at all and the brief is marked unverified, which is honest but not useful. Covers content and cluster decisions only — nothing on crawl health, page speed, structured data, or link acquisition, any of which can be the actual reason a page does not rank. One-language, one-market assumption throughout.
+Assumed superseded: this skill reflects what research found at intake, not the best way that exists. Re-run `squad-roster`'s Refresh-skills operation periodically rather than treating this as final.

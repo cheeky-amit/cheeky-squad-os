@@ -99,3 +99,10 @@ does not plan organic distribution; see
 - Every copy field is exact text within its limit.
 - The continuity line quotes an actual line on the actual page.
 - Every reviewer has a name and a date.
+
+## Provenance & limits
+
+Sources searched: anthropics/skills (no match), addyosmani/agent-skills (no match), msitarzewski/agency-agents (marketing-content-creator.md — this skill, narrowed hard to production specification), obra/superpowers (no match), web search for creative brief templates (many; all either agency-branded or too generic to adapt). Execution dimension: not applicable to this seat.
+Intake date: 2026-08-15
+Known limits: Names no platform's current character limits or aspect ratios — they change, and a stale spec in a brief template produces confidently wrong assets. Written for paid social and search creative; a brief for long-form video or print would need different fields. Assumes a reviewer exists and is named; it has nothing to say about what to do when approval simply does not come.
+Assumed superseded: this skill reflects what research found at intake, not the best way that exists. Re-run `squad-roster`'s Refresh-skills operation periodically rather than treating this as final.

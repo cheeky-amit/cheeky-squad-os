@@ -101,3 +101,10 @@ The client brief quotes that list, not the body.
 - Every section above has been run, or is explicitly marked not-applicable with a reason.
 - Every finding has severity, stake, first action, and owner.
 - The first five moves are ordered and owned.
+
+## Provenance & limits
+
+Sources searched: anthropics/skills (no match), addyosmani/agent-skills (no match), msitarzewski/agency-agents (paid-media-auditor.md — this skill, structural half only; its measurement half went to tracking-analyst), obra/superpowers (no match), web search for paid-media audit checklists (several vendor lead-magnet checklists, none attributable). Execution dimension for this seat was researched separately and produced google-ads-operations.
+Intake date: 2026-08-15
+Known limits: Platform-neutral by design, which means it names no specific setting or report — a practitioner still has to know where to look. Says nothing about tracking, deliberately (see the scope boundary). The severity scale has three levels because more gets argued about rather than fixed; an account large enough to need finer triage would outgrow it.
+Assumed superseded: this skill reflects what research found at intake, not the best way that exists. Re-run `squad-roster`'s Refresh-skills operation periodically rather than treating this as final.

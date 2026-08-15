@@ -411,6 +411,7 @@ class OnboardedSkill:
     local_path: str
     purpose: str
     approval_mode: str
+    kind: str = "knowledge"
     source_url: str | None = None
     approved_at: str | None = None
 
@@ -421,6 +422,8 @@ class OnboardedSkill:
         _string(self.purpose, "onboarded_skills.purpose")
         if self.approval_mode not in {"user", "auto"}:
             raise ContractError("onboarded_skills.approval_mode must be user or auto")
+        if self.kind not in {"knowledge", "execution"}:
+            raise ContractError("onboarded_skills.kind must be knowledge or execution")
         if self.source_url is not None:
             _string(self.source_url, "onboarded_skills.source_url")
         if self.approved_at is not None:
@@ -431,7 +434,15 @@ class OnboardedSkill:
         data = _object(value, path)
         _reject_unknown(
             data,
-            {"name", "source_url", "local_path", "purpose", "approval_mode", "approved_at"},
+            {
+                "name",
+                "source_url",
+                "local_path",
+                "purpose",
+                "approval_mode",
+                "kind",
+                "approved_at",
+            },
             path,
         )
         return cls(
@@ -439,6 +450,7 @@ class OnboardedSkill:
             local_path=_string(data.get("local_path"), f"{path}.local_path"),
             purpose=_string(data.get("purpose"), f"{path}.purpose"),
             approval_mode=_string(data.get("approval_mode"), f"{path}.approval_mode"),
+            kind=_string(data.get("kind", "knowledge"), f"{path}.kind"),
             source_url=_optional_string(data.get("source_url"), f"{path}.source_url"),
             approved_at=_optional_string(data.get("approved_at"), f"{path}.approved_at"),
         )
@@ -449,6 +461,7 @@ class OnboardedSkill:
             "local_path": self.local_path,
             "purpose": self.purpose,
             "approval_mode": self.approval_mode,
+            "kind": self.kind,
         }
         if self.source_url is not None:
             result["source_url"] = self.source_url

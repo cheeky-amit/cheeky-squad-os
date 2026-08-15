@@ -92,3 +92,10 @@ from a cell id and never restates the hypothesis.
 - Every planned cell has a hypothesis, a primary signal, both criteria, and a read date.
 - No two live cells differ by more than one variable within an audience.
 - Every killed and scaled cell has a date and stays in the file.
+
+## Provenance & limits
+
+Sources searched: anthropics/skills (no match), addyosmani/agent-skills (no match), msitarzewski/agency-agents (paid-media-creative-strategist.md — this skill, adapted from its creative-testing and RSA-architecture frameworks), obra/superpowers (no match), web search for creative-testing matrices (agency blog posts, no attributable artifact). Execution dimension: not searched for this seat — it briefs, and the media seat is what touches the ad platforms.
+Intake date: 2026-08-15
+Known limits: Contains no statistical significance guidance, on purpose: at realistic flight volumes most creative tests never reach it, and a threshold nobody can hit is worse than a stated read date. The 'shallowest causal signal' rule is a heuristic, not a measurement method. Says nothing about creative production quality, only about what gets tested and how it is judged.
+Assumed superseded: this skill reflects what research found at intake, not the best way that exists. Re-run `squad-roster`'s Refresh-skills operation periodically rather than treating this as final.

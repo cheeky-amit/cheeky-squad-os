@@ -89,3 +89,10 @@ its owner, and the one-line verdict the client brief quotes.
 - Every row above 3% has an open root cause with an owner and a category from the four
   above.
 - The verdict line exists and is quotable without further explanation.
+
+## Provenance & limits
+
+Sources searched: anthropics/skills (no match), addyosmani/agent-skills (no match), msitarzewski/agency-agents (paid-media-auditor.md — this skill, measurement and change-history-forensics half; its structural half went to performance-media-buyer), obra/superpowers (no match), web search for reconciliation procedures (finance-oriented material, adapted in spirit only). Execution dimension: see ga4-event-audit-operations for observing an event, and google-ads-operations for reading platform change history.
+Intake date: 2026-08-15
+Known limits: Single-basis reconciliation only: it settles arguments by declaring an authority rather than by modelling. It explicitly cannot tell you what was incremental — a channel can reconcile perfectly and still be claiming credit for demand that existed anyway, and nothing in this file addresses that. No media-mix or geo-holdout method. The variance grades (3% / 10%) are conventions, not derived thresholds.
+Assumed superseded: this skill reflects what research found at intake, not the best way that exists. Re-run `squad-roster`'s Refresh-skills operation periodically rather than treating this as final.

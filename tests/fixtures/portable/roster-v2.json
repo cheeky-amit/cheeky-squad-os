@@ -48,11 +48,20 @@
       "onboarded_skills": [
         {
           "name": "citation-formatter",
-          "source_url": "https://github.com/anthropics/skills",
           "local_path": ".squad/skills/report-writer/citation-formatter/SKILL.md",
           "purpose": "Format citations consistently in the final report",
           "approval_mode": "user",
+          "kind": "knowledge",
+          "source_url": "https://github.com/anthropics/skills",
           "approved_at": "2026-08-08T00:00:03Z"
+        },
+        {
+          "name": "docx-export-cli",
+          "local_path": ".squad/skills/report-writer/docx-export-cli/SKILL.md",
+          "purpose": "Operate the export CLI to convert the markdown report to signed-off DOCX",
+          "approval_mode": "auto",
+          "kind": "execution",
+          "source_url": "https://github.com/addyosmani/agent-skills"
         }
       ],
       "created": "2026-08-08T00:00:02Z"

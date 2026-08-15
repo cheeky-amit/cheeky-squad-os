@@ -91,6 +91,7 @@
         "local_path": {"$ref": "#/$defs/literalRelativePath"},
         "purpose": {"type": "string", "minLength": 1},
         "approval_mode": {"enum": ["user", "auto"]},
+        "kind": {"enum": ["knowledge", "execution"]},
         "approved_at": {"type": "string", "minLength": 1}
       }
     }

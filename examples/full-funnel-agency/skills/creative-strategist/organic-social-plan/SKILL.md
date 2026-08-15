@@ -90,3 +90,10 @@ raises a normal brief against its cell id.
 - The coherence check has been run and its answers are written down.
 - No slot repeats a killed concept.
 - Every slot has an owner and a lead time.
+
+## Provenance & limits
+
+Sources searched: anthropics/skills (no match), addyosmani/agent-skills (no match), msitarzewski/agency-agents (marketing-instagram-curator.md — this skill, with its core assumption inverted so organic inherits from paid), obra/superpowers (no match), web search for organic content-mix frameworks (generic calendar templates). Execution dimension: no publishing or scheduling API research was run — this squad plans slots and a human publishes.
+Intake date: 2026-08-15
+Known limits: The roughly-half / roughly-third / remainder mix is a starting shape, not a validated ratio. 'Organic inherits from paid' is a deliberate constraint that suits a squad already testing at volume with real money; a brand without paid spend should not use this skill as written. Platform-neutral, so it names no format's current specs or algorithmic behavior.
+Assumed superseded: this skill reflects what research found at intake, not the best way that exists. Re-run `squad-roster`'s Refresh-skills operation periodically rather than treating this as final.

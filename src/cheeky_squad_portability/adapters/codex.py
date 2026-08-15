@@ -296,7 +296,8 @@ def _onboarded_skills_instructions(role: Role) -> list[str]:
     for skill in role.onboarded_skills:
         attribution = skill.source_url if skill.source_url is not None else "original"
         lines.append(
-            f"- {skill.name}: {skill.local_path} — {skill.purpose} (source: {attribution})"
+            f"- {skill.name} ({skill.kind}): {skill.local_path} — {skill.purpose} "
+            f"(source: {attribution})"
         )
     return lines
 

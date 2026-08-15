@@ -42,6 +42,31 @@ disciplines, one release.
   in their generated agent files. This feature mints no new hard rule — same
   reasoning the research verb already established.
 
+- **Execution skills, declared capability gaps, provenance, and refresh.** Builder
+  feedback closed a gap in the above: a role can research great frameworks
+  (`kind: knowledge`) and still be unable to actually operate its platform. Q8 now
+  runs two research dimensions, always both — knowledge (frameworks/logic) and
+  execution (official APIs, MCP servers, CLIs, bulk/export mechanics, platform docs) —
+  and labels every proposed skill `(knowledge)`/`(execution)`. A role whose purpose
+  names a platform it must operate can no longer close Q8 with zero execution skills
+  silently: either one gets onboarded, or the gap is *declared* — a
+  `## Declared capability gaps` section on the role's role-goal file plus a proposal
+  routed through `squad-env`'s existing `global_needs` contain/propose channel, never a
+  second mechanism. Every onboarded skill now ends with a mandatory
+  `## Provenance & limits` block (sources searched, including no-matches; intake date;
+  known limits; a standing line that a better way is assumed to exist) —
+  `squad-roster`'s Add operation refuses to register a skill whose file lacks it, the
+  same failure shape as an ID collision. A role's spawn prompt and its generated agent
+  file both carry a standing step-further check — *"could one more research step find
+  a better way than my onboarded method?"* — wired into the existing engagement record
+  (hard rule #11), never a new artifact: one cheap step if yes, recorded either way,
+  never a spiral. `squad-roster` gains a **Refresh skills** operation: re-runs a role's
+  Q8 research against its existing onboarded set, diffs it (better source found,
+  source updated, limit resolved, gap closed), and proposes upgrades through the same
+  approval gate as first onboarding — worth running on an Evergreen/Multi-use squad's
+  cadence, or whenever a declared gap might have closed. None of this mints a new hard
+  rule either — same reasoning as the base feature.
+
 - **The squad card.** After every structural change — a goal written, a role added or
   removed, a skill onboarded — `squad-onboard` and `squad-role` now print a compact,
   plain-language summary: the goal in one line, `Seats: N/5`, and one row per role

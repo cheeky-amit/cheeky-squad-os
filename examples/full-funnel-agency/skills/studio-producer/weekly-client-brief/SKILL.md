@@ -86,3 +86,10 @@ states the decision that came out of them.
 - Every decision line names a human and a date.
 - Every number traces to a reconciled source, or is explicitly marked unreconciled.
 - The page fits on one screen.
+
+## Provenance & limits
+
+Sources searched: anthropics/skills (no match), addyosmani/agent-skills (no match), msitarzewski/agency-agents (project-management-studio-producer.md — this skill, adapted from its Strategic Portfolio Review template), obra/superpowers (no match — engineering workflow), web search for agency reporting templates (nothing with a licence clean enough to attribute). Execution dimension: not applicable — this role operates no platform, so no execution search was run.
+Intake date: 2026-08-15
+Known limits: Assumes the reconciliation artifact it quotes already exists; says nothing about producing one. Written for a weekly cadence — a monthly or quarterly client would need different section weighting, not this file with the dates changed. Contains no guidance on presenting to a room, only on writing the page.
+Assumed superseded: this skill reflects what research found at intake, not the best way that exists. Re-run `squad-roster`'s Refresh-skills operation periodically rather than treating this as final.

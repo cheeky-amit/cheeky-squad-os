@@ -77,3 +77,10 @@ does. It tracks only the things that would change the program's shape if they ha
 - Every open row has a trigger, an impact, one owner, and a pre-agreed response.
 - Every row that fired this week appears in this week's client brief.
 - No row has been untouched for more than 14 days.
+
+## Provenance & limits
+
+Sources searched: anthropics/skills (no match), addyosmani/agent-skills (no match), msitarzewski/agency-agents (project-management-studio-producer.md — this skill, adapted from its Risk Management and Contingency section), obra/superpowers (no match), web search for risk-register formats (generic project-management templates, none marketing-specific). Execution dimension: not applicable — no platform to operate.
+Intake date: 2026-08-15
+Known limits: Deliberately excludes channel performance, which is the media seat's surface — that boundary is a judgement call and a program with a different shape might draw it elsewhere. No quantitative scoring (probability x impact); the register is ordered by conversation, not arithmetic, which is a choice a larger program might outgrow.
+Assumed superseded: this skill reflects what research found at intake, not the best way that exists. Re-run `squad-roster`'s Refresh-skills operation periodically rather than treating this as final.

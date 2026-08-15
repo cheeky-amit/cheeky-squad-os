@@ -111,3 +111,10 @@ message reuses a validated paid angle, cite the cell id rather than re-deriving 
 - All five exit conditions are named, including a maximum duration.
 - The success bar is click-based and has a read date.
 - No message contains promotional, discount, or price-led language.
+
+## Provenance & limits
+
+Sources searched: anthropics/skills (no match), addyosmani/agent-skills (no match), msitarzewski/agency-agents (marketing-email-strategist.md — this skill; four of its critical rules carried through intact, framing re-anchored from long-cycle service businesses onto a DTC purchase cycle), obra/superpowers (no match), web search for lifecycle sequence benchmarks (widely varying figures, none specific enough to bind a success bar). Execution dimension for this seat was researched separately and produced klaviyo-flow-operations.
+Intake date: 2026-08-15
+Known limits: Carries no benchmark numbers at all, deliberately — the source's were dated and vertical-specific, and a wrong benchmark in a spec becomes a target nobody should be chasing. Platform-neutral, so it cannot tell you whether your ESP can express a given exit condition. Says nothing about copy craft or template design, which is where most of the actual work lives.
+Assumed superseded: this skill reflects what research found at intake, not the best way that exists. Re-run `squad-roster`'s Refresh-skills operation periodically rather than treating this as final.

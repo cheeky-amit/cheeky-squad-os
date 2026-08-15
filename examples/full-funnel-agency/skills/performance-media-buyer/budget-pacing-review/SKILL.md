@@ -89,3 +89,10 @@ decides where money goes; that one decides whether the container deserves money.
 - The decision is written, including a "no change" decision with its reason.
 - No single move exceeds 20% of the giving row's budget.
 - Every number came from the reconciled source, not from a platform's own report.
+
+## Provenance & limits
+
+Sources searched: anthropics/skills (no match), addyosmani/agent-skills (no match), msitarzewski/agency-agents (paid-media-ppc-strategist.md — primary source; paid-media-paid-social-strategist.md — cross-platform split logic folded in), obra/superpowers (no match), web search for budget-pacing frameworks (nothing beyond what the two sources already covered). Execution dimension: see google-ads-operations for the mechanics of applying a budget change.
+Intake date: 2026-08-15
+Known limits: The two-window rule and the 20% move cap are conventions chosen to suit a weekly cadence at this spend level, not results derived from data — a much larger or much smaller account should expect to retune both. Assumes reconciled numbers exist upstream; with unreconciled inputs the whole table is decoration. Covers no incrementality testing, which is the honest way to answer the question this table only approximates.
+Assumed superseded: this skill reflects what research found at intake, not the best way that exists. Re-run `squad-roster`'s Refresh-skills operation periodically rather than treating this as final.

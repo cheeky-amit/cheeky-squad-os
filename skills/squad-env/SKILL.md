@@ -139,6 +139,7 @@ it can be added to your `environment` and provisioned.
 - `squad-role` may call you to derive an `environment` for a role it just generated.
 - `squad-spawn` calls you (or runs `provision.sh`) before dispatch, then bakes each role's workspace path + the env-source line into the spawn prompt.
 - The `PermissionRequest` hook reads `environment.workspace` to auto-approve a running role's in-sandbox scaffolding. Keep `workspace` accurate or the hook will defer.
+- **Execution skills need tools; Q8 and this skill propose them together.** An execution skill `squad-role`'s Q8 onboards may name a specific MCP server, CLI, or bulk/export mechanism the role needs to actually act on its platform — not just read about it. Q8 doesn't provision anything itself: it folds that need into the role's `environment.tools` (a `kind: "system"` or `kind: "mcp"` entry, same shape as any other tool) and lets this skill's ordinary `global_needs` proposal surface it, in the same pass as onboarding the skill — never a second, separate ask for the same gap. This is also where a Q8 execution-gap declaration (`squad-role`'s "Execution-gap check") resolves in practice: once the proposed tool is connected, `squad-roster`'s Refresh-skills operation can find the execution skill that was missing at intake.
 
 ## Refusals
 

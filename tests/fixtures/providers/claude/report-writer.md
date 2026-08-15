@@ -75,7 +75,8 @@ Expected tools: jq (system).
 
 ## Onboarded skills
 
-- `citation-formatter` — `.squad/skills/report-writer/citation-formatter/SKILL.md` — Format citations consistently in the final report (source: https://github.com/anthropics/skills)
+- `citation-formatter` (knowledge) — `.squad/skills/report-writer/citation-formatter/SKILL.md` — Format citations consistently in the final report (source: https://github.com/anthropics/skills)
+- `docx-export-cli` (execution) — `.squad/skills/report-writer/docx-export-cli/SKILL.md` — Operate the export CLI to convert the markdown report to signed-off DOCX (source: https://github.com/addyosmani/agent-skills)
 
 The runtime gates auto-approval eligibility; it does not block a human-approved
 out-of-scope write. Report that distinction exactly.

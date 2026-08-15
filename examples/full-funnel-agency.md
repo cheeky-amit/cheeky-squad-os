@@ -9,18 +9,28 @@ What this example is here to show:
 - A decomposition that honestly produces **eight** workstreams, the cap firing at Step 5,
   and the consolidation that follows — including the moment the builder asks for a sixth
   seat and does not get one.
-- **Q8 in full for two seats** — the research pass across real open-source repositories,
-  the numbered proposal, and the auto-approval record — and summarized for the other
-  three. Eleven skills are onboarded in total.
+- **Q8 in full for two seats** — the **two-dimension** research pass (knowledge *and*
+  execution), the numbered proposal with its `(knowledge)` / `(execution)` labels, and the
+  auto-approval record — and summarized for the other three. Fourteen skills are onboarded
+  in total: eleven knowledge, three execution.
+- **A declared capability gap.** One seat researches its execution dimension honestly and
+  comes back half-empty: it can operate Google Ads, but nothing connects it to Meta. It
+  onboards what it found, declares the rest as a gap in its role goal, and routes the
+  proposed fix through `squad-env` — instead of quietly shipping a role that looks
+  capable and is not.
+- **The step-further check.** A role, mid-run, spending one bounded step asking whether a
+  better method exists than the one it was handed, and recording the answer either way.
 - The **squad card** (text plus mermaid squad map) printed twice: mid-build at three
   seats with no hand-off edges, and as final state after dispatch with the hand-off edges
   the manifests actually justify.
-- The `# Your onboarded skills` section of a real spawn prompt, with the absolute-path
-  convention.
+- The `# Your onboarded skills` section of a real spawn prompt, with the kind labels and
+  the absolute-path convention.
 
 Everything the transcript below claims exists as a real artifact in
-[`full-funnel-agency/`](full-funnel-agency/) — the roster, all eleven adapted skills, and
-a one-command validation of the roster against this repo's own contract loader.
+[`full-funnel-agency/`](full-funnel-agency/) — the roster, all fourteen adapted skills
+(each ending in the mandatory `## Provenance & limits` block), the role goal carrying the
+declared gap, and a one-command validation of the roster against this repo's own contract
+loader.
 
 Guided domain research is deliberately **skipped** in this run; it is worked end to end,
 both gates included, in [`klaviyo-audit.md`](klaviyo-audit.md). This example spends its
@@ -294,10 +304,10 @@ Q1–Q7 in the usual shape: purpose, file scope `deliverables/program/**` (exclu
 `deliverables/program/archive/**`), tools `Read, Write, Edit, Glob, Grep`, model `opus`,
 no sandbox.
 
-**Q8 in one paragraph.** The research pass found nothing usable in `anthropics/skills`
-(document and office-format skills), `addyosmani/agent-skills` (frontend and web
-performance), or `obra/superpowers` (engineering workflow). It found one strong match in
-`msitarzewski/agency-agents`:
+**Q8 in one paragraph.** The **knowledge** pass found nothing usable in
+`anthropics/skills` (document and office-format skills), `addyosmani/agent-skills`
+(frontend and web performance), or `obra/superpowers` (engineering workflow). It found one
+strong match in `msitarzewski/agency-agents`:
 [`project-management/project-management-studio-producer.md`](https://github.com/msitarzewski/agency-agents/blob/main/project-management/project-management-studio-producer.md).
 Two skills were distilled from that single file, because it bundles two different jobs:
 **`weekly-client-brief`** (its Strategic Portfolio Review template, dropped from
@@ -307,6 +317,14 @@ section, rewritten so every row carries an observable trigger and a response agr
 *before* the trigger fires — the source stated both in prose, which ages into something
 nobody can check). Both auto-approved off `skill_onboarding: auto`, recorded at
 `2026-08-15T08:19:41Z`.
+
+**The execution dimension was skipped outright, and said so.** Q8 researches two
+dimensions — how a role thinks and how a role *acts* — but this seat operates no platform:
+it writes a page and keeps a register, both inside its own file scope. So the flow printed
+*"execution dimension: not applicable — this role operates no platform, so no execution
+search was run"* and moved on. Saying it is the point. A silent single-dimension search
+looks identical to a thorough one that found nothing, and the execution-gap check in step
+5 never fires for a role like this precisely because there is no platform to name.
 
 ### 5.2 `performance-media-buyer` — Q8 in full
 
@@ -354,7 +372,10 @@ Q8 — Skill onboarding.
 
 Rule of this step: don't reinvent the wheel. I search for an
 existing open-source skill before authoring anything original, and
-attribution stays on whatever I adapt. Researching now, in order.
+attribution stays on whatever I adapt. Two dimensions, always both —
+how this role THINKS, and how it ACTS.
+
+── Dimension 1: knowledge (frameworks, logic, domain practice)
 
   anthropics/skills — https://github.com/anthropics/skills
     Document, spreadsheet, and presentation skills. Nothing on
@@ -375,14 +396,41 @@ attribution stays on whatever I adapt. Researching now, in order.
   obra/superpowers — https://github.com/obra/superpowers
     Engineering workflow — TDD, debugging, worktrees. No match.
 
-  Web search, beyond the four repos above: nothing that beats the
-  agency-agents set for this role. Several paid-media "prompt packs"
-  exist; all are thinner than what's already found and none carry a
-  licence I can attribute cleanly.
+  Web search beyond the four repos: nothing that beats the
+  agency-agents set. Several paid-media "prompt packs" exist; all are
+  thinner than what's already found and none carry a licence I can
+  attribute cleanly.
 
-Proposed, 2 skills:
+── Dimension 2: execution (how this role actually operates the
+   platforms its purpose names — Google Ads and Meta Ads)
 
-  1. paid-media-audit
+  Your Q1 says this seat OWNS every paid dollar. That means applying
+  changes, not just recommending them, so I searched for how those
+  changes actually get made.
+
+  The same four repos first — an execution skill sometimes lives
+  there too. It doesn't here: agency-agents' paid-media agents
+  mention API access in passing but document no mechanics, and the
+  other three have nothing advertising-related at all.
+
+  Google Ads — official documentation, three entry points:
+    https://developers.google.com/google-ads/api/docs/start
+    https://developers.google.com/google-ads/api/docs/reporting/overview
+    https://developers.google.com/google-ads/scripts/docs/start
+  Enough to distil real mechanics: reporting queries, change-history
+  reads, staged bulk edits, learning-period behavior, what the
+  platform refuses.
+
+  Meta Ads — https://developers.facebook.com/docs/marketing-apis
+  The documentation exists and is good. The problem is access: I
+  checked the MCP servers connected to this project and there is no
+  Meta Marketing API server among them. A skill describing writes
+  this squad cannot perform is a skill that will be believed and then
+  fail. Flagging it at step 5 rather than writing it.
+
+Proposed, 3 skills:
+
+  1. paid-media-audit  (knowledge)
      Source: https://github.com/msitarzewski/agency-agents/blob/main/paid-media/paid-media-auditor.md
      Purpose: pre-flight an inherited ad account on structure,
      bidding, budget, targeting, and creative coverage before a
@@ -395,7 +443,7 @@ Proposed, 2 skills:
      failure has a named consequence and a first action, because 200
      checkpoints is a deliverable in search of a reader.
 
-  2. budget-pacing-review
+  2. budget-pacing-review  (knowledge)
      Source: https://github.com/msitarzewski/agency-agents/blob/main/paid-media/paid-media-ppc-strategist.md
      Also drawn from: https://github.com/msitarzewski/agency-agents/blob/main/paid-media/paid-media-paid-social-strategist.md
      Purpose: run the weekly cross-channel pacing and reallocation
@@ -409,11 +457,26 @@ Proposed, 2 skills:
      a two-window rule and a 20% cap on any single move, so the
      weekly cadence can't reallocate on noise.
 
-Goal frontmatter has skill_onboarding: auto — approving both without
-asking. Here's the record.
+  3. google-ads-operations  (execution)
+     Source: https://developers.google.com/google-ads/api/docs/start
+     Also drawn from: the reporting overview and Ads Scripts docs above
+     Purpose: operate the account safely — read current state and
+     change history first, stage every change with its rollback,
+     verify by reading back.
+     Adapted: distilled from reference documentation into a decision
+     procedure. Adds three things the docs don't say in one place:
+     which instrument to reach for at which scale, read-before-write
+     as a rule rather than advice, and the escalate-don't-improvise
+     list. Deliberately reproduces no endpoint signature or API
+     version — those change per release, and a stale signature in a
+     skill file is worse than none.
 
-  ✓ paid-media-audit          approval_mode: auto  2026-08-15T08:31:07Z
-  ✓ budget-pacing-review      approval_mode: auto  2026-08-15T08:31:07Z
+Goal frontmatter has skill_onboarding: auto — approving all three
+without asking. Here's the record.
+
+  ✓ paid-media-audit        (knowledge)  auto  2026-08-15T08:31:07Z
+  ✓ budget-pacing-review    (knowledge)  auto  2026-08-15T08:31:07Z
+  ✓ google-ads-operations   (execution)  auto  2026-08-15T08:31:07Z
 
   Approved via .squad/goal.md frontmatter (skill_onboarding: auto),
   set during onboarding. Not inferred here.
@@ -421,16 +484,54 @@ asking. Here's the record.
 Onboarded:
   .squad/skills/performance-media-buyer/paid-media-audit/SKILL.md
   .squad/skills/performance-media-buyer/budget-pacing-review/SKILL.md
+  .squad/skills/performance-media-buyer/google-ads-operations/SKILL.md
 
-Both entries appended to this role's onboarded_skills via
-squad-roster; roster.md regenerated.
+Each ends with its mandatory ## Provenance & limits block — sources
+searched including the empty ones, intake date, known limits, and the
+standing line that this is the best found at intake and not the best
+that exists. squad-roster refuses to register an entry whose file
+lacks that block, so it isn't a courtesy.
+
+All three appended to this role's onboarded_skills via squad-roster;
+roster.md regenerated.
+
+── Execution-gap check
+
+performance-media-buyer operates Meta Ads, but no execution skill was
+found or approved for it. Declaring this as a capability gap: no MCP
+server is connected for the Meta Marketing API, so the account can be
+read from manual exports but no change can be pushed from this squad.
+I can propose connecting a Meta Marketing API MCP server for you to
+approve via squad-env.
+
+  → Written to .squad/role-goal-performance-media-buyer.md under
+    ## Declared capability gaps
+  → Proposed fix handed to squad-env's global_needs channel — the
+    same one that proposes a missing CLI. Not a second channel.
+
+User: Right — the client's Meta access is still with the old
+contractor. Leave the gap, don't block on it.
+
+squad-role: Left declared. Until it closes, Meta changes get staged
+as a table here and applied by a human in the platform, which the
+skill's scope boundary says out loud.
 ```
 
-The two source URLs on `budget-pacing-review` are worth a note. The roster's
-`onboarded_skills` entry carries a single `source_url` — the primary — and the skill
-file's own `Source:` attribution block names both. Attribution follows the text, not the
-schema field; where an adaptation genuinely draws on two files, both get named where a
-reader will see them.
+Two details in that pass are worth pulling out.
+
+**The gap is the honest half of the answer.** This seat could have had a
+`meta-ads-operations` skill in about the same effort it took to write the Google one — the
+documentation is public and good. It would also have been fiction: a role carrying a
+confident procedure for writes it has no credential to perform. Q8's execution-gap check
+exists so that the difference between *"we didn't find one"* and *"we can't do this yet"*
+survives into the role's own goal file, where `squad-spawn` bakes it into every dispatch
+and `squad-roster`'s Refresh can later clear it. The real
+[`role-goal-performance-media-buyer.md`](full-funnel-agency/role-goal-performance-media-buyer.md)
+is in this repo; its last section is that one bullet.
+
+**Two source URLs on one entry.** The roster's `onboarded_skills` entry carries a single
+`source_url` — the primary — and the skill file's own `Source:` attribution block names
+every source it drew on. Attribution follows the text, not the schema field.
 
 ### 5.3 `creative-strategist` (Q8 summarized) — and the first squad card
 
@@ -452,8 +553,15 @@ shippable spec — with exact copy fields and character limits checked at brief 
 with its core assumption inverted: the source plans organic as its own creative universe
 with its own testing, which in this squad would be a second, slower, less-instrumented
 test of questions paid is already answering with real money — so organic inherits from
-paid, and a concept earns a slot by having survived a matrix cell. Three skills, all
-auto-approved, recorded at `2026-08-15T08:44:20Z`.
+paid, and a concept earns a slot by having survived a matrix cell. Three knowledge skills,
+all auto-approved, recorded at `2026-08-15T08:44:20Z`.
+
+**Execution dimension: none, and the reason is a seam, not an oversight.** This seat
+produces briefs and plans; the assets are uploaded by whoever owns the platform, which in
+this squad is `performance-media-buyer`. It names no platform it must operate, so no
+execution search ran and the gap check never fired. That is a different outcome from
+`performance-media-buyer`'s Meta result, and the distinction is worth keeping: one seat has
+nothing to operate, the other has something to operate and no way to reach it.
 
 The three skills deduplicate against each other explicitly: each one's scope-boundary
 section names what the other two own and refuses to restate it. That is what stops three
@@ -466,7 +574,7 @@ Squad: Kettleworks acquisition cost to $58 or under by mid-November, on numbers 
 Seats: 3/5
 
 - studio-producer — runs the program and owns everything the client sees (skills onboarded: 2)
-- performance-media-buyer — one budget across search, shopping, and paid social (skills onboarded: 2)
+- performance-media-buyer — one budget across search, shopping, and paid social (skills onboarded: 3)
 - creative-strategist — turns angles into tested creative, paid and organic (skills onboarded: 3)
 ```
 
@@ -474,7 +582,7 @@ Seats: 3/5
 graph TD
   goal["🎯 Kettleworks acquisition cost to $58 or under by mid-November, on numbers everyone trusts"]
   studio-producer["studio-producer<br/>Runs the program and owns everything the client sees<br/>skills: 2"]
-  performance-media-buyer["performance-media-buyer<br/>One budget across search, shopping, and paid social<br/>skills: 2"]
+  performance-media-buyer["performance-media-buyer<br/>One budget across search, shopping, and paid social<br/>skills: 3"]
   creative-strategist["creative-strategist<br/>Turns angles into tested creative, paid and organic<br/>skills: 3"]
   goal --> studio-producer
   goal --> performance-media-buyer
@@ -508,7 +616,22 @@ what a one-off audit does not need and a weekly program does: a standing reconci
 an authority rule (store of record for revenue, platforms for spend, nothing else
 authoritative for anything), and a root-cause order that puts "genuine attribution
 difference" last precisely because it is unfalsifiable and therefore the most comfortable
-place to stop looking. Auto-approved, recorded at `2026-08-15T08:58:52Z`.
+place to stop looking.
+
+**Execution dimension: one skill, and it changed what the seat can honestly claim.** This
+role's purpose is to *prove* numbers, which means observing what the site actually sends —
+so the execution search ran against the collection documentation itself:
+[GA4 collection](https://developers.google.com/analytics/devguides/collection/ga4),
+[DebugView](https://support.google.com/analytics/answer/7201382),
+[the Measurement Protocol](https://developers.google.com/analytics/devguides/collection/protocol/ga4),
+and [Meta's Conversions API](https://developers.facebook.com/docs/marketing-api/conversions-api).
+The result is **`ga4-event-audit-operations`**, which contributes the one thing no
+framework can: an ordering rule (data layer → container preview → debug view → platform
+event tool → store of record, stop at the first break) and a procedure for *proving*
+deduplication rather than trusting two dashboards that both report success. Its hard line
+— observation only, never a write, never test traffic into a production stream — is what
+keeps an audit from becoming the incident. Three skills, all auto-approved, recorded at
+`2026-08-15T08:58:52Z`.
 
 ### 5.5 `lifecycle-organic-marketer` — Q8 in full
 
@@ -546,7 +669,9 @@ User: Neither.
 
 squad-role: Q8 — Skill onboarding.
 
-Researching, same order as always.
+Two dimensions again — knowledge, then execution.
+
+── Dimension 1: knowledge
 
   anthropics/skills — https://github.com/anthropics/skills
     No lifecycle or search marketing content. No match.
@@ -584,9 +709,36 @@ Researching, same order as always.
   nothing for lifecycle would have been an authoring decision
   disguised as a research result.
 
-Proposed, 2 skills:
+── Dimension 2: execution
 
-  1. lifecycle-sequence-spec
+  Your Q1 says this seat OWNS the lifecycle program. Owning it means
+  reading live flows and staging changes to them, not just writing
+  specs, so: what platform, and can this squad reach it?
+
+  Curated repos first — nothing. The four have no ESP mechanics
+  between them.
+
+  Connected MCP servers for this project: a Klaviyo server IS
+  connected, with flow, segment, profile, and metric access. That
+  settles the platform question — this seat can actually touch the
+  system it owns.
+
+  Official documentation, for the mechanics the MCP surface doesn't
+  explain on its own:
+    https://developers.klaviyo.com/en/reference/api_overview
+    https://developers.klaviyo.com/en/reference/get_flows
+
+  Organic search, same question: the cannibalization check needs
+  search-console data. There's no console MCP server connected and
+  no CLI; the check is run by a human through the console UI and
+  handed over. That's a limitation of the knowledge skill rather
+  than a missing execution skill, so it's recorded in that skill's
+  Known limits, not declared as a gap — nothing about the role's
+  purpose says it operates the console.
+
+Proposed, 3 skills:
+
+  1. lifecycle-sequence-spec  (knowledge)
      Source: https://github.com/msitarzewski/agency-agents/blob/main/marketing/marketing-email-strategist.md
      Purpose: specify a sequence so it can't ship without a trigger,
      a segment definition, exit conditions, and a click-based
@@ -604,7 +756,7 @@ Proposed, 2 skills:
      program's Out of scope forbids — the adaptation replaces the
      incentive rather than inheriting it.
 
-  2. organic-search-brief
+  2. organic-search-brief  (knowledge)
      Source: https://github.com/msitarzewski/agency-agents/blob/main/marketing/marketing-seo-specialist.md
      Purpose: run the cannibalization check and cluster-ownership
      map before proposing any on-page change.
@@ -618,32 +770,66 @@ Proposed, 2 skills:
      an explicit "mark the brief unverified" path for when the
      check can't be run, so it can't be silently skipped.
 
-Goal frontmatter has skill_onboarding: auto — approving both.
+  3. klaviyo-flow-operations  (execution)
+     Source: https://developers.klaviyo.com/en/reference/api_overview
+     Also drawn from: https://developers.klaviyo.com/en/reference/get_flows
+     Purpose: inspect and stage changes to running flows and
+     segments without breaking the profiles currently inside them.
+     Adapted: distilled from reference documentation into the one
+     thing the docs never state in one place — what each kind of
+     change does to people who are ALREADY mid-sequence. Adding a
+     message at the end is safe; shortening a delay can fire two
+     messages back-to-back at someone who was already waiting.
+     Carries a bright line the API itself does not impose: this
+     skill never triggers a real send. Read, inspect, stage, hand
+     the send to a human. An accidental send cannot be recalled.
 
-  ✓ lifecycle-sequence-spec   approval_mode: auto  2026-08-15T09:11:36Z
-  ✓ organic-search-brief      approval_mode: auto  2026-08-15T09:11:36Z
+Goal frontmatter has skill_onboarding: auto — approving all three.
+
+  ✓ lifecycle-sequence-spec   (knowledge)  auto  2026-08-15T09:11:36Z
+  ✓ organic-search-brief      (knowledge)  auto  2026-08-15T09:11:36Z
+  ✓ klaviyo-flow-operations   (execution)  auto  2026-08-15T09:11:36Z
 
   Approved via .squad/goal.md frontmatter (skill_onboarding: auto).
 
 Onboarded:
   .squad/skills/lifecycle-organic-marketer/lifecycle-sequence-spec/SKILL.md
   .squad/skills/lifecycle-organic-marketer/organic-search-brief/SKILL.md
+  .squad/skills/lifecycle-organic-marketer/klaviyo-flow-operations/SKILL.md
+
+All three carry ## Provenance & limits.
+
+── Execution-gap check
+
+This role operates the ESP, and it has an execution skill for it —
+the MCP server is connected and klaviyo-flow-operations is onboarded.
+No gap to declare. Nothing written to the role goal.
 
 Squad is at the 5-seat cap — deactivate or consolidate a role via
 squad-roster before generating another.
 ```
 
-That rejected third candidate is the honest part of the research pass. `growth-hacker` is
-a real file with a real name that sounds exactly like something this seat should have;
-onboarding it would have produced a skill with a plausible frontmatter and nothing
-underneath. Naming what was checked and rejected is what makes the two that *were*
-onboarded mean something.
+Two things in that pass are the honest part.
+
+**The rejected third candidate.** `growth-hacker` is a real file with a real name that
+sounds exactly like something this seat should have; onboarding it would have produced a
+skill with plausible frontmatter and nothing underneath. Naming what was checked and
+rejected is what makes the ones that *were* onboarded mean something — and it is why the
+`## Provenance & limits` block records empty searches alongside successful ones.
+
+**The gap check that correctly did not fire.** Compare with `performance-media-buyer`:
+same check, same platform-operating purpose, opposite outcome, because a Klaviyo MCP
+server is connected and a Meta one is not. The check is not a ritual disclaimer — it
+returns a different answer per seat based on what is actually reachable. And note the
+third case in the same message: the search-console limitation is recorded in a skill's
+**Known limits** rather than declared as a gap, because operating the console was never
+part of this role's purpose. Three outcomes, three different places to put the truth.
 
 ---
 
 ## 6. The roster after generation
 
-`.squad/roster.json` — schema version 2, five roles, eleven onboarded skills. The full
+`.squad/roster.json` — schema version 2, five roles, fourteen onboarded skills. The full
 file is in this repo at
 [`full-funnel-agency/roster.json`](full-funnel-agency/roster.json); here is the
 `performance-media-buyer` entry, which is the one carrying both a sandbox and onboarded
@@ -687,6 +873,7 @@ skills:
   "onboarded_skills": [
     {
       "name": "paid-media-audit",
+      "kind": "knowledge",
       "source_url": "https://github.com/msitarzewski/agency-agents/blob/main/paid-media/paid-media-auditor.md",
       "local_path": ".squad/skills/performance-media-buyer/paid-media-audit/SKILL.md",
       "purpose": "Pre-flight an inherited ad account on structure, bidding, budget, targeting, and creative coverage before a single dollar moves.",
@@ -695,9 +882,19 @@ skills:
     },
     {
       "name": "budget-pacing-review",
+      "kind": "knowledge",
       "source_url": "https://github.com/msitarzewski/agency-agents/blob/main/paid-media/paid-media-ppc-strategist.md",
       "local_path": ".squad/skills/performance-media-buyer/budget-pacing-review/SKILL.md",
       "purpose": "Run the weekly cross-channel pacing and reallocation decision from one table, with a written rule for when spend moves and when it does not.",
+      "approval_mode": "auto",
+      "approved_at": "2026-08-15T08:31:07Z"
+    },
+    {
+      "name": "google-ads-operations",
+      "kind": "execution",
+      "source_url": "https://developers.google.com/google-ads/api/docs/start",
+      "local_path": ".squad/skills/performance-media-buyer/google-ads-operations/SKILL.md",
+      "purpose": "Operate the Google Ads account safely — read current state and change history first, stage every change with its rollback, and verify by reading back.",
       "approval_mode": "auto",
       "approved_at": "2026-08-15T08:31:07Z"
     }
@@ -706,9 +903,22 @@ skills:
 }
 ```
 
-Skills by seat: `studio-producer` 2, `performance-media-buyer` 2, `creative-strategist` 3,
-`tracking-analyst` 2, `lifecycle-organic-marketer` 2 — **eleven**, every one of them
-adapted from a named open-source source file with attribution preserved in the skill body.
+Skills by seat and kind:
+
+| Seat | Knowledge | Execution | Total |
+|---|---|---|---|
+| `studio-producer` | 2 | 0 (no platform to operate) | 2 |
+| `performance-media-buyer` | 2 | 1 (+1 declared gap: Meta) | 3 |
+| `creative-strategist` | 3 | 0 (no platform to operate) | 3 |
+| `tracking-analyst` | 2 | 1 | 3 |
+| `lifecycle-organic-marketer` | 2 | 1 | 3 |
+
+**Fourteen**, every one adapted from a named source — an open-source file or official
+platform documentation — with attribution preserved in the skill body and a
+`## Provenance & limits` block at the end of every single one. The `kind` field is
+serialized explicitly on all fourteen entries even though `knowledge` is the contract's
+default: a reader of the roster should not have to know the default to know what a role
+can actually do.
 
 The roster in this repo validates against the plugin's own contract loader; the exact
 command is in [`full-funnel-agency/README.md`](full-funnel-agency/README.md).
@@ -732,11 +942,21 @@ You are the creative-strategist role on a cheeky-squad-os squad.
 <full contents of .squad/role-goal-creative-strategist.md>
 
 # Your onboarded skills
-- hook-matrix — /Users/dana/work/kettleworks/.squad/skills/creative-strategist/hook-matrix/SKILL.md — Lay out hook x audience x format as a matrix where every cell is a written hypothesis with a kill or scale criterion attached before it ships.
-- creative-brief — /Users/dana/work/kettleworks/.squad/skills/creative-strategist/creative-brief/SKILL.md — Turn one hook-matrix cell into a production brief a designer, editor, or writer can execute without asking a follow-up question.
-- organic-social-plan — /Users/dana/work/kettleworks/.squad/skills/creative-strategist/organic-social-plan/SKILL.md — Plan the 30-day organic format mix from concepts paid has already validated, so organic tests nothing paid has not paid for first.
+- hook-matrix — (knowledge) — /Users/dana/work/kettleworks/.squad/skills/creative-strategist/hook-matrix/SKILL.md — Lay out hook x audience x format as a matrix where every cell is a written hypothesis with a kill or scale criterion attached before it ships.
+- creative-brief — (knowledge) — /Users/dana/work/kettleworks/.squad/skills/creative-strategist/creative-brief/SKILL.md — Turn one hook-matrix cell into a production brief a designer, editor, or writer can execute without asking a follow-up question.
+- organic-social-plan — (knowledge) — /Users/dana/work/kettleworks/.squad/skills/creative-strategist/organic-social-plan/SKILL.md — Plan the 30-day organic format mix from concepts paid has already validated, so organic tests nothing paid has not paid for first.
 
 Read each of these before starting; they are part of your role.
+
+Before executing, one step-further check: ask yourself — "could one more
+research step find a better way than my onboarded method?" If yes, and the
+step is cheap (one search, one doc lookup, one MCP introspection call —
+never a second research pass), take it. Record the answer either way in
+your engagement record's ## Assumptions (hard rule #11): [confirmed] if you
+checked and your onboarded method still holds, or [inferred]/[assumed] with
+if wrong → <what breaks> if you took the step and found something better, or
+didn't check. Never spiral — one step, bounded, then proceed with whichever
+method you're using.
 
 # Your role's file ownership
 Includes:
@@ -748,8 +968,14 @@ Excludes (these win over every include):
 ...
 ```
 
-Three things about that block:
+Four things about that block:
 
+- **The kind label rides along.** A role reads `(knowledge)` or `(execution)` next to each
+  skill and knows, without opening the file, which ones tell it how to think and which
+  ones tell it how to act on a live system. For a seat with a declared gap, the absence is
+  just as informative: `performance-media-buyer`'s prompt lists one execution skill for
+  Google and nothing for Meta, and the gap bullet from its role goal is right there in the
+  section above.
 - **Absolute paths, always.** The roster stores `local_path` relative
   (`.squad/skills/creative-strategist/hook-matrix/SKILL.md`) because a roster is portable
   and a portable file cannot contain someone's home directory. The spawn prompt resolves
@@ -764,6 +990,39 @@ Three things about that block:
   the only channel from parent to worker that survives every mode and every isolation
   setting.
 
+### The step further, actually taken
+
+Week one. `performance-media-buyer` is about to run its first pacing review, and the
+step-further instruction above is sitting in its prompt. Here is what one bounded step
+looks like in practice — from its engagement record, `.squad/role-plan-performance-media-buyer.md`:
+
+```markdown
+## Assumptions
+
+- [confirmed] The two-window rule in `budget-pacing-review` (require two
+  consecutive 28-day windows at or under target before moving spend) is
+  still the right call at this spend level. Step-further check taken: one
+  doc lookup on the platform's current bid-strategy learning behavior,
+  since a shorter learning period would justify a faster cadence. It has
+  not changed — a strategy edit still re-enters learning, and a weekly
+  reallocation on one window would keep campaigns learning permanently.
+  Proceeding with the onboarded method.
+- [assumed] Meta spend can be reallocated on the same weekly cadence as
+  Google despite being applied by hand. if wrong → the pacing decision
+  ships on time but lands late on half the budget, and the 28-day
+  comparison in week 3 straddles two different application dates.
+```
+
+Three things that beat is deliberately *not*. It is not a second research pass — one
+lookup, one answer, done. It is not a licence to override the onboarded method — the check
+confirmed it and the role proceeded. And it is not optional narration: had the role skipped
+the check, the same section would carry an `[inferred]` or `[assumed]` bullet saying so,
+because "I didn't check" is a recordable answer and a silent skip is not.
+
+The second bullet is the more interesting one. The declared Meta gap is not an abstraction
+by the time work starts — it shows up as a graded assumption with a named blast radius,
+which is exactly the shape `squad-verify`'s forcing rule can act on later.
+
 ---
 
 ## 8. The squad card — final state
@@ -777,20 +1036,20 @@ Squad: Kettleworks acquisition cost to $58 or under by mid-November, on numbers 
 Seats: 5/5
 
 - studio-producer — runs the program and owns everything the client sees (skills onboarded: 2)
-- performance-media-buyer — one budget across search, shopping, and paid social (skills onboarded: 2)
+- performance-media-buyer — one budget across search, shopping, and paid social (skills onboarded: 3)
 - creative-strategist — turns angles into tested creative, paid and organic (skills onboarded: 3)
-- tracking-analyst — one conversion definition and a weekly reconciliation (skills onboarded: 2)
-- lifecycle-organic-marketer — email, SMS, and organic search (skills onboarded: 2)
+- tracking-analyst — one conversion definition and a weekly reconciliation (skills onboarded: 3)
+- lifecycle-organic-marketer — email, SMS, and organic search (skills onboarded: 3)
 ```
 
 ```mermaid
 graph TD
   goal["🎯 Kettleworks acquisition cost to $58 or under by mid-November, on numbers everyone trusts"]
   studio-producer["studio-producer<br/>Runs the program and owns everything the client sees<br/>skills: 2"]
-  performance-media-buyer["performance-media-buyer<br/>One budget across search, shopping, and paid social<br/>skills: 2"]
+  performance-media-buyer["performance-media-buyer<br/>One budget across search, shopping, and paid social<br/>skills: 3"]
   creative-strategist["creative-strategist<br/>Turns angles into tested creative, paid and organic<br/>skills: 3"]
-  tracking-analyst["tracking-analyst<br/>One conversion definition and a weekly reconciliation<br/>skills: 2"]
-  lifecycle-organic-marketer["lifecycle-organic-marketer<br/>Email, SMS, and organic search<br/>skills: 2"]
+  tracking-analyst["tracking-analyst<br/>One conversion definition and a weekly reconciliation<br/>skills: 3"]
+  lifecycle-organic-marketer["lifecycle-organic-marketer<br/>Email, SMS, and organic search<br/>skills: 3"]
   goal --> studio-producer
   goal --> performance-media-buyer
   goal --> creative-strategist
@@ -809,6 +1068,12 @@ fatigue signal reaches creative as a request rather than as a complaint, and eve
 client-facing converges on one seat. Eight seats would have drawn roughly twice the edges
 for the same funnel.
 
+One thing the card deliberately does not show: the declared Meta gap. The card is a
+plain-language status a non-technical stakeholder can read cold, and `skills: 3` is that.
+The gap lives where it can actually act — in the role goal, baked into every dispatch, and
+on `squad-roster`'s Refresh list. A card that tried to carry both would be a status dump,
+which is the one thing its spec forbids.
+
 ---
 
 ## 9. What just happened — one-line lessons
@@ -820,9 +1085,28 @@ for the same funnel.
   merge removes a hand-off. Search plus social share one budget; hypothesis and asset are
   one artifact; the audit's top finding is always tracking. Three merges, three removed
   arguments.
-- **Skill onboarding is research first, authoring last.** Eleven skills, zero authored
+- **Skill onboarding is research first, authoring last.** Fourteen skills, zero authored
   from scratch, every one attributed. The seat that nearly authored from scratch
   (`lifecycle-organic-marketer`) was one API call away from having the sources all along.
+- **Knowledge without hands is trivia.** A seat that knows what a good pacing decision
+  looks like and cannot apply one is a consultant, not a teammate. Q8 researches both
+  dimensions every time, and a platform-operating seat closes with either an execution
+  skill or a declared gap — never with silence.
+- **Three seats, three different honest answers about execution.** `creative-strategist`
+  operates no platform, so no search ran and none was needed. `lifecycle-organic-marketer`
+  operates one it can reach, so it onboarded the mechanics.
+  `performance-media-buyer` operates one it cannot reach, so it declared a gap and routed
+  the fix. Collapsing those three into one reassuring sentence is what the check exists to
+  prevent.
+- **Every skill ends by admitting what it isn't.** The `## Provenance & limits` block
+  records the searches that came back empty, the intake date, what the skill does not
+  cover, and the standing line that this is the best found at intake rather than the best
+  that exists. `squad-roster` refuses to register a skill without it, which is the only
+  reason a humility contract survives contact with a deadline.
+- **The step-further check is cheap on purpose.** One lookup, one recorded answer,
+  proceed. Its value is not finding a better method — usually it does not. Its value is
+  that "I did not check" becomes a graded assumption with a named blast radius instead of
+  an invisible default.
 - **`auto` approves; it does not hide.** Auto-approval skipped the yes, not the record —
   every entry still shows its source URL, its approval mode, and its timestamp, and the
   proposal was printed in full before anything was written.
@@ -841,13 +1125,45 @@ for the same funnel.
 
 ---
 
-## 10. The artifacts
+## 10. How this squad grows
+
+A squad that onboarded fourteen skills in one afternoon has fourteen snapshots of what
+research could find on 2026-08-15. That is the honest description, and it is why every
+skill file ends by saying so rather than presenting itself as settled.
+
+`squad-roster`'s **Refresh skills** operation is the other half of that contract. It
+re-runs Q8's two-dimension research against a role's *existing* set and diffs the result
+four ways: a better source found, the same source materially changed since `approved_at`,
+a `Known limits` line that no longer applies, or a **declared gap that now has a
+candidate**. Worth running on a Multi-use squad's natural cadence, because a
+quarter-long program's context goes stale faster than a one-week audit's.
+
+For this squad the first Refresh has an obvious job waiting for it. The day Kettleworks'
+Meta access comes back from the old contractor and an MCP server is connected,
+`performance-media-buyer`'s declared gap stops being true — the execution dimension that
+came back empty at intake now has something in it. Refresh is what notices: it re-runs the
+search, finds the reachable platform, proposes a `meta-ads-operations` skill **through the
+same approval gate Q8 used** (nothing upgrades silently, no matter how the original entry
+was approved), and on approval removes the bullet from the role goal's
+`## Declared capability gaps` and notes the resolution.
+
+Note what that means for the gap itself: it is not a permanent apology in a file. It is a
+tracked item with a defined closing condition, sitting in the one place a later operation
+knows to look.
+
+---
+
+## 11. The artifacts
 
 Everything above is backed by real files in [`full-funnel-agency/`](full-funnel-agency/):
 
-- `roster.json` — the five-role v2 roster with all eleven `onboarded_skills` entries.
-- `skills/<role-id>/<skill-name>/SKILL.md` — the eleven adapted skills, mirroring the
-  `.squad/skills/` layout a live squad would have on disk.
+- `roster.json` — the five-role v2 roster with all fourteen `onboarded_skills` entries,
+  each carrying an explicit `kind`.
+- `skills/<role-id>/<skill-name>/SKILL.md` — the fourteen adapted skills (eleven
+  knowledge, three execution), mirroring the `.squad/skills/` layout a live squad would
+  have on disk. Every one ends with `## Provenance & limits`.
+- `role-goal-performance-media-buyer.md` — the role goal carrying the declared Meta
+  capability gap, in the shape `templates/role-goal.md` defines.
 - `README.md` — the directory map and the one-command roster validation.
 
 The partner model was never offered during this run's Step 3 because

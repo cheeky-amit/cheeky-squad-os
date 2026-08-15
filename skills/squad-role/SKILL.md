@@ -128,19 +128,30 @@ skills**, external open-source skill files it researched, adapted, and had appro
 Rule of the flow: *don't reinvent the wheel — find an existing open-source skill first,
 onboard it, and improve it; always keep attribution.*
 
-1. **Research first.** From Q1's purpose and the squad goal, search for an existing
-   skill before authoring anything original. Check, in this order:
-   - `anthropics/skills`
-   - `addyosmani/agent-skills`
-   - `msitarzewski/agency-agents`
-   - `obra/superpowers`
-   - then a WebSearch / repo-tree search for anything domain-specific to this role
+1. **Research first — two dimensions, always both.** From Q1's purpose and the squad
+   goal, research never stops at how the role *thinks* — it also covers how the role
+   *acts*. Run both:
+   - **(knowledge)** — frameworks, logic, domain best practice. Check, in this order:
+     `anthropics/skills`, `addyosmani/agent-skills`, `msitarzewski/agency-agents`,
+     `obra/superpowers`, then a WebSearch / repo-tree search for anything
+     domain-specific to this role.
+   - **(execution)** — how this role actually *performs* its actions on whatever
+     platform(s) its purpose names: official APIs, MCP servers, CLIs, bulk/export
+     mechanics, platform documentation. Check the same four curated repos first (an
+     execution skill sometimes lives there too), then official platform docs and MCP
+     server registries. A how-to skill distilled from official platform docs still
+     counts as research-first — the docs are the source, and the resulting skill's
+     `Source:` line attributes them like any other source.
 
-   State plainly when nothing relevant turns up anywhere in that list — only then
-   author an original skill for this step.
+   State plainly, **per dimension**, when nothing relevant turns up — only then author
+   an original skill for that dimension. A role with no platform to operate skips the
+   execution dimension outright (there's nothing to research) and says so explicitly,
+   rather than silently running only the knowledge search.
 
-2. **Propose.** Print a numbered list, one item per candidate:
+2. **Propose.** Print a numbered list, one item per candidate, each one labeled
+   `(knowledge)` or `(execution)`:
    - proposed skill name (kebab-case)
+   - `(knowledge)` or `(execution)`
    - source — the URL, or `original`
    - one-line purpose
    - one line on what gets adapted or improved for this squad
@@ -159,17 +170,61 @@ onboard it, and improve it; always keep attribution.*
      `squad-onboard`, when the builder said so)
 
    Record the mode and an ISO-8601 `approved_at` on every entry, whichever channel
-   approved it.
+   approved it. The same gate governs `squad-roster`'s Refresh-skills operation later —
+   an upgrade proposed on refresh is still a proposal, never a silent swap.
 
 4. **Onboard.** For each approved item: fetch the source, rewrite/adapt it into
    standard SKILL.md shape (YAML frontmatter `name`/`description`, then body), keep a
    `Source: <url>` attribution line near the top of the body (`Source: original` if
-   authored fresh), and write it to
-   `.squad/skills/<role-id>/<skill-name>/SKILL.md`. Append the entry to this role's
-   `onboarded_skills` via `squad-roster` — do not hand-edit `roster.json` — and let
-   `squad-roster` regenerate `roster.md`.
+   authored fresh), and **end the body with a mandatory `## Provenance & limits`
+   block** — this is a stated contract, not a courtesy: **an onboarded skill without
+   this block is not onboarded**, and `squad-roster`'s Add operation refuses to
+   register it (see that skill). Shape:
 
-If the user said `skip` at step 2, none of this runs — the role registers with no
+   ```markdown
+   ## Provenance & limits
+
+   Sources searched: <every source checked for this dimension, including the ones
+   that came back empty — e.g. "anthropics/skills (no match), addyosmani/agent-skills
+   (no match), msitarzewski/agency-agents (this skill, adapted), Klaviyo official API
+   docs (execution mechanics)">
+   Intake date: <ISO-8601>
+   Known limits: <what this skill does NOT cover, or where it's likely shallow>
+   Assumed superseded: this skill reflects what research found at intake, not the
+   best way that exists. Re-run `squad-roster`'s Refresh-skills operation
+   periodically rather than treating this as final.
+   ```
+
+   Write the finished file to `.squad/skills/<role-id>/<skill-name>/SKILL.md`. Append
+   the entry to this role's `onboarded_skills` via `squad-roster` — do not hand-edit
+   `roster.json` — and let `squad-roster` regenerate `roster.md`.
+
+5. **Execution-gap check — not optional.** A role whose Q1 purpose names a specific
+   platform, tool, or service it must *operate* (not just read about) may not close Q8
+   with zero execution skills and nothing said about it. If step 1's execution
+   dimension came back empty, or nothing from it got approved, Q8 is not finished until
+   the gap is declared. Print exactly this shape:
+
+   *"`<role-id>` operates `<platform/tool>`, but no execution skill was found or
+   approved for it. Declaring this as a capability gap: `<one line — what's actually
+   missing, e.g. "no MCP server connected for the Klaviyo bulk-send API">`. I can
+   propose `<the fix — an MCP server to connect, a CLI to install>` for you to approve
+   via `squad-env`."*
+
+   Then, both of the following — neither is optional narration:
+   - Write a `## Declared capability gaps` section to this role's role-goal file (see
+     "Write role goal" below) — one bullet per gap, same shape as the printed line.
+   - Hand the proposed fix to `squad-env`'s existing contain/propose channel
+     (`global_needs`) — the same mechanism that already proposes a missing system CLI
+     or MCP server; do not invent a second channel (see `squad-env`'s "How this
+     composes with the rest of the squad").
+
+   This check applies even when the user said `skip` at step 2: a platform-operating
+   role that skipped Q8 entirely still gets a declared capability gap — there is
+   obviously no execution skill — named plainly rather than silently absent.
+
+If the user said `skip` at step 2 and the role doesn't operate a platform (so the
+execution-gap check above never fires), none of this runs — the role registers with no
 `onboarded_skills`, `{{onboarded_skills_block}}` is omitted for it, and it is
 indistinguishable from a role generated before this feature shipped.
 
@@ -189,8 +244,9 @@ still produces a Claude agent. Before registration, map them into roster v2:
 - Q7 sandbox → canonical `environment` (`dirs` becomes `directories`; `env` becomes
   `variables`). Values may contain non-secret provisioning configuration; credentials never
   belong in the roster, and export redacts all values from the portable snapshot.
-- Q8 skill picks → `onboarded_skills` entries (`name`, `source_url` — omitted for an
-  original skill, `local_path`, `purpose`, `approval_mode`, optional `approved_at`).
+- Q8 skill picks → `onboarded_skills` entries (`name`, `kind`: `knowledge` |
+  `execution`, `source_url` — omitted for an original skill, `local_path`, `purpose`,
+  `approval_mode`, optional `approved_at`).
 
 The Claude agent path goes in `provider_overrides.claude.agent_file`. Do not add Codex
 syntax here; the Codex adapter compiles from the canonical role at export time.
@@ -230,7 +286,19 @@ Build the system prompt body from these answers. The template lives at `template
 - `{{file_scope_lines}}` — Q3 answer rendered as **one markdown bullet per glob** (not a comma-separated string — the template places it under a bullet list)
 - `{{isolation_block}}` — the literal `isolation: worktree` line (Q6), or omitted entirely
 - `{{workspace_block}}` — the "Your workspace (sandbox)" section (Q7), or omitted entirely if the role has no `environment` (canonical text in `squad-env`'s SKILL body)
-- `{{onboarded_skills_block}}` — the "Onboarded skills" section (Q8), or omitted entirely if the role has no `onboarded_skills` entries. When present, one bullet per skill: name — absolute path to its `SKILL.md` — purpose — `Source: <url or "original">`.
+- `{{onboarded_skills_block}}` — the "Onboarded skills" section (Q8), or omitted entirely if the role has no `onboarded_skills` entries. When present: one bullet per skill — name — `(knowledge|execution)` — absolute path to its `SKILL.md` — purpose — `Source: <url or "original">` — followed by the standing step-further check (canonical text below; same wording `squad-spawn` bakes into its per-dispatch prompt — the standing role file and the per-dispatch prompt must not disagree, same discipline as `{{plan_block}}` and `{{stop_conditions_block}}`):
+
+  ```markdown
+  Before executing, one step-further check: ask yourself — "could one more
+  research step find a better way than my onboarded method?" If yes, and
+  the step is cheap (one search, one doc lookup, one MCP introspection
+  call — never a second research pass), take it. Record the answer either
+  way in your engagement record's `## Assumptions` (hard rule #11):
+  `[confirmed]` if you checked and your onboarded method still holds, or
+  `[inferred]`/`[assumed]` with `if wrong → <what breaks>` if you took the
+  step and found something better, or didn't check. Never spiral — one
+  step, bounded, then proceed with whichever method you're using.
+  ```
 - `{{plan_block}}` — the "Step 0 — publish your engagement record" section (hard rule #11). **Not collected by a question, and never omitted** — every generated role gets it, every time, regardless of mode or scope; it is a role-behavior contract, not a generation choice. Substitute the canonical text (same heading `templates/role-definition.md`'s placeholder legend names, and the same wording `squad-spawn` bakes into its spawn prompt — the standing role file and the per-dispatch prompt must not disagree):
 
   ```markdown
@@ -393,6 +461,18 @@ created: <ISO-8601>
 
 - `needs:` <precondition>
 - `stop:` <mid-run bound>
+
+## Declared capability gaps
+
+<!-- Only present when Q8's execution-gap check fired (this role operates a
+     platform and no execution skill was onboarded for it). Omit this whole
+     heading otherwise — same absence contract as every other conditional
+     section in this plugin. One bullet per gap, same shape as the printed
+     refusal line. Cleared by squad-roster's Refresh-skills operation when
+     a matching execution skill is later onboarded. -->
+
+- <platform/tool this role can't yet operate — what's missing, and what was
+  proposed via squad-env's global_needs to close it>
 ```
 
 Write to `.squad/role-goal-<name>.md`. This mirrors `templates/role-goal.md`'s shape exactly — squad-role composes this schema directly rather than reading the template file at generation time, so if you ever touch this inlined copy, touch `templates/role-goal.md` to match (the two must not diverge).
@@ -432,14 +512,17 @@ Role `<name>` generated.
     - stop: <mid-run bound 1>
     [...]
   Onboarded skills: <n> declared
-    - <skill-name> (from <source_url or "original">)
+    - <skill-name> (<knowledge|execution>, from <source_url or "original">)
+    [...]
+  Declared capability gaps: <n> (or "none")
+    - <gap 1>
     [...]
   Agent file: .claude/agents/<name>.md
   Role goal: .squad/role-goal-<name>.md
   Registered in: .squad/roster.json
 ```
 
-The stop conditions are never asked for — they're derived (previous section) and shown here so the user sees them without a new question in the flow. `Onboarded skills` reflects whatever Q8 produced — `0` if the role skipped Q8 or nothing was approved.
+The stop conditions are never asked for — they're derived (previous section) and shown here so the user sees them without a new question in the flow. `Onboarded skills` reflects whatever Q8 produced — `0` if the role skipped Q8 or nothing was approved. `Declared capability gaps` reflects the execution-gap check — `none` unless this role operates a platform and closed Q8 without an execution skill for it.
 
 **Then print the updated squad card** — both parts, text card and mermaid squad map, same canonical shape as `squad-onboard`'s "Narration — the squad card" section (see there for the exact node/edge shape and label-escaping rules; do not restate or redefine the shape here, just render it from the current roster). Covers the whole squad — every active role, not just the one just generated — each role's text-card row and map-node label carrying its own `skills onboarded: <n>` / `skills: <n>` count. This runs every time, whether this is the squad's first role or its fifth.
 

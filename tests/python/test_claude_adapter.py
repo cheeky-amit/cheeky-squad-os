@@ -89,9 +89,10 @@ def test_agents_match_goldens_and_map_read_write_boundaries(
     assert "Expected variable names: `REPORT_FORMAT`" in writer
     assert "REPORT_FORMAT=markdown" not in writer
     assert "## Onboarded skills" in writer
-    assert "`citation-formatter`" in writer
+    assert "`citation-formatter` (knowledge)" in writer
     assert ".squad/skills/report-writer/citation-formatter/SKILL.md" in writer
     assert "source: https://github.com/anthropics/skills" in writer
+    assert "`docx-export-cli` (execution)" in writer
     assert "## Onboarded skills" not in reader
     for text in (reader, writer):
         frontmatter = text.split("---", 2)[1]
@@ -120,7 +121,7 @@ def test_onboarded_skill_with_no_source_url_attributes_as_original(
     artifacts = compile_claude_agents(manifest, solo)
     content = next(iter(artifacts.values())).decode()
 
-    assert "`in-house-tool`" in content
+    assert "`in-house-tool` (knowledge)" in content
     assert "(source: original)" in content
 
 

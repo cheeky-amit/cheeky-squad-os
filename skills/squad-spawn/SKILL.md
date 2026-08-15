@@ -126,9 +126,18 @@ Binding on this run, on top of what the file itself says:
 <full contents of .squad/role-goal-<role.name>.md>
 
 # Your onboarded skills — only if this role's roster entry has a non-empty onboarded_skills
-<one line per skill: name — ABSOLUTE path to its SKILL.md — purpose>
+<one line per skill: name — (knowledge|execution) — ABSOLUTE path to its SKILL.md — purpose>
 
 Read each of these before starting; they are part of your role.
+
+Before executing, one step-further check: ask yourself — "could one more research
+step find a better way than my onboarded method?" If yes, and the step is cheap (one
+search, one doc lookup, one MCP introspection call — never a second research pass),
+take it. Record the answer either way in your engagement record's `## Assumptions`
+(hard rule #11): `[confirmed]` if you checked and your onboarded method still holds,
+or `[inferred]`/`[assumed]` with `if wrong → <what breaks>` if you took the step and
+found something better, or didn't check. Never spiral — one step, bounded, then
+proceed with whichever method you're using.
 
 # Shared world model — only if `world.sh --index` produced output this dispatch (step 9)
 <the script's stdout, pasted VERBATIM — do not reformat, summarize, or truncate
