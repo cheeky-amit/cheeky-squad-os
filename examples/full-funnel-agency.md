@@ -25,12 +25,18 @@ What this example is here to show:
   the manifests actually justify.
 - The `# Your onboarded skills` section of a real spawn prompt, with the kind labels and
   the absolute-path convention.
+- **Week one's actual output** (section 9) — ten deliverables, each visibly the product of
+  an onboarded skill, plus the engagement record, two hand-off manifests, and
+  `squad-verify`'s honest week-1 verdict: **five signals, zero passing, `unmet`**. Setup
+  working and a squad working are different claims, and only the second one needs files.
 
 Everything the transcript below claims exists as a real artifact in
 [`full-funnel-agency/`](full-funnel-agency/) — the roster, all fourteen adapted skills
 (each ending in the mandatory `## Provenance & limits` block), the role goal carrying the
-declared gap, and a one-command validation of the roster against this repo's own contract
-loader.
+declared gap, week one's ten deliverables, the process artifacts, and a one-command
+validation of the roster against this repo's own contract loader. **The client and its
+numbers are fictional; every figure is internally consistent across every file**, because
+the tracking-analyst's reconciled table is the single source the rest of them quote.
 
 Guided domain research is deliberately **skipped** in this run; it is worked end to end,
 both gates included, in [`klaviyo-audit.md`](klaviyo-audit.md). This example spends its
@@ -1076,7 +1082,152 @@ which is the one thing its spec forbids.
 
 ---
 
-## 9. What just happened — one-line lessons
+## 9. Week one — the output
+
+Everything above is setup. This section is the squad's actual work product: real files, in
+each role's own scope, each one visibly the product of an onboarded skill. Open a skill and
+its deliverable side by side and the shape matches — that is the test this section exists to
+pass. **The data is fictional; the structure is not.**
+
+Walk the squad map's edges from section 8 and each one lands on a file.
+
+### `goal → tracking-analyst` — the numbers everything else depends on
+
+`tracking-analyst` ran first, because the pacing rule forbids citing an unreconciled row and
+nobody could tell whether any row was reconciled.
+
+[`tracking-audit-2026-08-19.md`](full-funnel-agency/deliverables/measurement/tracking-audit-2026-08-19.md)
+walks five conversion paths and ends in a verdict against the bar the skill stated up front —
+not a discussion:
+
+> | Criterion | Bar | Measured | Result |
+> |---|---|---|---|
+> | Platform-reported conversions vs store orders | within 3% | **+16.0%** | FAIL |
+> | Double-counted events on any browser + server path | zero | **178** | FAIL |
+
+The blocking defect is exactly the one `conversion-tracking-audit` tells the role to go
+looking for: Meta's browser and server events share no deduplication key, so 178 orders in
+28 days are counted twice.
+[`weekly-reconciliation.md`](full-funnel-agency/deliverables/measurement/weekly-reconciliation.md)
+then applies the authority rule — store of record for orders, platforms for spend, nothing
+else authoritative for anything — and grades every row. Two rows come out unusable for a
+spend decision.
+
+### `tracking-analyst → performance-media-buyer` — the hand-off, and what it forbids
+
+[`role-comm-tracking-analyst--performance-media-buyer.md`](full-funnel-agency/role-comm-tracking-analyst--performance-media-buyer.md)
+is the manifest the map's edge is derived from. Its Caveats section is the interesting half:
+
+> **This is the first reconciled window.** There is no trustworthy prior window to compare
+> against — the previous one came from platform reports. If your rule needs two consecutive
+> windows, you have one.
+
+### `goal → performance-media-buyer` — an audit, and a review that moves nothing
+
+[`audit-google-ads-2026-08-18.md`](full-funnel-agency/deliverables/media/audit-google-ads-2026-08-18.md)
+follows `paid-media-audit`'s shape: three severities, every finding carrying an observation,
+a stake in money, a first action, and an owner. Finding C2 is routed to `tracking-analyst`
+rather than graded, because a conversion-action change is their surface — the seam the cap
+created in section 4, working.
+
+[`pacing-2026-08-24.md`](full-funnel-agency/deliverables/media/pacing-2026-08-24.md) is the
+one to read if you only read one. The reallocation rule fails on evidence, and the
+deliverable is the decision **not** to move:
+
+> Two of three. **No move.** … **What would have happened if the rule had held:** the cap
+> allows at most 20% of the giving row's budget in one week — **$6,960** of Meta
+> prospecting's $34,800.
+
+That is the skill's "write down that spend does not move, and why" rule producing something
+in week one. The same file carries the staged Meta table marked *apply by hand: declared
+capability gap open* — the gap from section 5.2 costing Dana about 25 minutes of manual work
+and putting a day of lag into a 28-day comparison.
+
+### `performance-media-buyer → creative-strategist` — two requests that look alike
+
+[`role-comm-performance-media-buyer--creative-strategist.md`](full-funnel-agency/role-comm-performance-media-buyer--creative-strategist.md)
+separates a fatigue refresh from a coverage gap, and warns the consumer off the one number it
+must not use — Meta prospecting's conversion data is unreconciled even though its engagement
+data is fine.
+
+### `goal → creative-strategist` — hypotheses before assets
+
+[`hook-matrix.md`](full-funnel-agency/deliverables/creative/hook-matrix.md) has ten populated
+cells of a possible 72, four live, each with a hypothesis, a primary signal, kill and scale
+criteria, and a read date — all recorded before launch. It reports no results, on purpose:
+
+> Nothing yet. First read **2026-08-28** … Reporting a direction before a cell's read date
+> would be reading noise.
+
+[`briefs/h3-a1-vid.md`](full-funnel-agency/deliverables/creative/briefs/h3-a1-vid.md) is one
+cell turned into a production spec — exact copy within character counts, a continuity line
+quoting the actual line on the actual landing page, named reviewers with a deadline, and an
+amendment where the first close was rejected for implying a promise the brand does not make.
+
+### `creative-strategist → lifecycle-organic-marketer` and the compounding half
+
+[`winback.md`](full-funnel-agency/deliverables/lifecycle/sequences/winback.md) is where the
+goal's Out-of-scope bullet does real work. The source template closes on an incentive; this
+program does not run one, so message 3 had to earn the reopen another way — a maintenance
+prompt built from the customer's own purchase date. The spec says why that is the harder and
+better version, and states the open risk in its own words rather than burying it.
+
+[`burr-alignment-espresso.md`](full-funnel-agency/deliverables/lifecycle/organic/burr-alignment-espresso.md)
+ran the mandatory cannibalization check and found a blocker — on a query this brief does not
+even target — then fixed that first. It also coordinates with cell H3-A1-VID so a page and a
+video are not written independently about the same question.
+
+### `performance-media-buyer → studio-producer` — one page, all decisions
+
+[`week-01-client-brief.md`](full-funnel-agency/deliverables/program/week-01-client-brief.md)
+is `weekly-client-brief`'s shape exactly: four decisions each with a named human and a date,
+two decisions waiting on the client each with a deadline and a stated cost of delay, and
+every number traced to the reconciled source. Its opening line is the honest one:
+
+> It has not moved yet, and it was not going to in week one: what week one bought was the
+> ability to measure it honestly, which we did not have on Monday.
+
+[`risk-register.md`](full-funnel-agency/deliverables/program/risk-register.md) carries five
+rows, each with an observable trigger and a response agreed before the trigger fires. R1 is
+the Meta gap, tracked here for the client audience while the role goal tracks it for the
+squad — one fact, two readers, deliberately not merged.
+
+### The process artifacts
+
+[`role-plan-performance-media-buyer.md`](full-funnel-agency/role-plan-performance-media-buyer.md)
+is the full engagement record the step-further beat in section 7 was excerpted from. Its
+Amendments section records a decision worth more than the deliverables:
+
+> I considered building the table on three rows and noting the gap, and rejected it: a
+> pacing table missing the largest spend line is not a pacing table. Built the full table,
+> marked the two rows, and let the reallocation rule fail on the evidence rather than
+> pre-filtering the evidence to make it pass.
+
+### And the loop closes — honestly
+
+[`verification.md`](full-funnel-agency/verification.md) is `squad-verify` checking all five
+Definition-of-done signals against the files above. **Verdict: `unmet`. Zero signals pass.**
+
+That is the correct week-1 result for a goal due 14 November, and the file says so rather
+than grading on a curve:
+
+> What did happen is that all five signals became measurable. Before this week the
+> acquisition-cost number could not be computed against a trustworthy basis at all; now it
+> can, and it says $71.15. That is worse news than the client had on Monday and it is the
+> first honest number the program has produced.
+
+Three things to notice in it. One signal — the six-Monday streak — **cannot** pass before
+2026-09-28 under any circumstances, and the file says that plainly so nobody reads the FAIL
+as a quality judgement. The Meta-gap `[assumed]` bullet from the engagement record surfaces
+in *Assumptions surfaced to the human*, and sets a standing constraint: the acquisition-cost
+signal cannot PASS on `performance-media-buyer`'s own output alone while it stands. And
+`world_conflicts` is **absent from the frontmatter entirely** rather than present as `0` —
+this squad skipped research at section 2, so `.squad/world/` never existed, and that is a
+different state from a squad with a world model and no disputes.
+
+---
+
+## 10. What just happened — one-line lessons
 
 - **The cap is a decomposition tool, not a budget.** It refused a sixth seat and then
   found the seam — splitting one 200-checkpoint audit framework by reader — that made the
@@ -1122,10 +1273,18 @@ which is the one thing its spec forbids.
   the goal would have shipped the source's default and been rejected at first review.
 - **Hand-off edges are derived, never assumed.** The three-seat card has none because
   nothing had run. That is the difference between a map and a diagram of an intention.
+- **A skill is only real if you can see it in the output.** Every deliverable in section 9
+  follows its skill's own template, pass bars, and scope boundaries closely enough that you
+  can read the two side by side and check. A skill nobody can audit against a deliverable
+  is a prompt with a filename.
+- **The most useful thing week one produced was a worse number.** Acquisition cost read
+  $71.15 instead of the platform-flattered figure the client had been managing against.
+  Five signals, zero passing, verdict `unmet` — and the loop closed honestly, which is the
+  only kind of closing that is worth anything on week 1 of 13.
 
 ---
 
-## 10. How this squad grows
+## 11. How this squad grows
 
 A squad that onboarded fourteen skills in one afternoon has fourteen snapshots of what
 research could find on 2026-08-15. That is the honest description, and it is why every
@@ -1153,9 +1312,11 @@ knows to look.
 
 ---
 
-## 11. The artifacts
+## 12. The artifacts
 
 Everything above is backed by real files in [`full-funnel-agency/`](full-funnel-agency/):
+
+**Setup**
 
 - `roster.json` — the five-role v2 roster with all fourteen `onboarded_skills` entries,
   each carrying an explicit `kind`.
@@ -1164,7 +1325,27 @@ Everything above is backed by real files in [`full-funnel-agency/`](full-funnel-
   have on disk. Every one ends with `## Provenance & limits`.
 - `role-goal-performance-media-buyer.md` — the role goal carrying the declared Meta
   capability gap, in the shape `templates/role-goal.md` defines.
+
+**Week one's output** — ten deliverables, two per seat, each in its role's own
+`file_ownership` path:
+
+- `deliverables/program/` — the Monday client brief and the risk register.
+- `deliverables/media/` — the Google Ads audit and the week-1 pacing review.
+- `deliverables/creative/` — the hook matrix and one brief generated from cell H3-A1-VID.
+- `deliverables/measurement/` — the tracking audit verdict and the weekly reconciliation.
+- `deliverables/lifecycle/` — the winback sequence spec and the organic search brief.
+
+**Process**
+
+- `role-plan-performance-media-buyer.md` — the full engagement record section 7 excerpts.
+- `role-comm-*.md` — two of the five hand-off manifests the squad map's edges derive from.
+- `verification.md` — `squad-verify`'s week-1 check: five signals, zero passing, verdict
+  `unmet`, and a Verdict paragraph that explains why that is the honest reading.
 - `README.md` — the directory map and the one-command roster validation.
+
+All figures in the deliverables are fictional and internally consistent: the
+tracking-analyst's reconciled numbers are the single source every other file quotes, which
+is that seat's authority rule working across a directory rather than inside one document.
 
 The partner model was never offered during this run's Step 3 because
 `.squad/partner.md` does not exist in this project; onboarding's Step 7 mentioned it once,

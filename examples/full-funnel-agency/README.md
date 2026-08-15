@@ -26,6 +26,17 @@ example of a five-seat marketing agency squad for a direct-to-consumer brand.
   provider overrides, and fourteen onboarded-skill entries with explicit `kind` values —
   validating against the plugin's own contract loader.
 
+- **Week one's actual output.** Ten deliverables, two per seat, each in its role's own
+  `file_ownership` path and each visibly the product of one onboarded skill — open the skill
+  and the deliverable side by side and the shape matches. Plus the engagement record, two
+  hand-off manifests, and `squad-verify`'s week-1 check: **five signals, zero passing,
+  verdict `unmet`**, which is the honest reading on week 1 of a 13-week program.
+
+> **The client and all its data are fictional and illustrative.** Kettleworks does not
+> exist. Every figure is internally consistent across every file in this directory: the
+> tracking-analyst's reconciled table is the single source the other seats quote, which is
+> that skill's authority rule working across a directory instead of inside one document.
+
 ## Map
 
 ```
@@ -33,6 +44,26 @@ full-funnel-agency/
 ├── README.md                                  this file
 ├── roster.json                                schema_version 2 — 5 roles, 14 onboarded skills
 ├── role-goal-performance-media-buyer.md       the role goal carrying the declared Meta gap
+├── role-plan-performance-media-buyer.md       engagement record (hard rule #11)
+├── role-comm-tracking-analyst--performance-media-buyer.md    hand-off: reconciled numbers
+├── role-comm-performance-media-buyer--creative-strategist.md hand-off: fatigue + coverage
+├── verification.md                            squad-verify at week 1 — verdict: unmet
+├── deliverables/
+│   ├── program/
+│   │   ├── week-01-client-brief.md            ← weekly-client-brief
+│   │   └── risk-register.md                   ← program-risk-register
+│   ├── media/
+│   │   ├── audit-google-ads-2026-08-18.md     ← paid-media-audit
+│   │   └── pacing-2026-08-24.md               ← budget-pacing-review (+ google-ads-operations)
+│   ├── creative/
+│   │   ├── hook-matrix.md                     ← hook-matrix
+│   │   └── briefs/h3-a1-vid.md                ← creative-brief
+│   ├── measurement/
+│   │   ├── tracking-audit-2026-08-19.md       ← conversion-tracking-audit (+ ga4-event-audit-operations)
+│   │   └── weekly-reconciliation.md           ← attribution-reconciliation
+│   └── lifecycle/
+│       ├── sequences/winback.md               ← lifecycle-sequence-spec (+ klaviyo-flow-operations)
+│       └── organic/burr-alignment-espresso.md ← organic-search-brief
 └── skills/
     ├── studio-producer/
     │   ├── weekly-client-brief/SKILL.md            (knowledge)
@@ -58,7 +89,18 @@ full-funnel-agency/
 `skills/` mirrors the layout a live squad has on disk. In a real project these files sit
 at `.squad/skills/<role-id>/<skill-name>/SKILL.md`, which is exactly what each roster
 entry's `local_path` says — `squad-spawn` resolves those to absolute paths before baking
-them into a role's spawn prompt.
+them into a role's spawn prompt. The `role-*.md` and `verification.md` files at the top
+level mirror the same way: in a live squad they sit under `.squad/`.
+
+`deliverables/` paths are the real thing rather than a mirror — they match each role's
+`file_ownership.include` globs in `roster.json` exactly, which is what makes the permission
+hook auto-approve those writes.
+
+Two reproduction notes, so nothing here overstates itself. The squad map in the transcript
+derives from five hand-off manifests; **two** are reproduced, the pair the walkthrough
+quotes. All five roles published an engagement record; **one** is reproduced,
+`performance-media-buyer`'s, the one the transcript excerpts. `verification.md` describes
+the full squad, and says so where it counts records.
 
 Execution coverage by seat: `studio-producer` and `creative-strategist` operate no
 platform, so the execution dimension was skipped and said so. `tracking-analyst` and
