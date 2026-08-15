@@ -9,5 +9,5 @@
   "destination": "project",
   "providers": ["claude", "codex"],
   "runtime_owner": "claude",
-  "export_version": "1.1.0"
+  "export_version": "1.2.0"
 }

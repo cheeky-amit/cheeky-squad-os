@@ -34,7 +34,7 @@ shape, stop and offer that migration instead of dropping data.
 ## Preflight
 
 1. Read `.squad/goal.md`. If absent: refuse with *"No squad goal set. Run `/cheeky-squad-os:squad-onboard` first."*
-2. Read `.squad/roster.json` if it exists. Canonicalize a legacy roster in memory through `squad-roster`; do not rewrite it merely because it is legacy. Note existing role IDs — the new role must not collide.
+2. Read `.squad/roster.json` if it exists. Canonicalize a legacy roster in memory through `squad-roster`; do not rewrite it merely because it is legacy. Note existing role IDs — the new role must not collide. **Count active roles (`active: true`).** If the count is already 5 (hard rule #16, `MAX_ACTIVE_ROLES`), refuse to start Q1: print the active roster (id + purpose, one line each) and suggest consolidating two roles into one or deactivating one via `squad-roster` first — *"A squad that needs a sixth seat needs a better decomposition, not a bigger roster."* Deactivated roles don't count toward the cap; an over-cap legacy roster (more than 5 active roles from before this rule existed) is grandfathered — it keeps working, but this refusal still blocks any *new* addition until the active count drops under 5.
 3. Note the squad's mode (`one-time`, `multi-use`, `evergreen`). It affects the `isolation` field decision below.
 4. If `.squad/world/claims-research.md` exists, read it. It holds domain-research findings the human gated during `squad-onboard` (Grade `confirmed` or `reported` only — `world.sh` rejects anything else from that file). Feed it into **Derive stop conditions** below. Absent file → this source is simply skipped; nothing about the rest of this flow changes. A squad that never ran research looks identical to one running a version of this plugin that never shipped the feature.
 5. If `.squad/partner.md` exists, read it (hard rule #12). Its `## Decide vs. ask` section's "Always ask first" items feed **Derive stop conditions** below the same way belief-derived bounds do. Its `## Standing constraints` and `## Beliefs to check` are not a role-generation input here — `squad-onboard` already used Standing constraints to pre-populate the goal's Out of scope (which source 3 below already reads), and `squad-spawn` bakes the whole file into every dispatch prompt fresh each run (hard rule #4), so nothing from it needs to be captured into a standing role file at generation time. Absent file → this source is simply skipped, same as source 1 above; nothing else in this flow changes.
@@ -120,6 +120,59 @@ If **yes**, hand off to `/cheeky-squad-os:squad-env` to derive the `environment`
 
 If **no**, omit `{{workspace_block}}` entirely and leave the `environment` field off the roster entry.
 
+### Q8 — Skill onboarding
+
+Not one question — a short sub-flow, run once per role, immediately after Q7 and before
+stop conditions are derived. A role isn't just a prompt: it can carry **onboarded
+skills**, external open-source skill files it researched, adapted, and had approved.
+Rule of the flow: *don't reinvent the wheel — find an existing open-source skill first,
+onboard it, and improve it; always keep attribution.*
+
+1. **Research first.** From Q1's purpose and the squad goal, search for an existing
+   skill before authoring anything original. Check, in this order:
+   - `anthropics/skills`
+   - `addyosmani/agent-skills`
+   - `msitarzewski/agency-agents`
+   - `obra/superpowers`
+   - then a WebSearch / repo-tree search for anything domain-specific to this role
+
+   State plainly when nothing relevant turns up anywhere in that list — only then
+   author an original skill for this step.
+
+2. **Propose.** Print a numbered list, one item per candidate:
+   - proposed skill name (kebab-case)
+   - source — the URL, or `original`
+   - one-line purpose
+   - one line on what gets adapted or improved for this squad
+
+   Mirror the research verb's Gate 1 UX (`squad-world`'s research-plan gate,
+   `ARCHITECTURE.md`): accept the whole list in one word (`go`), skip skill onboarding
+   for this role entirely in one word (`skip`), or edit — reword an item, drop one, add
+   one — in the same reply.
+
+3. **Approval gate.** Default is `approval_mode: user` — ask before onboarding each
+   skill. Auto-approve (`approval_mode: auto`) only when one of two things is already
+   true, never inferred mid-flow:
+   - `.squad/partner.md` carries a standing constraint authorizing skill onboarding
+     without asking (hard rule #12 — told, not inferred), or
+   - `.squad/goal.md`'s frontmatter has `skill_onboarding: auto` (set once, during
+     `squad-onboard`, when the builder said so)
+
+   Record the mode and an ISO-8601 `approved_at` on every entry, whichever channel
+   approved it.
+
+4. **Onboard.** For each approved item: fetch the source, rewrite/adapt it into
+   standard SKILL.md shape (YAML frontmatter `name`/`description`, then body), keep a
+   `Source: <url>` attribution line near the top of the body (`Source: original` if
+   authored fresh), and write it to
+   `.squad/skills/<role-id>/<skill-name>/SKILL.md`. Append the entry to this role's
+   `onboarded_skills` via `squad-roster` — do not hand-edit `roster.json` — and let
+   `squad-roster` regenerate `roster.md`.
+
+If the user said `skip` at step 2, none of this runs — the role registers with no
+`onboarded_skills`, `{{onboarded_skills_block}}` is omitted for it, and it is
+indistinguishable from a role generated before this feature shipped.
+
 ## Map answers to the canonical role
 
 The interactive questions retain familiar Claude terms because the active lifecycle
@@ -136,6 +189,8 @@ still produces a Claude agent. Before registration, map them into roster v2:
 - Q7 sandbox → canonical `environment` (`dirs` becomes `directories`; `env` becomes
   `variables`). Values may contain non-secret provisioning configuration; credentials never
   belong in the roster, and export redacts all values from the portable snapshot.
+- Q8 skill picks → `onboarded_skills` entries (`name`, `source_url` — omitted for an
+  original skill, `local_path`, `purpose`, `approval_mode`, optional `approved_at`).
 
 The Claude agent path goes in `provider_overrides.claude.agent_file`. Do not add Codex
 syntax here; the Codex adapter compiles from the canonical role at export time.
@@ -175,6 +230,7 @@ Build the system prompt body from these answers. The template lives at `template
 - `{{file_scope_lines}}` — Q3 answer rendered as **one markdown bullet per glob** (not a comma-separated string — the template places it under a bullet list)
 - `{{isolation_block}}` — the literal `isolation: worktree` line (Q6), or omitted entirely
 - `{{workspace_block}}` — the "Your workspace (sandbox)" section (Q7), or omitted entirely if the role has no `environment` (canonical text in `squad-env`'s SKILL body)
+- `{{onboarded_skills_block}}` — the "Onboarded skills" section (Q8), or omitted entirely if the role has no `onboarded_skills` entries. When present, one bullet per skill: name — absolute path to its `SKILL.md` — purpose — `Source: <url or "original">`.
 - `{{plan_block}}` — the "Step 0 — publish your engagement record" section (hard rule #11). **Not collected by a question, and never omitted** — every generated role gets it, every time, regardless of mode or scope; it is a role-behavior contract, not a generation choice. Substitute the canonical text (same heading `templates/role-definition.md`'s placeholder legend names, and the same wording `squad-spawn` bakes into its spawn prompt — the standing role file and the per-dispatch prompt must not disagree):
 
   ```markdown
@@ -349,8 +405,8 @@ Write the composed system prompt to `.claude/agents/<name>.md`. Use the YAML fro
 
 Call into `squad-roster` to add the canonical role. It includes `id`,
 `purpose`, `description`, `file_ownership`, `capabilities`, `reasoning`, `active: true`,
-`goal_ref`, the created timestamp, optional canonical `environment`, and the exact
-Claude choices under `provider_overrides.claude`. A v2 roster stores that object directly.
+`goal_ref`, the created timestamp, optional canonical `environment`, optional
+`onboarded_skills` (Q8), and the exact Claude choices under `provider_overrides.claude`. A v2 roster stores that object directly.
 For a legacy roster, `squad-roster` must preserve the legacy source shape with its
 documented reverse projection and forward-projection check. If this role uses exclusions,
 Codex overrides, or other v2-only semantics, stop and separately preview/confirm migration
@@ -375,14 +431,19 @@ Role `<name>` generated.
     - needs: <precondition 1>
     - stop: <mid-run bound 1>
     [...]
+  Onboarded skills: <n> declared
+    - <skill-name> (from <source_url or "original">)
+    [...]
   Agent file: .claude/agents/<name>.md
   Role goal: .squad/role-goal-<name>.md
   Registered in: .squad/roster.json
 ```
 
-The stop conditions are never asked for — they're derived (previous section) and shown here so the user sees them without a new question in the flow.
+The stop conditions are never asked for — they're derived (previous section) and shown here so the user sees them without a new question in the flow. `Onboarded skills` reflects whatever Q8 produced — `0` if the role skipped Q8 or nothing was approved.
 
-Then ask whether the user wants to generate another role (loop back to Q1 with a fresh name) or finish.
+**Then print the updated squad card** — both parts, text card and mermaid squad map, same canonical shape as `squad-onboard`'s "Narration — the squad card" section (see there for the exact node/edge shape and label-escaping rules; do not restate or redefine the shape here, just render it from the current roster). Covers the whole squad — every active role, not just the one just generated — each role's text-card row and map-node label carrying its own `skills onboarded: <n>` / `skills: <n>` count. This runs every time, whether this is the squad's first role or its fifth.
+
+Then, unless the active count is now 5, ask whether the user wants to generate another role (loop back to Q1 with a fresh name) or finish. **If the active count is now 5, skip that offer** — print instead: *"Squad is at the 5-seat cap — deactivate or consolidate a role via `squad-roster` before generating another."*
 
 ## Refusals
 

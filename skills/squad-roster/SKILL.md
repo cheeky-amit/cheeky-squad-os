@@ -137,20 +137,27 @@ Called by `squad-role` after role generation:
 
 1. Canonicalize the roster in memory.
 2. Refuse an ID collision.
-3. Validate required neutral fields and optional provider overrides.
-4. For a v2 roster, append the role and pretty-print v2 JSON. For a legacy roster, preserve
+3. **Refuse the 5-seat cap (hard rule #16).** Count active roles (`active: true`); if the new role would make the count 6, refuse the write — same message shape as the ID-collision refusal: name the current active roster and point at consolidating two roles or deactivating one first. Deactivated roles never count. This is the last line of defense — `squad-onboard`'s decomposition cap and `squad-role`'s preflight should have already caught this, but a direct roster write bypasses both.
+4. Validate required neutral fields, optional provider overrides, and — v2 only — each `onboarded_skills` entry (`name`, `local_path`, `purpose`, `approval_mode` required; `source_url`, `approved_at` optional; `additionalProperties: false`).
+5. For a v2 roster, append the role and pretty-print v2 JSON. For a legacy roster, preserve
    its legacy shape using the reverse projection above. If the new role has exclusions,
-   Codex overrides, or any other semantics that fail the forward-projection check, stop and
-   offer a separate conversion plan; do not add a partially represented role. Regenerate
-   `.squad/roster.md` only after the selected-shape write succeeds.
-5. Report every generated provider artifact separately from the neutral roster write.
+   Codex overrides, `onboarded_skills`, or any other v2-only semantics that fail the
+   forward-projection check, stop and offer a separate conversion plan; do not add a
+   partially represented role. Regenerate `.squad/roster.md` only after the selected-shape
+   write succeeds.
+6. Report every generated provider artifact separately from the neutral roster write.
 
 ### Deactivate or remove
 
-Ask whether to soft-deactivate (`active: false`) or hard-delete the roster entry and
-referenced generated role/goal artifacts. Hard-delete requires exact confirmation
-`yes, delete`. Delete only paths the selected role entry owns; ambiguous or missing
-ownership cancels deletion.
+**Before asking for confirmation, state the blast radius.** One line: what this removal
+orphans — the role's `file_ownership`/`file_scope` paths (deliverables that will have no
+owner), any hand-off manifests addressed to or from this role
+(`.squad/role-comm-<role>--*`), and its onboarded skills, if any (the manifest entry
+goes with the role; the files under `.squad/skills/<role-id>/**` are left on disk,
+unreferenced). Then ask whether to soft-deactivate (`active: false`) or hard-delete the
+roster entry and referenced generated role/goal artifacts. Hard-delete requires exact
+confirmation `yes, delete`. Delete only paths the selected role entry owns; ambiguous or
+missing ownership cancels deletion.
 
 ### Human view
 
@@ -205,6 +212,14 @@ records, secrets, caches, version-control state, or unrelated live/private data 
 default. Exported packages are immutable vendored snapshots with no continuing runtime
 dependency on the generator.
 
+**Onboarded-skill manifests export; payloads don't (yet).** A role's `onboarded_skills`
+entries — name, source, local path, purpose, approval mode/timestamp — are part of the
+roster contract and travel with every export, the same as any other role field. The
+skill files themselves, under `.squad/skills/**`, are not vendored into the snapshot: an
+exported squad's `local_path` references point at bytes the export doesn't carry. This
+is a documented limitation, not an oversight — see `CHANGELOG.md`'s 1.2.0 entry and the
+follow-up in `docs/ROADMAP.md`.
+
 ## Validation before roster writes
 
 - `schema_version` is 2 for new writes.
@@ -216,6 +231,8 @@ dependency on the generator.
 - reasoning profile is `fast`, `balanced`, `deep`, or `inherit`; effort is `inherit`,
   `low`, `medium`, `high`, `xhigh`, or `max`.
 - `active` is Boolean; environment/provider override shapes match schema.
+- each `onboarded_skills` entry has `name`, `local_path`, `purpose`, `approval_mode`;
+  `source_url`/`approved_at` are optional; no unknown fields.
 - JSON is well formed and has no unknown fields.
 
 If validation fails, do not write. Name the exact boundary failure.

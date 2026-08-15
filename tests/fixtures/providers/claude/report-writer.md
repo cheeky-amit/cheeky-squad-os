@@ -73,5 +73,9 @@ Expected directories: inputs, outputs.
 Load the provisioned workspace environment before running tools. Expected variable names: `REPORT_FORMAT`. Values are intentionally not embedded.
 Expected tools: jq (system).
 
+## Onboarded skills
+
+- `citation-formatter` — `.squad/skills/report-writer/citation-formatter/SKILL.md` — Format citations consistently in the final report (source: https://github.com/anthropics/skills)
+
 The runtime gates auto-approval eligibility; it does not block a human-approved
 out-of-scope write. Report that distinction exactly.

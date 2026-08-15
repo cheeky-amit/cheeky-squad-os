@@ -77,7 +77,21 @@
             "claude": {"type": "object", "additionalProperties": false, "minProperties": 1, "properties": {"model": {"type": "string", "minLength": 1}, "tools": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}}, "agent_file": {"$ref": "#/$defs/relativePath"}, "isolation": {"const": "worktree"}}},
             "codex": {"type": "object", "additionalProperties": false, "minProperties": 1, "properties": {"model": {"type": "string", "minLength": 1}, "reasoning_effort": {"$ref": "#/$defs/reasoningEffort"}, "sandbox_mode": {"enum": ["read-only", "workspace-write"]}}}
           }
-        }
+        },
+        "onboarded_skills": {"type": "array", "items": {"$ref": "#/$defs/onboardedSkill"}}
+      }
+    },
+    "onboardedSkill": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "local_path", "purpose", "approval_mode"],
+      "properties": {
+        "name": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$"},
+        "source_url": {"type": "string", "minLength": 1},
+        "local_path": {"$ref": "#/$defs/literalRelativePath"},
+        "purpose": {"type": "string", "minLength": 1},
+        "approval_mode": {"enum": ["user", "auto"]},
+        "approved_at": {"type": "string", "minLength": 1}
       }
     }
   }

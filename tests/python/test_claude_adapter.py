@@ -16,6 +16,7 @@ from cheeky_squad_portability.adapters.claude import (
 from cheeky_squad_portability.contracts import (
     Destination,
     ExecutionMode,
+    OnboardedSkill,
     Provider,
     Roster,
     RuntimeOwner,
@@ -87,11 +88,40 @@ def test_agents_match_goldens_and_map_read_write_boundaries(
     assert ".squad/role-plan-report-writer.md" in writer
     assert "Expected variable names: `REPORT_FORMAT`" in writer
     assert "REPORT_FORMAT=markdown" not in writer
+    assert "## Onboarded skills" in writer
+    assert "`citation-formatter`" in writer
+    assert ".squad/skills/report-writer/citation-formatter/SKILL.md" in writer
+    assert "source: https://github.com/anthropics/skills" in writer
+    assert "## Onboarded skills" not in reader
     for text in (reader, writer):
         frontmatter = text.split("---", 2)[1]
         assert "hooks:" not in frontmatter
         assert "mcpServers:" not in frontmatter
         assert "permissionMode:" not in frontmatter
+
+
+def test_onboarded_skill_with_no_source_url_attributes_as_original(
+    manifest: SquadManifest, roster: Roster
+) -> None:
+    writer = next(role for role in roster.roles if role.id == "report-writer")
+    original_skill = replace(
+        writer,
+        onboarded_skills=(
+            OnboardedSkill(
+                name="in-house-tool",
+                local_path=".squad/skills/report-writer/in-house-tool/SKILL.md",
+                purpose="A skill authored fresh for this squad",
+                approval_mode="auto",
+            ),
+        ),
+    )
+    solo = replace(roster, roles=(original_skill,))
+
+    artifacts = compile_claude_agents(manifest, solo)
+    content = next(iter(artifacts.values())).decode()
+
+    assert "`in-house-tool`" in content
+    assert "(source: original)" in content
 
 
 def test_agents_load_vendored_context_from_destination_anchors_outside_cwd(
@@ -160,6 +190,12 @@ def test_legacy_fallback_is_pure_and_byte_equivalent(manifest: SquadManifest) ->
     legacy = _json(PORTABLE / "legacy-roster.json")
     original = copy.deepcopy(legacy)
     canonical = _json(PORTABLE / "roster-v2.json")
+    # roster-v2.json carries a v2-only onboarded_skills entry that a legacy
+    # roster has no way to express; strip it before comparing compiled output.
+    assert isinstance(canonical, dict)
+    canonical_roles = canonical["roles"]
+    assert isinstance(canonical_roles, list) and isinstance(canonical_roles[1], dict)
+    canonical_roles[1].pop("onboarded_skills", None)
 
     assert compile_claude_agents(manifest, legacy) == compile_claude_agents(manifest, canonical)
     assert legacy == original

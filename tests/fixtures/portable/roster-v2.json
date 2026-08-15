@@ -45,6 +45,16 @@
           "agent_file": ".claude/agents/report-writer.md"
         }
       },
+      "onboarded_skills": [
+        {
+          "name": "citation-formatter",
+          "source_url": "https://github.com/anthropics/skills",
+          "local_path": ".squad/skills/report-writer/citation-formatter/SKILL.md",
+          "purpose": "Format citations consistently in the final report",
+          "approval_mode": "user",
+          "approved_at": "2026-08-08T00:00:03Z"
+        }
+      ],
       "created": "2026-08-08T00:00:02Z"
     }
   ]

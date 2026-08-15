@@ -131,6 +131,8 @@ These are the load-bearing invariants the rest of the document references by num
 14. **Declared bounds.** Every role declares `needs:` preconditions and `stop:` bounds in its role goal. A fired condition ends the run with `status: escalated` on the engagement record. An open escalation blocks a `met` verdict; escalations are opened by roles and closed only in `verification.md` by the human's recorded ruling. Escalation is evidence generation, never decision — hard rule #10 holds. *Stopping well is a deliverable.*
 15. **The human meets the same evidence bar.** A NEEDS-HUMAN row or open escalation converts to PASS only against a stated what-you-checked / what-you-found, recorded verbatim in `verification.md` with attribution and date, permanently marked distinct from machine-verified truth. The human is never blocked — they are put on the record. This is the rule the metaphor stance (README, "Why we say squad") means by *"you are not exempt from the discipline you imposed"* — the one hard rule in this list that binds the human rather than the squad; see "The thesis" above.
 
+16. **Five seats per squad.** A squad holds at most five active roles (`active: true`); deactivated roles don't count toward the cap. The cap is enforced at three points: decomposition (`squad-onboard`, when workstreams are proposed — a decomposition that needs a sixth seat is consolidated to ≤5, not exempted), registration preflight (`squad-role`, before Q1 and again on the "generate another role?" loop-back), and the roster write itself (`squad-roster`'s Add operation, last line of defense). A squad already over the cap when this rule shipped is grandfathered: it keeps running exactly as before, but no new role may be added until its active count drops back under 5.
+
 ## Evidence grades
 
 Hard rule #11's engagement record grades every assumption by evidence class, never by number — a role cannot derive "73% confident," so a number here would be theatre. This is the **one vocabulary**, defined here once; `templates/role-plan.md`, `templates/verification.md`, `squad-verify`, and every generated role cite it rather than restate it.
@@ -337,6 +339,64 @@ The paper apparatus, stated once here as a reference table — not repeated as r
 | 2 — "I understand you" | #11 | the engagement record (`.squad/role-plan-<role>.md`) |
 | 3 — "We understand the world" | #13 | the belief ledger (`.squad/world/claims-*.md`) |
 | §3.4 — the infrastructure layer | #14 / #15 | stop conditions + `.squad/verification.md` |
+| — (operational bound, not a Collins et al. desideratum) | #16 | active-role count check (`squad-onboard`, `squad-role` preflight, `squad-roster` Add) |
+
+## Skill onboarding
+
+A role is not just a prompt — it can carry **onboarded skills**: external, open-source
+skill or agent files a role researched, adapted, and had approved before its first run.
+The rule of the flow is the same one the research verb applies to domain facts, turned
+toward capability instead of belief: *don't reinvent the wheel — find an existing
+open-source skill first, onboard it, and improve it; always keep attribution.*
+
+**Research first.** `squad-role`'s Q8 checks a curated source list —
+`anthropics/skills`, `addyosmani/agent-skills`, `msitarzewski/agency-agents`,
+`obra/superpowers` — then a domain-specific web/repo search, before authoring anything
+original. Nothing is authored fresh until the search comes back empty, stated plainly.
+
+**The approval gate, and its two auto-approve channels.** Default is
+`approval_mode: user` — the human approves each skill before it's onboarded, mirroring
+the research verb's Gate 1 (`go` / `skip` / edit in the same reply). Auto-approval
+(`approval_mode: auto`) fires only through one of two channels the human set up in
+advance, never inferred mid-flow: a standing constraint in `.squad/partner.md`
+authorizing skill onboarding without asking (hard rule #12 — told, not inferred), or
+`skill_onboarding: auto` in the squad's own `.squad/goal.md` frontmatter, set once
+during `squad-onboard` when the builder said so. Every entry records which mode
+approved it and when.
+
+**Storage layout.** An onboarded skill's rewritten SKILL.md lives at
+`.squad/skills/<role-id>/<skill-name>/SKILL.md`, carrying a `Source:` attribution line
+(the origin URL, or `original` if authored fresh). The roster's `onboarded_skills`
+array (schema: `schemas/roster.schema.json`) is the manifest — name, source, local
+path, purpose, approval mode, and approval timestamp — for every skill a role has
+onboarded.
+
+**Spawn injection.** `squad-spawn` bakes a `# Your onboarded skills` section into a
+role's spawn prompt whenever its roster entry has any — one line per skill (name,
+absolute path, purpose) plus the instruction to read each before starting. Absent
+entries omit the section entirely, the same absence contract every other conditional
+spawn-prompt section in this plugin honors (see hard rule #4).
+
+**Export stance.** The manifest entries in `onboarded_skills` are part of the portable
+contract and travel with the roster on export. The skill *payload* — the actual bytes
+under `.squad/skills/**` — does not; vendoring it into export packages is a documented
+follow-up (see `CHANGELOG.md` and `docs/ROADMAP.md`), not a v1.2.0 guarantee.
+
+The whole flow — the five-seat cap firing at decomposition, research-first Q8, the
+auto-approve channel, and the squad card — is worked end to end in
+`examples/full-funnel-agency.md`, with the real roster and adapted skill files under
+`examples/full-funnel-agency/`.
+
+**This feature — and the squad-card narration standard shipping alongside it
+(structural changes now print a compact, plain-language squad card: the goal, the seat
+count, one line per role) — mint no new hard rule between them.** Same reasoning the
+research verb already established (see "Guided domain research" above): an optional,
+human-approved verb is an application of rules already on the books, not a new
+invariant. #12 gives skill onboarding its two auto-approve channels, #4 gives it the
+spawn-injection channel; the squad card is pure narration over state every one of these
+artifacts already tracks. Adding a #17 for "an optional skill an approved role may pick
+up" would say the invariant list grows with every new verb, which this repo has already
+refused once and should refuse again.
 
 ## The three modes
 

@@ -144,6 +144,18 @@ def _environment_lines(role: Role) -> list[str]:
     return lines
 
 
+def _onboarded_skills_lines(role: Role) -> list[str]:
+    if not role.onboarded_skills:
+        return []
+    lines = ["", "## Onboarded skills", ""]
+    for skill in role.onboarded_skills:
+        attribution = skill.source_url if skill.source_url is not None else "original"
+        lines.append(
+            f"- `{skill.name}` — `{skill.local_path}` — {skill.purpose} (source: {attribution})"
+        )
+    return lines
+
+
 def _snapshot_root(manifest: SquadManifest) -> str:
     namespace = provider_namespace(manifest.squad.id)
     if manifest.destination is Destination.PROJECT:
@@ -264,6 +276,7 @@ def _render_agent(manifest: SquadManifest, role: Role) -> bytes:
             ]
         )
     lines.extend(_environment_lines(role))
+    lines.extend(_onboarded_skills_lines(role))
     lines.extend(
         [
             "",

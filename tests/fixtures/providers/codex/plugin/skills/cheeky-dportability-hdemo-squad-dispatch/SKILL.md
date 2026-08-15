@@ -46,5 +46,7 @@ Workspace hint: .squad/workspaces/report-writer
 Expected workspace directories: inputs, outputs.
 Expected environment variable names: REPORT_FORMAT. Values are intentionally not embedded.
 Expected tools: jq (system).
+Onboarded skills for this role:
+- citation-formatter: .squad/skills/report-writer/citation-formatter/SKILL.md — Format citations consistently in the final report (source: https://github.com/anthropics/skills)
 This role mutates the workspace. Dispatch it sequentially; do not run it concurrently with another mutating squad role.
 Capabilities and ownership remain subject to the active Codex sandbox and tool policy.

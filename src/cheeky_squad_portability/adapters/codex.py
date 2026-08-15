@@ -252,6 +252,8 @@ def _developer_instructions(manifest: SquadManifest, role: Role) -> str:
         lines.append("Do not modify these paths: " + ", ".join(role.file_ownership.exclude) + ".")
     if role.environment is not None:
         lines.extend(_environment_instructions(role))
+    if role.onboarded_skills:
+        lines.extend(_onboarded_skills_instructions(role))
     if _is_mutating(role):
         lines.append(
             "This role mutates the workspace. Dispatch it sequentially; do not run it "
@@ -286,6 +288,16 @@ def _environment_instructions(role: Role) -> list[str]:
         rendered_tools = [f"{tool.name} ({tool.kind})" for tool in environment.tools]
         tools = ", ".join(rendered_tools)
         lines.append(f"Expected tools: {tools}.")
+    return lines
+
+
+def _onboarded_skills_instructions(role: Role) -> list[str]:
+    lines = ["Onboarded skills for this role:"]
+    for skill in role.onboarded_skills:
+        attribution = skill.source_url if skill.source_url is not None else "original"
+        lines.append(
+            f"- {skill.name}: {skill.local_path} — {skill.purpose} (source: {attribution})"
+        )
     return lines
 
 

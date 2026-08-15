@@ -3,6 +3,62 @@
 All notable changes to cheeky-squad-os are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [SemVer](https://semver.org/).
 
+## [1.2.0] - 2026-08-15
+
+The apprenticeship release. A squad no longer has to build every role's competence
+from priors alone, and it no longer has to grow without bound to cover a goal. Five
+seats, a researched skill, and a card that shows what's actually running — three
+disciplines, one release.
+
+### Added
+
+- **A five-seat cap (hard rule #16).** A squad holds at most five active roles
+  (`active: true`); deactivated roles don't count. Enforced at three points:
+  `squad-onboard` consolidates a >5-workstream decomposition into ≤5 roles before
+  proposing them ("a squad that needs a sixth seat needs a better decomposition, not
+  a bigger roster"); `squad-role`'s preflight refuses to start Q1 — and refuses the
+  "generate another role?" loop-back — once the active count hits 5; `squad-roster`'s
+  Add operation is the last line of defense, refusing any write that would push the
+  active count to 6. `MAX_ACTIVE_ROLES = 5` and `Roster.active_roles()` land in
+  `contracts.py`; no `maxItems` in the schema, because a legacy squad already over the
+  cap when this rule shipped is grandfathered — it keeps running, but gains no new
+  seats until it drops back under 5.
+
+- **Per-role skill onboarding.** A role now carries `onboarded_skills` — an optional,
+  roster-v2-only array recording external, open-source skill files it researched,
+  adapted, and had approved. `squad-role`'s new Q8 checks a curated source list
+  (`anthropics/skills`, `addyosmani/agent-skills`, `msitarzewski/agency-agents`,
+  `obra/superpowers`, then a domain-specific search) before authoring anything
+  original — *don't reinvent the wheel; find it, onboard it, improve it, keep
+  attribution.* Proposals mirror the research verb's Gate 1 UX (`go` / `skip` / edit
+  in the same reply). Approval defaults to asking per skill; auto-approval fires only
+  through two channels the human set up in advance — a standing constraint in
+  `.squad/partner.md`, or `skill_onboarding: auto` in the squad's own `.squad/goal.md`
+  frontmatter — never inferred mid-flow. An onboarded skill's rewritten SKILL.md lands
+  at `.squad/skills/<role-id>/<skill-name>/SKILL.md` with a `Source:` attribution
+  line; `squad-spawn` bakes a `# Your onboarded skills` section into the role's spawn
+  prompt whenever it has any, with the same absence contract as every other
+  conditional spawn-prompt section. Both Claude and Codex adapters render the manifest
+  in their generated agent files. This feature mints no new hard rule — same
+  reasoning the research verb already established.
+
+- **The squad card.** After every structural change — a goal written, a role added or
+  removed, a skill onboarded — `squad-onboard` and `squad-role` now print a compact,
+  plain-language summary: the goal in one line, `Seats: N/5`, and one row per role
+  (name, purpose, onboarded-skill count). `squad-roster`'s Deactivate-or-remove
+  operation gains a matching blast-radius line before confirming — what the removal
+  orphans. No internal jargon; this is the "show, don't narrate" lesson, applied by
+  default. Mints no new hard rule either.
+
+### Known limitations
+
+- **Skill payload vendoring is out of scope.** `onboarded_skills` manifest entries
+  (name, source, local path, purpose, approval mode/timestamp) are part of the
+  portable contract and export with the roster. The skill *payload* — the actual
+  bytes under `.squad/skills/**` — is not vendored into export packages yet; an
+  exported squad's onboarded-skill references currently point at paths the export
+  doesn't carry. Tracked as a follow-up in `docs/ROADMAP.md`.
+
 ## [1.1.0] - 2026-08-08
 
 The portability release. A squad can now be compiled as an immutable, self-contained

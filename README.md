@@ -31,6 +31,19 @@ both. The new exporter compiles the resulting provider-neutral roster into a ven
 immutable snapshot. The generator does not need to remain installed for that snapshot
 to work.
 
+Three more disciplines ship alongside that:
+
+- **A five-seat cap.** A squad holds at most five active roles — enforced at
+  decomposition, at role registration, and at the roster write itself. A decomposition
+  that wants a sixth seat gets consolidated instead, not exempted.
+- **Per-role skill onboarding.** A role doesn't have to invent everything from
+  scratch — `squad-role` researches the open-source skill ecosystem first, proposes
+  what it finds (or says plainly when nothing fits), and only onboards a skill once
+  you approve it. Attribution ships with every onboarded skill.
+- **The squad card.** Every structural change — a goal written, a role added or
+  removed, a skill onboarded — now ends with a compact, plain-language summary: the
+  goal, how many of the five seats are filled, and what each role does. No jargon.
+
 ## Why squads
 
 The same primitives serve engineering, operations, business infrastructure, and

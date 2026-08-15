@@ -1,6 +1,7 @@
 """Provider-neutral contracts for portable cheeky-squad-os exports."""
 
 from cheeky_squad_portability.contracts import (
+    MAX_ACTIVE_ROLES,
     Capability,
     ClaudeOverride,
     CodexOverride,
@@ -10,6 +11,7 @@ from cheeky_squad_portability.contracts import (
     EnvironmentTool,
     ExecutionMode,
     FileOwnership,
+    OnboardedSkill,
     Provider,
     ProviderOverrides,
     ReasoningEffort,
@@ -52,6 +54,7 @@ from cheeky_squad_portability.plan import (
 )
 
 __all__ = [
+    "MAX_ACTIVE_ROLES",
     "ApplyResult",
     "Capability",
     "ClaudeOverride",
@@ -66,6 +69,7 @@ __all__ = [
     "ExportError",
     "ExportPlan",
     "FileOwnership",
+    "OnboardedSkill",
     "PreparedExport",
     "PreparedUninstall",
     "Provider",

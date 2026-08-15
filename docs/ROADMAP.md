@@ -38,6 +38,12 @@ evidence.
    receipts, collision policy, and private-state exclusions remain the default.
 8. **Public marketplace presence.** Separate product decision. Generation and release
    tooling must never submit automatically.
+9. **Vendor onboarded-skill payloads.** Export packages currently carry only the
+   `onboarded_skills` manifest entries (name, source, local path, purpose, approval
+   record) as part of the portable roster contract. The skill files themselves, under
+   `.squad/skills/**`, are not copied into the snapshot — an exported squad's
+   onboarded-skill references point at paths the export doesn't carry. Vendor the
+   payload bytes alongside the manifest so an exported squad is truly self-contained.
 
 ## Non-goals
 

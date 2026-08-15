@@ -66,7 +66,7 @@ from the projected references rather than inventing filename conventions.
 
 ## Build the spawn prompt (per role)
 
-Every spawn — subagent, teammate, scheduled — follows the same canonical prompt order, regardless of mode: **goal → partner model → role-goal → world index → hand-offs → file scope → Step 0 → stop-condition contract → task.** Partner model sits right after the goal, not buried after role-specific material, for the same reason session-start.sh appends it right after the goal too: standing constraints bind like the goal (hard rule #12), and a role should see the human's own brief before it sees its own slice of the work.
+Every spawn — subagent, teammate, scheduled — follows the same canonical prompt order, regardless of mode: **goal → partner model → role-goal → onboarded skills → world index → hand-offs → file scope → Step 0 → stop-condition contract → task.** Partner model sits right after the goal, not buried after role-specific material, for the same reason session-start.sh appends it right after the goal too: standing constraints bind like the goal (hard rule #12), and a role should see the human's own brief before it sees its own slice of the work.
 
 ```
 You are the <role.name> role on a cheeky-squad-os squad.
@@ -124,6 +124,11 @@ Binding on this run, on top of what the file itself says:
 
 # Your role's goal
 <full contents of .squad/role-goal-<role.name>.md>
+
+# Your onboarded skills — only if this role's roster entry has a non-empty onboarded_skills
+<one line per skill: name — ABSOLUTE path to its SKILL.md — purpose>
+
+Read each of these before starting; they are part of your role.
 
 # Shared world model — only if `world.sh --index` produced output this dispatch (step 9)
 <the script's stdout, pasted VERBATIM — do not reformat, summarize, or truncate
@@ -225,7 +230,7 @@ record is not optional even though you also returned a status.
 Read .squad/goal.md and .squad/role-goal-<role.name>.md at any time during your work. Stay inside your file scope. Hand off deliverables by writing to your scope. When a deliverable is ready for another role, publish a hand-off manifest at .squad/role-comm-<role.name>--<consumer>.md (shape: templates/role-comm.md — what's ready, how to consume, caveats).
 ```
 
-Include the workspace block only for roles that have an `environment`; omit it otherwise. Include the Step 0 block and the "Your stop conditions" block always — both are baked unconditionally, in every mode, with no opt-out. A role with an empty `## Stop conditions` section (shouldn't happen post-`squad-role`, but don't assume) still gets the contract block — it just has nothing to fire on. The "Shared world model" block and the "Partner model" block are the two sections in this template that ARE conditional, per steps 9 and 10 above respectively — every role in a given dispatch gets the same yes/no on each, since both reflect state that's squad-wide (or project-wide, for the partner model) rather than anything role-specific. Never bake an empty "Partner model" heading — absent or empty `.squad/partner.md` means the section is left out entirely, not printed with nothing under it.
+Include the workspace block only for roles that have an `environment`; omit it otherwise. Include the Step 0 block and the "Your stop conditions" block always — both are baked unconditionally, in every mode, with no opt-out. A role with an empty `## Stop conditions` section (shouldn't happen post-`squad-role`, but don't assume) still gets the contract block — it just has nothing to fire on. The "Onboarded skills" block is conditional too, but unlike the two below, its yes/no is decided per-role, not once for the whole dispatch — read straight from that role's own roster entry (`onboarded_skills`) when building its prompt, and never bake an empty heading. Resolve every `local_path` in it to an absolute path before baking it in: a worktree checkout won't have `.squad/skills/**` if it isn't tracked in git, so the relative form can silently point at nothing. The "Shared world model" block and the "Partner model" block are the two sections in this template that are decided *once, for the whole dispatch*, per steps 9 and 10 above respectively — every role in a given dispatch gets the same yes/no on each, since both reflect state that's squad-wide (or project-wide, for the partner model) rather than anything role-specific. Never bake an empty "Partner model" heading — absent or empty `.squad/partner.md` means the section is left out entirely, not printed with nothing under it.
 
 **Hard rule #4:** the full text of `.squad/goal.md` and the role's projected goal reference is the only reliable channel from parent to subagent. The SessionStart hook does not fire for subagents. Bake both texts in; don't rely on hook injection for the One-time path. `.squad/partner.md` rides the same channel for the same reason (hard rule #12): it is gitignored by default, so it is typically absent inside an `isolation: worktree` checkout even where SessionStart *does* fire — baking is the only path that works everywhere, every mode, every isolation setting.
 

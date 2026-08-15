@@ -344,7 +344,7 @@ def test_release_versions_match_portable_goldens() -> None:
     manifest = _json(FIXTURES / "manifest-v2.json")
     assert isinstance(manifest, dict)
 
-    assert version == manifest["export_version"] == "1.1.0"
+    assert version == manifest["export_version"] == "1.2.0"
     for path in (
         ROOT / "tests/fixtures/providers/claude/plugin.json",
         ROOT / "tests/fixtures/providers/codex/plugin/.codex-plugin/plugin.json",
